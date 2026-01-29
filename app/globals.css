@@ -1,0 +1,196 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-inter: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  
+  /* Insurigence Brand Tokens - Updated 2026 */
+  --brand-primary: #0D2137;
+  --brand-accent: #00E6A7;
+  --brand-accent-dark: #00C992;
+  --brand-background: #F5F7FA;
+  --brand-text: #0D2137;
+  --brand-text-muted: #64748B;
+  --brand-text-subtle: #94A3B8;
+  
+  /* Market Classification Colors */
+  --market-standard: #059669;
+  --market-standard-bg: #ECFDF5;
+  --market-standard-border: #A7F3D0;
+  --market-es: #D97706;
+  --market-es-bg: #FFFBEB;
+  --market-es-border: #FDE68A;
+  --market-borderline: #0EA5E9;
+  --market-borderline-bg: #F0F9FF;
+  --market-borderline-border: #BAE6FD;
+}
+
+html, body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  font-family: var(--font-inter);
+  background-color: var(--brand-background);
+  color: var(--brand-text);
+  min-width: 100%;
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+@layer base {
+  * {
+    @apply border-slate-200;
+  }
+}
+
+@layer components {
+  /* Brand Button - Primary */
+  .btn-brand-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+    background-color: var(--brand-primary);
+  }
+  
+  .btn-brand-primary:focus {
+    --tw-ring-color: var(--brand-primary);
+  }
+  
+  /* Brand Button - Accent */
+  .btn-brand-accent {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+    background-color: var(--brand-accent);
+  }
+  
+  /* Brand Button - Secondary */
+  .btn-brand-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold bg-white border border-slate-200 text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  /* Brand Card */
+  .brand-card {
+    @apply bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm;
+  }
+  
+  .brand-card-interactive {
+    @apply bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm transition-all hover:shadow-md hover:border-slate-300;
+  }
+  
+  /* Brand Badges */
+  .badge-standard {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border;
+    background-color: var(--market-standard-bg);
+    color: var(--market-standard);
+    border-color: var(--market-standard-border);
+  }
+  
+  .badge-es {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border;
+    background-color: var(--market-es-bg);
+    color: var(--market-es);
+    border-color: var(--market-es-border);
+  }
+  
+  .badge-borderline {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border;
+    background-color: var(--market-borderline-bg);
+    color: var(--market-borderline);
+    border-color: var(--market-borderline-border);
+  }
+  
+  .badge-new {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200;
+  }
+
+  /* Section Title */
+  .section-title {
+    @apply text-lg font-semibold mb-4;
+    color: var(--brand-primary);
+  }
+  
+  /* Page Header */
+  .page-header {
+    @apply mb-8;
+  }
+  
+  .page-header-title {
+    @apply text-3xl font-bold tracking-tight;
+    color: var(--brand-primary);
+  }
+  
+  .page-header-subtitle {
+    @apply mt-1 text-base;
+    color: var(--brand-text-muted);
+  }
+
+  /* Form Inputs */
+  .form-input {
+    @apply block w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-800 placeholder-slate-400 shadow-sm focus:border-[#00E6A7] focus:outline-none focus:ring-2 focus:ring-[#00E6A7]/20 transition-colors bg-white;
+  }
+
+  .form-label {
+    @apply block text-sm font-medium text-slate-700 mb-2;
+  }
+
+  .form-error {
+    @apply text-sm text-red-600 mt-1;
+  }
+
+  /* Legacy support */
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-xl px-6 py-3 text-sm font-semibold text-white shadow-sm hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    background-color: var(--brand-primary);
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-xl bg-white px-6 py-3 text-sm font-semibold text-slate-700 shadow-sm border border-slate-200 hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors;
+  }
+
+  .card {
+    @apply bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6;
+  }
+
+  .stats-card {
+    @apply bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6 flex flex-col;
+  }
+
+  .status-badge {
+    @apply inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold;
+  }
+
+  .status-pending {
+    @apply bg-amber-50 text-amber-700 border border-amber-200;
+  }
+
+  .status-reviewed {
+    @apply bg-blue-50 text-blue-700 border border-blue-200;
+  }
+
+  .status-converted {
+    @apply bg-emerald-50 text-emerald-700 border border-emerald-200;
+  }
+
+  .status-rejected {
+    @apply bg-red-50 text-red-700 border border-red-200;
+  }
+  
+  /* KPI Tile */
+  .kpi-tile {
+    @apply bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm;
+  }
+  
+  .kpi-value {
+    @apply text-3xl font-bold;
+    color: var(--brand-primary);
+  }
+  
+  .kpi-label {
+    @apply text-sm mt-1;
+    color: var(--brand-text-muted);
+  }
+}

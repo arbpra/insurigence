@@ -1,0 +1,411 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum LeadStatus {
+  NEW
+  WAITING_ON_INFO
+  READY_TO_MARKET
+  QUOTED
+  PRESENTED
+  BOUND
+  LOST
+}
+
+enum MarketClassification {
+  STANDARD
+  EXCESS_SURPLUS
+  BORDERLINE
+}
+
+enum CarrierFitTier {
+  GOOD_FIT
+  POSSIBLE_FIT
+  REVIEW_NEEDED
+  NO_FIT
+}
+
+enum LineOfBusiness {
+  COMMERCIAL_GL
+}
+
+enum CarrierMarketType {
+  STANDARD
+  EXCESS_SURPLUS
+}
+
+enum ProposalStatus {
+  DRAFT
+  SHARED
+  VIEWED
+  ACCEPTED
+  DECLINED
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  AGENT
+}
+
+enum LeadSource {
+  INTERNAL
+  EXTERNAL
+}
+
+enum ActivityEventType {
+  INTAKE_SUBMITTED_INTERNAL
+  INTAKE_SUBMITTED_EXTERNAL
+  LEAD_EVALUATED
+  PROPOSAL_CREATED
+  PROPOSAL_SHARED
+  PROPOSAL_VIEWED
+  USER_LOGIN
+  USER_CREATED
+  USER_UPDATED
+  USER_DEACTIVATED
+  AGENCY_CREATED
+  AGENCY_UPDATED
+  AGENCY_PAUSED
+  CARRIER_CREATED
+  CARRIER_UPDATED
+  APPETITE_RULE_CREATED
+  APPETITE_RULE_UPDATED
+  INTAKE_FORM_CREATED
+  INTAKE_FORM_PUBLIC_TOGGLED
+}
+
+enum SubscriptionTier {
+  SOLO
+  GROWTH
+  MULTI_LOCATION
+}
+
+enum RiskTolerance {
+  CONSERVATIVE
+  BALANCED
+  AGGRESSIVE
+}
+
+enum AgencyStatus {
+  ACTIVE
+  PAUSED
+}
+
+enum PresentationMode {
+  STANDARD
+  FLASH
+  BOTH
+}
+
+model Agency {
+  id                   String   @id @default(uuid())
+  name                 String
+  primaryEmail         String?
+  phone                String?
+  website              String?
+
+  subscriptionTier     SubscriptionTier @default(SOLO)
+  allowedMarkets       String[]         @default(["standard"])
+  riskTolerance        RiskTolerance    @default(BALANCED)
+  status               AgencyStatus     @default(ACTIVE)
+  placementNotes       String?
+  esRecommendationsEnabled Boolean      @default(true)
+
+  brandPrimaryColor    String?
+  brandSecondaryColor  String?
+  logoUrl              String?
+  proposalFooterText   String?
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  users                User[]
+  intakeForms          IntakeForm[]
+  intakeSubmissions    IntakeSubmission[]
+  leads                Lead[]
+  carriers             Carrier[]
+  appetiteRules        CarrierAppetiteRule[]
+  quotes               Quote[]
+  proposals            Proposal[]
+  aiRuns               AiRun[]
+  billingAccount       BillingAccount?
+  leadCarrierFits      LeadCarrierFit[]
+}
+
+model User {
+  id           String   @id @default(uuid())
+  agencyId     String?
+  email        String   @unique
+  passwordHash String?
+  firstName    String?
+  lastName     String?
+  role         UserRole @default(AGENT)
+  isActive     Boolean  @default(true)
+  mustChangePassword Boolean @default(true)
+  lastLoginAt  DateTime?
+  lastActivityAt DateTime?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  agency       Agency?  @relation(fields: [agencyId], references: [id])
+  leads        Lead[]   @relation("AssignedLeads")
+  activityEvents ActivityEvent[] @relation("UserEvents")
+  sessions     Session[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([token])
+  @@index([userId])
+}
+
+model IntakeForm {
+  id               String           @id @default(uuid())
+  agencyId         String
+  lob              LineOfBusiness
+  name             String
+  definition       Json
+  isActive         Boolean          @default(true)
+  isPublic         Boolean          @default(false)
+  publicToken      String?          @unique
+  presentationMode PresentationMode @default(STANDARD)
+  allowModeToggle  Boolean          @default(false)
+
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  agency      Agency         @relation(fields: [agencyId], references: [id])
+  submissions IntakeSubmission[]
+}
+
+model IntakeSubmission {
+  id              String   @id @default(uuid())
+  agencyId        String
+  intakeFormId    String
+  insuredName     String
+  contactEmail    String?
+  responses       Json
+  completenessScore Int    @default(0)
+  createdAt       DateTime @default(now())
+
+  agency          Agency   @relation(fields: [agencyId], references: [id])
+  intakeForm      IntakeForm @relation(fields: [intakeFormId], references: [id])
+  lead            Lead?
+}
+
+model Lead {
+  id                   String              @id @default(uuid())
+  agencyId              String
+  intakeSubmissionId    String?             @unique
+  assignedToId          String?
+  lob                   LineOfBusiness     @default(COMMERCIAL_GL)
+
+  insuredName            String
+  primaryContactEmail    String?
+  status                 LeadStatus        @default(NEW)
+  source                 LeadSource        @default(INTERNAL)
+
+  marketClassification   MarketClassification?
+  marketConfidence       Decimal?
+  marketReasonCodes      String[]           @default([])
+
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  agency                 Agency             @relation(fields: [agencyId], references: [id])
+  intakeSubmission       IntakeSubmission?  @relation(fields: [intakeSubmissionId], references: [id])
+  assignedTo             User?              @relation("AssignedLeads", fields: [assignedToId], references: [id])
+
+  carrierFits            LeadCarrierFit[]
+  quotes                 Quote[]
+  proposals              Proposal[]
+  aiRuns                 AiRun[]
+}
+
+model Carrier {
+  id           String            @id @default(uuid())
+  agencyId     String
+  name         String
+  marketType   CarrierMarketType @default(STANDARD)
+  enabled      Boolean           @default(true)
+  priorityRank Int               @default(100)
+  notes        String?
+  isActive     Boolean           @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  agency        Agency               @relation(fields: [agencyId], references: [id])
+  appetiteRules CarrierAppetiteRule[]
+  appetiteGuides AppetiteGuide[]
+  carrierFits   LeadCarrierFit[]
+  quotes        Quote[]
+
+  @@unique([agencyId, name])
+}
+
+model CarrierAppetiteRule {
+  id                   String         @id @default(uuid())
+  agencyId             String
+  carrierId            String
+  lob                  LineOfBusiness @default(COMMERCIAL_GL)
+  version              Int            @default(1)
+  
+  allowedIndustries    String[]       @default([])
+  excludedIndustries   String[]       @default([])
+  allowedStates        String[]       @default([])
+  excludedStates       String[]       @default([])
+  minRevenue           Int?
+  maxRevenue           Int?
+  minEmployees         Int?
+  maxEmployees         Int?
+  minYearsInBusiness   Int?
+  lossHistoryYears     Int            @default(5)
+  maxLossCount         Int?
+  maxLossAmount        Int?
+  
+  rules                Json?
+  summary              String?
+  isActive             Boolean        @default(true)
+  isAgencyOverride     Boolean        @default(false)
+
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  agency    Agency         @relation(fields: [agencyId], references: [id])
+  carrier   Carrier        @relation(fields: [carrierId], references: [id])
+
+  @@unique([carrierId, lob, version])
+}
+
+model AppetiteGuide {
+  id          String   @id @default(uuid())
+  carrierId   String
+  fileName    String
+  fileUrl     String
+  fileSize    Int?
+  mimeType    String?
+  notes       String?
+  uploadedAt  DateTime @default(now())
+
+  carrier     Carrier  @relation(fields: [carrierId], references: [id])
+}
+
+model LeadCarrierFit {
+  id        String         @id @default(uuid())
+  agencyId   String
+  leadId     String
+  carrierId  String
+  tier      CarrierFitTier
+  score     Decimal?
+  reasons   String[]       @default([])
+  notes     String?
+  createdAt DateTime       @default(now())
+
+  agency    Agency         @relation(fields: [agencyId], references: [id])
+  lead      Lead           @relation(fields: [leadId], references: [id])
+  carrier   Carrier        @relation(fields: [carrierId], references: [id])
+
+  @@unique([leadId, carrierId])
+}
+
+model Quote {
+  id        String   @id @default(uuid())
+  agencyId   String
+  leadId     String
+  carrierId  String?
+  quoteName  String?
+  premiumAnnualCents BigInt?
+  totalAnnualCents   BigInt?
+  coverageSummary Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  agency    Agency  @relation(fields: [agencyId], references: [id])
+  lead      Lead    @relation(fields: [leadId], references: [id])
+  carrier   Carrier? @relation(fields: [carrierId], references: [id])
+}
+
+model Proposal {
+  id        String        @id @default(uuid())
+  agencyId   String
+  leadId     String
+  status    ProposalStatus @default(DRAFT)
+  title     String
+  marketClassification MarketClassification?
+  marketConfidence Decimal?
+  marketSummary String?
+  agentRecommendation String?
+  snapshot  Json?
+  quoteIds  String[]       @default([])
+  publicToken String?      @unique
+  sharedAt  DateTime?
+  viewedAt  DateTime?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  agency    Agency         @relation(fields: [agencyId], references: [id])
+  lead      Lead           @relation(fields: [leadId], references: [id])
+}
+
+model AiRun {
+  id        String   @id @default(uuid())
+  agencyId   String
+  leadId     String?
+  purpose   String
+  model     String?
+  output    Json
+  createdAt DateTime @default(now())
+
+  agency    Agency   @relation(fields: [agencyId], references: [id])
+  lead      Lead?    @relation(fields: [leadId], references: [id])
+}
+
+model BillingAccount {
+  id        String   @id @default(uuid())
+  agencyId   String  @unique
+  stripeCustomerId String?
+  stripeSubscriptionId String?
+  planCode  String?
+  status    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  agency    Agency   @relation(fields: [agencyId], references: [id])
+}
+
+model ActivityEvent {
+  id          String            @id @default(uuid())
+  agencyId    String?
+  userId      String?
+  leadId      String?
+  eventType   ActivityEventType
+  metadata    Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime          @default(now())
+
+  user        User?             @relation("UserEvents", fields: [userId], references: [id])
+
+  @@index([agencyId])
+  @@index([userId])
+  @@index([leadId])
+  @@index([eventType])
+  @@index([createdAt])
+}
