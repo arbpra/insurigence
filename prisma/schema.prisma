@@ -3,7 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
 }
 
 enum LeadStatus {
@@ -103,7 +104,7 @@ enum PresentationMode {
 }
 
 model Agency {
-  id                   String   @id @default(uuid())
+  id                   String   @id @default(auto()) @map("_id") @db.ObjectId
   name                 String
   primaryEmail         String?
   phone                String?
@@ -138,8 +139,8 @@ model Agency {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  agencyId     String?
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId     String?  @db.ObjectId
   email        String   @unique
   passwordHash String?
   firstName    String?
@@ -158,26 +159,24 @@ model User {
   activityEvents ActivityEvent[] @relation("UserEvents")
   sessions     Session[]
 
-  @@index([email])
   @@index([role])
 }
 
 model Session {
-  id        String   @id @default(uuid())
-  userId    String
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
   token     String   @unique
   expiresAt DateTime
   createdAt DateTime @default(now())
   
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  @@index([token])
   @@index([userId])
 }
 
 model IntakeForm {
-  id               String           @id @default(uuid())
-  agencyId         String
+  id               String           @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId         String           @db.ObjectId
   lob              LineOfBusiness
   name             String
   definition       Json
@@ -195,9 +194,9 @@ model IntakeForm {
 }
 
 model IntakeSubmission {
-  id              String   @id @default(uuid())
-  agencyId        String
-  intakeFormId    String
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId        String   @db.ObjectId
+  intakeFormId    String   @db.ObjectId
   insuredName     String
   contactEmail    String?
   responses       Json
@@ -210,11 +209,11 @@ model IntakeSubmission {
 }
 
 model Lead {
-  id                   String              @id @default(uuid())
-  agencyId              String
-  intakeSubmissionId    String?             @unique
-  assignedToId          String?
-  lob                   LineOfBusiness     @default(COMMERCIAL_GL)
+  id                   String              @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId             String              @db.ObjectId
+  intakeSubmissionId   String?             @unique @db.ObjectId
+  assignedToId         String?             @db.ObjectId
+  lob                  LineOfBusiness     @default(COMMERCIAL_GL)
 
   insuredName            String
   primaryContactEmail    String?
@@ -222,7 +221,7 @@ model Lead {
   source                 LeadSource        @default(INTERNAL)
 
   marketClassification   MarketClassification?
-  marketConfidence       Decimal?
+  marketConfidence       Float?
   marketReasonCodes      String[]           @default([])
 
   createdAt              DateTime           @default(now())
@@ -239,8 +238,8 @@ model Lead {
 }
 
 model Carrier {
-  id           String            @id @default(uuid())
-  agencyId     String
+  id           String            @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId     String            @db.ObjectId
   name         String
   marketType   CarrierMarketType @default(STANDARD)
   enabled      Boolean           @default(true)
@@ -261,9 +260,9 @@ model Carrier {
 }
 
 model CarrierAppetiteRule {
-  id                   String         @id @default(uuid())
-  agencyId             String
-  carrierId            String
+  id                   String         @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId             String         @db.ObjectId
+  carrierId            String         @db.ObjectId
   lob                  LineOfBusiness @default(COMMERCIAL_GL)
   version              Int            @default(1)
   
@@ -295,8 +294,8 @@ model CarrierAppetiteRule {
 }
 
 model AppetiteGuide {
-  id          String   @id @default(uuid())
-  carrierId   String
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  carrierId   String   @db.ObjectId
   fileName    String
   fileUrl     String
   fileSize    Int?
@@ -308,12 +307,12 @@ model AppetiteGuide {
 }
 
 model LeadCarrierFit {
-  id        String         @id @default(uuid())
-  agencyId   String
-  leadId     String
-  carrierId  String
+  id        String         @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId  String         @db.ObjectId
+  leadId    String         @db.ObjectId
+  carrierId String         @db.ObjectId
   tier      CarrierFitTier
-  score     Decimal?
+  score     Float?
   reasons   String[]       @default([])
   notes     String?
   createdAt DateTime       @default(now())
@@ -326,11 +325,11 @@ model LeadCarrierFit {
 }
 
 model Quote {
-  id        String   @id @default(uuid())
-  agencyId   String
-  leadId     String
-  carrierId  String?
-  quoteName  String?
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId  String   @db.ObjectId
+  leadId    String   @db.ObjectId
+  carrierId String?  @db.ObjectId
+  quoteName String?
   premiumAnnualCents BigInt?
   totalAnnualCents   BigInt?
   coverageSummary Json
@@ -343,13 +342,13 @@ model Quote {
 }
 
 model Proposal {
-  id        String        @id @default(uuid())
-  agencyId   String
-  leadId     String
+  id        String        @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId  String        @db.ObjectId
+  leadId    String        @db.ObjectId
   status    ProposalStatus @default(DRAFT)
   title     String
   marketClassification MarketClassification?
-  marketConfidence Decimal?
+  marketConfidence Float?
   marketSummary String?
   agentRecommendation String?
   snapshot  Json?
@@ -365,9 +364,9 @@ model Proposal {
 }
 
 model AiRun {
-  id        String   @id @default(uuid())
-  agencyId   String
-  leadId     String?
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId  String   @db.ObjectId
+  leadId    String?  @db.ObjectId
   purpose   String
   model     String?
   output    Json
@@ -378,8 +377,8 @@ model AiRun {
 }
 
 model BillingAccount {
-  id        String   @id @default(uuid())
-  agencyId   String  @unique
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId  String   @unique @db.ObjectId
   stripeCustomerId String?
   stripeSubscriptionId String?
   planCode  String?
@@ -391,10 +390,10 @@ model BillingAccount {
 }
 
 model ActivityEvent {
-  id          String            @id @default(uuid())
-  agencyId    String?
-  userId      String?
-  leadId      String?
+  id          String            @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId    String?           @db.ObjectId
+  userId      String?           @db.ObjectId
+  leadId      String?           @db.ObjectId
   eventType   ActivityEventType
   metadata    Json?
   ipAddress   String?
