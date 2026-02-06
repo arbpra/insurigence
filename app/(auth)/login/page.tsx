@@ -80,7 +80,7 @@ function LoginContent() {
             <h2 className="text-2xl font-bold mb-2" style={{ color: '#0D2137' }}>
               Welcome back
             </h2>
-            <p className="text-gray-500 mb-6">
+            <p className="text-gray-500 mb-16">
               Sign in to access your dashboard
             </p>
 
@@ -94,7 +94,7 @@ function LoginContent() {
               </div>
             )}
 
-            <a
+            {/* <a
               href="/api/login"
               className="w-full py-3 px-4 rounded-lg font-semibold text-white transition-all duration-200 hover:opacity-90 flex items-center justify-center gap-2 mb-6"
               style={{ backgroundColor: '#00E6A7' }}
@@ -104,16 +104,16 @@ function LoginContent() {
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
               </svg>
               Sign in with Replit
-            </a>
+            </a> */}
 
-            <div className="relative mb-6">
+            {/* <div className="relative mb-6">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-gray-300"></div>
               </div>
               <div className="relative flex justify-center text-sm">
                 <span className="px-3 bg-white text-gray-500">Or sign in with email</span>
               </div>
-            </div>
+            </div> */}
 
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
