@@ -7,6 +7,7 @@ import Logo from '@/app/components/Logo';
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const redirect = searchParams.get('redirect');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -42,11 +43,19 @@ function LoginContent() {
       }
 
       if (data.user.mustChangePassword) {
-        router.push('/change-password');
-      } else if (data.user.role === 'SUPER_ADMIN') {
-        router.push('/super-admin');
+        router.replace('/change-password');
+        return;
+      }
+
+      if (redirect) {
+        router.replace(redirect);
+        return;
+      }
+
+      if (data.user.role === 'SUPER_ADMIN') {
+        router.replace('/super-admin');
       } else {
-        router.push('/dashboard');
+        router.replace('/dashboard');
       }
     } catch {
       setError('An error occurred. Please try again.');
