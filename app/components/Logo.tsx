@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import Image from 'next/image';
-import logoImage from '@/attached_assets/image_1769205831692.png';
+import logoImage from '@/attached_assets/insurigence_logo.webp';
 
 interface LogoProps {
   size?: 'sm' | 'md' | 'lg';
@@ -10,7 +10,7 @@ interface LogoProps {
 export default function Logo({ size = 'md', className = '' }: LogoProps) {
   const sizes = {
     sm: { height: 24, width: 140 },
-    md: { height: 32, width: 180 },
+    md: { height: 32, width: 300 },
     lg: { height: 44, width: 260 },
   };
 
