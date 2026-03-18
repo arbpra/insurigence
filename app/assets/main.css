@@ -10937,3 +10937,25 @@ footer{padding-top: 60px;}
 .leading-mnug {
   line-height: 1;
 }
+
+.cs_footer_widget_title {
+  position: relative;
+  display: inline-block;
+}
+
+.cs_footer_widget_title::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -5px;
+  width: 50px;
+  height: 2px;
+  background: #fff;
+  transform-origin: left;
+  animation: lineGrow 1s ease forwards;
+}
+
+@keyframes lineGrow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}

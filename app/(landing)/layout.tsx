@@ -1,7 +1,7 @@
 "use client"
 import { ReactNode, useEffect } from 'react';
-import Header from '../(landing)/header/page';
-import Footer from '../(landing)/footer/page';
+import Header from '../components/header/page';
+import Footer from '../components/footer/page';
 
 
 interface LayoutProps {

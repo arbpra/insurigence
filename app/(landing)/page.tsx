@@ -1,11 +1,11 @@
 import Link from 'next/link';
-import Herobanner from '../(landing)/home-banner/page';
-import AboutUs from '../(landing)/about-us/page';
-import Features from '../(landing)/features/page';
-import CallToAction from '../(landing)/call-to-action/page';
-import Services from '../(landing)/services/page';
-import OurAim from '../(landing)/our-aim/page';
-import CallToActionFooter from '../(landing)/call-to-action-footer/page';
+import Herobanner from '../components/home-banner/page';
+import AboutUs from '../components/about-us/page';
+import Features from '../components/features/page';
+import CallToAction from '../components/call-to-action/page';
+import Services from '../components/services/page';
+import OurAim from '../components/our-aim/page';
+import CallToActionFooter from '../components/call-to-action-footer/page';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
