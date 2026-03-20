@@ -62,11 +62,11 @@ export default function Nav({ setMobileToggle }: NavProps) {
       </li> */}
 
        <li>
-        <Link href="#">How It Woks</Link>
+        <Link href="#">How It Works</Link>
       </li>
 
       <li>
-        <Link href="/who-is-it-for">Who It's For</Link>
+        <Link href="/who-is-it-for">Who It's Forss</Link>
       </li>
 
       <li>

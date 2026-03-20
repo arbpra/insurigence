@@ -111,21 +111,58 @@ export default function Header3({ variant }: any) {
 
                 <Logo size="md" />
               </div>
-                            
+
               <div className="cs_main_header_right">
+
                 <div className="cs_nav cs_primary_font fw-medium">
+
+                  {/* Hamburger (ONLY MOBILE) */}
                   <span
-                    className={
-                      mobileToggle
-                        ? 'cs-munu_toggle cs_teggle_active'
-                        : 'cs-munu_toggle'
-                    }
+                    className="cs-munu_toggle d-lg-none"
                     onClick={() => setMobileToggle(!mobileToggle)}
                   >
                     <span></span>
                   </span>
+
+                  {/* Desktop Menu */}
+                  <div className="d-none d-lg-block">
+                    <Nav setMobileToggle={setMobileToggle} />
+                  </div>
+
+                </div>
+
+                {/* Sidebar (ONLY MOBILE) */}
+                <div className={`cs_sidebar_menu d-lg-none ${mobileToggle ? 'active' : ''}`}>
+
+                  {/* Top Bar (Logo + Close) */}
+                  <div className="cs_sidebar_header d-flex justify-content-between align-items-center mb-4">
+
+                    {/* Logo */}
+                    <Logo size="md" />
+
+                    {/* Close Button */}
+                    <button
+                      className="cs_sidebar_close"
+                      onClick={() => setMobileToggle(false)}
+                    >
+                      ✕
+                    </button>
+
+                  </div>
+
+                  {/* Menu */}
                   <Nav setMobileToggle={setMobileToggle} />
                 </div>
+
+                {/* Overlay */}
+                {mobileToggle && (
+                  <div
+                    className="cs_sidebar_overlay d-lg-none"
+                    onClick={() => setMobileToggle(false)}
+                  ></div>
+                )}
+
+
               </div>
               <div className="cs_main_header_right hidden md:block">
                 <div className="header-btn d-flex align-items-center">

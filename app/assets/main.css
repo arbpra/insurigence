@@ -11042,3 +11042,66 @@ footer{padding-top: 60px;}
   from { transform: scaleX(0); }
   to { transform: scaleX(1); }
 }
+
+.cs_sidebar_menu {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 280px;
+  height: 100vh;
+  background: #121212;
+  z-index: 99999;
+  padding: 20px;
+  overflow-y: auto;
+
+  transform: translateX(100%);
+  transition: transform 0.3s ease;
+}
+
+.cs_sidebar_menu.active {
+  transform: translateX(0);
+}
+
+.cs_sidebar_overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  background: rgba(0,0,0,0.5);
+  z-index: 99998;
+}
+
+.cs_sidebar_menu .cs_nav_list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.cs_sidebar_menu .cs_nav_list li a {
+  color: #fff;
+}
+
+/* Hide sidebar in desktop */
+@media (min-width: 992px) {
+  .cs_sidebar_menu {
+    position: static;
+    width: auto;
+    height: auto;
+    background: none;
+    left: 0;
+    padding: 0;
+  }
+
+  .cs_sidebar_overlay {
+    display: none;
+  }
+}
+
+.cs_sidebar_menu ul {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.cs_sidebar_close{color: #00e6a7;}
