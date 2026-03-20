@@ -2,7 +2,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from "framer-motion";
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import Slider from "react-slick";
 import ServiceImage1 from '@/attached_assets/independent-commercial-agencies.webp';
 import ServiceImage2 from '@/attached_assets/wholesale-brokers-and-mgas.webp';
@@ -11,7 +11,6 @@ import ServiceImage4 from '@/attached_assets/growing-teams-and-new-hires.webp';
 import ArrowRight from '@/attached_assets/arrow_right.svg';
 import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
-
 
 const fadeUp = {
   hidden: { opacity: 0, y: 50 },
@@ -48,6 +47,32 @@ const container = {
 
 const Services = () => {
 
+  // ✅ ALL hooks here (TOP LEVEL)
+  const [mounted, setMounted] = useState(false);
+  const [slidesToShow, setSlidesToShow] = useState(4);
+  const sliderRef = useRef<Slider | null>(null);
+
+  useEffect(() => {
+    setMounted(true);
+
+    const updateSlides = () => {
+      const width = window.innerWidth;
+
+      if (width < 480) setSlidesToShow(1);
+      else if (width < 768) setSlidesToShow(2);
+      else if (width < 1024) setSlidesToShow(3);
+      else setSlidesToShow(4);
+    };
+
+    updateSlides();
+    window.addEventListener("resize", updateSlides);
+
+    return () => window.removeEventListener("resize", updateSlides);
+  }, []);
+
+  // ✅ AFTER hooks
+  if (!mounted) return null;
+
   const chooseContent = [
     { url: '#', img: ServiceImage1, title: 'Independent Commercial Agencies', content: '' },
     { url: '#', img: ServiceImage2, title: 'Wholesale Brokers And MGAs', content: '' },
@@ -60,7 +85,7 @@ const Services = () => {
   dots: false,
   infinite: true,
   speed: 2000,
-  slidesToShow: 4,
+  slidesToShow: slidesToShow,   // 👈 dynamic
   slidesToScroll: 1,
   arrows: false,
   swipeToSlide: true,
@@ -68,26 +93,26 @@ const Services = () => {
   autoplaySpeed: 4000,
 
   responsive: [
-  {
-    breakpoint: 480,
-    settings: { slidesToShow: 1 }
-  },
-  {
-    breakpoint: 768,
-    settings: { slidesToShow: 2 }
-  },
-  {
-    breakpoint: 1024,
-    settings: { slidesToShow: 3 }
-  },
-  {
-    breakpoint: 1400,
-    settings: { slidesToShow: 4 }
-  }
-]
+    {
+      breakpoint: 480,
+      settings: { slidesToShow: 1 }
+    },
+    {
+      breakpoint: 768,
+      settings: { slidesToShow: 2 }
+    },
+    {
+      breakpoint: 1024,
+      settings: { slidesToShow: 3 }
+    },
+    {
+      breakpoint: 1400,
+      settings: { slidesToShow: 4 }
+    }
+  ]
 };
 
-  const sliderRef = useRef<Slider | null>(null);
+  
 
   const next = () => {
     sliderRef.current?.slickNext();

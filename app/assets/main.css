@@ -3352,6 +3352,11 @@ label {
   cursor: url(/assets/img/drag.png) 16 9, ew-resize !important;
 }
 
+.slick-slide {
+  display: flex !important;
+  justify-content: center;
+}
+
 .slick-slide>div {
   display: -webkit-box;
   display: -ms-flexbox;
