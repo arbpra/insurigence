@@ -21,6 +21,7 @@ const PUBLIC_PATHS = [
   '/compare',
   '/for-producers',
   '/use-cases',
+  '/who-is-it-for',
 ];
 
 function isPublicPath(pathname: string): boolean {

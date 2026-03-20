@@ -112,7 +112,7 @@ export default function Header3({ variant }: any) {
                 <Logo size="md" />
               </div>
                             
-              <div className="cs_main_header_center">
+              <div className="cs_main_header_right">
                 <div className="cs_nav cs_primary_font fw-medium">
                   <span
                     className={

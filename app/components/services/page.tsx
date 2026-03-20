@@ -9,6 +9,9 @@ import ServiceImage2 from '@/attached_assets/wholesale-brokers-and-mgas.webp';
 import ServiceImage3 from '@/attached_assets/program-administrators.webp';
 import ServiceImage4 from '@/attached_assets/growing-teams-and-new-hires.webp';
 import ArrowRight from '@/attached_assets/arrow_right.svg';
+import "slick-carousel/slick/slick.css";
+import "slick-carousel/slick/slick-theme.css";
+
 
 const fadeUp = {
   hidden: { opacity: 0, y: 50 },
@@ -54,35 +57,35 @@ const Services = () => {
 
 
   const settings = {
-    dots: false,
-    infinite: true,
-    speed: 2000,
-    slidesToShow: 4,
-    slidesToScroll: 1,
-    arrows: false,
-    swipeToSlide: true,
-    autoplay: true,
-    autoplaySpeed: 4000,
-    responsive: [
-      {
-        breakpoint: 1399,
-        settings: {
-          slidesToShow: 3,
-        }
-      },
-      {
-        breakpoint: 1199,
-        settings: {
-          slidesToShow: 3,
-        }
-      }, {
-        breakpoint: 575,
-        settings: {
-          slidesToShow: 1,
-        }
-      }
-    ]
-  };
+  dots: false,
+  infinite: true,
+  speed: 2000,
+  slidesToShow: 4,
+  slidesToScroll: 1,
+  arrows: false,
+  swipeToSlide: true,
+  autoplay: true,
+  autoplaySpeed: 4000,
+
+  responsive: [
+  {
+    breakpoint: 480,
+    settings: { slidesToShow: 1 }
+  },
+  {
+    breakpoint: 768,
+    settings: { slidesToShow: 2 }
+  },
+  {
+    breakpoint: 1024,
+    settings: { slidesToShow: 3 }
+  },
+  {
+    breakpoint: 1400,
+    settings: { slidesToShow: 4 }
+  }
+]
+};
 
   const sliderRef = useRef<Slider | null>(null);
 

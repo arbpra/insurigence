@@ -2026,6 +2026,16 @@ textarea {
   }
 }
 
+
+@media (max-width: 767px) {
+  .cs_card_new {
+    display: flex;
+    flex-direction: column-reverse;
+  }
+
+  .cs_card_new.cs_style_2{padding:40px !important;}
+}
+
 hr {
   margin: 0;
   padding: 0;
@@ -8711,7 +8721,26 @@ label {
   transition: all 0.3s ease;
 }
 
+.cs_card_new.cs_style_2 {
+  height: 100%;
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-orient: vertical;
+  -webkit-box-direction: normal;
+  -ms-flex-direction: column;
+  flex-direction: column;
+  padding: 80px;
+  -webkit-transition: all 0.3s ease;
+  transition: all 0.3s ease;
+}
+
 .cs_card.cs_style_2>* {
+  position: relative;
+  z-index: 1;
+}
+
+.cs_card_new.cs_style_2>* {
   position: relative;
   z-index: 1;
 }
@@ -8721,6 +8750,8 @@ label {
   height: 86px;
   border: 3px solid #00e6a7;
 }
+
+
 
 .cs_card.cs_style_2 .cs_card_content {
   -webkit-box-flex: 1;
@@ -8735,8 +8766,27 @@ label {
   flex-direction: column;
 }
 
+.cs_card_new.cs_style_2 .cs_card_content {
+  -webkit-box-flex: 1;
+  -ms-flex: 1;
+  flex: 1;
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-orient: vertical;
+  -webkit-box-direction: normal;
+  -ms-flex-direction: column;
+  flex-direction: column;
+}
+
 .cs_card.cs_style_2 .cs_card_title,
 .cs_card.cs_style_2 .cs_card_subtitle {
+  -webkit-transition: inherit;
+  transition: inherit;
+}
+
+.cs_card_new.cs_style_2 .cs_card_title,
+.cs_card_new.cs_style_2 .cs_card_subtitle {
   -webkit-transition: inherit;
   transition: inherit;
 }
@@ -8756,12 +8806,40 @@ label {
   transition: all 0.3s ease;
 }
 
+.cs_card_new.cs_style_2 .cs_card_btn {
+  width: 52px;
+  height: 52px;
+  background-color: var(--heading-color);
+  -webkit-transform: rotate(-45deg);
+  transform: rotate(-45deg);
+  margin-top: auto;
+  -webkit-transition: all 0.3s ease;
+  transition: all 0.3s ease;
+}
+
 .cs_card.cs_style_2 .cs_card_btn:hover {
   -webkit-transform: rotate(-45deg) scale(1.1);
   transform: rotate(-45deg) scale(1.1);
 }
 
+.cs_card_new.cs_style_2 .cs_card_btn:hover {
+  -webkit-transform: rotate(-45deg) scale(1.1);
+  transform: rotate(-45deg) scale(1.1);
+}
+
 .cs_card.cs_style_2 .cs_card_shape_2 {
+  content: "";
+  width: 85%;
+  height: 3px;
+  background-color: #fff;
+  position: absolute;
+  top: 70px;
+  right: 0;
+  -webkit-transition: all 0.3s ease;
+  transition: all 0.3s ease;
+}
+
+.cs_card_new.cs_style_2 .cs_card_shape_2 {
   content: "";
   width: 85%;
   height: 3px;
