@@ -88,7 +88,7 @@ const CallToAction = () => {
               className="flex flex-col sm:flex-row items-center justify-start gap-4"
             >
               <motion.a
-                href="#contact"
+                href="https://meetings-na2.hubspot.com/logan-kutz"
                 whileHover={{ y: -4, scale: 1.03 }}
                 transition={{ duration: 0.3 }}
                 className="inline-flex items-center gap-2 px-8 py-2 text-base font-medium rounded-md border-2"

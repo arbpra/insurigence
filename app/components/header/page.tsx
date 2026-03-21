@@ -35,11 +35,11 @@ export default function Header3({ variant }: any) {
                 <ul className="cs_header_contact_list cs_mp_0 cs_white_color">
                   <li>
                     <i className="bi bi-envelope-fill"></i>
-                    <a href="mailto:abc@insurigence.com" aria-label="Email link">abc@insurigence.com</a>
+                    <a href="mailto:contact@insurigence.ai" aria-label="Email link">contact@insurigence.ai</a>
                   </li>
                   <li>
                     <i className="bi bi-telephone-fill"></i>
-                    <a href="tel:012-345-6789" aria-label="Phone call link">012-345-6789</a>
+                    <a href="tel:2698586288" aria-label="Phone call link">(269) 858-6288</a>
                   </li>
                 </ul>
               </div>
@@ -48,11 +48,11 @@ export default function Header3({ variant }: any) {
                 <ul className="cs_header_contact_list cs_mp_0 cs_white_color">
                   <li>
                     <i className="bi bi-envelope-fill"></i>
-                    <a href="mailto:abc@insurigence.com" aria-label="Email link">abc@insurigence.com</a>
+                    <a href="mailto:contact@insurigence.ai" aria-label="Email link">contact@insurigence.ai</a>
                   </li>
                   <li>
                     <i className="bi bi-telephone-fill"></i>
-                    <a href="tel:012-345-6789" aria-label="Phone call link">012-345-6789</a>
+                    <a href="tel:2698586288" aria-label="Phone call link">(269) 858-6288</a>
                   </li>
                 </ul>
               </div>
@@ -63,11 +63,11 @@ export default function Header3({ variant }: any) {
                   <div className="cs_header_social_links top-header-social-icon">
                     <div className="cs_social_btns cs_style_1">
 
-                      <a href="#" aria-label="Social link" className="cs_center">
+                      <a href="https://www.facebook.com/profile.php?viewas=100000686899395&id=61587482870837" aria-label="Social link" className="cs_center">
                         <i className="bi bi-facebook"></i>
                       </a>
-                      <a href="#" aria-label="Social link" className="cs_center">
-                        <i className="bi bi-youtube"></i>
+                      <a href="https://www.linkedin.com/company/insurigence" aria-label="Social link" className="cs_center">
+                        <i className="bi bi-linkedin"></i>
                       </a>
                       {/* <a href="#" aria-label="Social link" className="cs_center">
                         <i className="bi bi-linkedin"></i>
@@ -92,11 +92,11 @@ export default function Header3({ variant }: any) {
                 <ul className="cs_header_contact_list cs_mp_0 cs_white_color">
                   <li>
                     <i className="bi bi-envelope-fill"></i>
-                    <a href="mailto:abc@insurigence.com" aria-label="Email link">Email Us</a>
+                    <a href="mailto:contact@insurigence.ai" aria-label="Email link">Email Us</a>
                   </li>
                   <li>
                     <i className="bi bi-telephone-fill"></i>
-                    <a href="tel:012-345-6789" aria-label="Phone call link">Call Us</a>
+                    <a href="tel:2698586288" aria-label="Phone call link">Call Us</a>
                   </li>
                 </ul>
               </div>

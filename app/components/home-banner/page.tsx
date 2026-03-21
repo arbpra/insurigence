@@ -96,7 +96,7 @@ const HeroBanner = () => {
           className="text-sm sm:text-base md:text-lg lg:text-xl max-w-3xl mx-auto leading-relaxed mb-10 text-white/90"
           style={{ fontFamily: "Helvetica" }}
         >
-          Insurigence helps agencies in smarter intakes, identify the right coverages, and deliver stronger submissions - all before the process even begins.
+          Insurigence helps agencies capture better data, uncover coverage gaps, and deliver higher-quality submissions from the very start.
         </motion.p>
 
         {/* Buttons */}
@@ -106,7 +106,7 @@ const HeroBanner = () => {
         >
 
           <motion.a
-            href="#contact"
+            href="https://meetings-na2.hubspot.com/logan-kutz"
             whileHover={{ y: -5, scale: 1.05 }}
             transition={{ duration: 0.3 }}
             className="inline-flex items-center gap-2 px-8 py-2 text-base font-medium rounded-md border-2"
@@ -121,7 +121,7 @@ const HeroBanner = () => {
 
           <motion.div whileHover={{ y: -5, scale: 1.05 }}>
             <Link
-              href="/sample-proposal"
+              href="/contact"
               className="inline-flex items-center gap-2 px-8 py-2 text-base font-medium rounded-md border-2"
               style={{
                 borderColor: "#fff",

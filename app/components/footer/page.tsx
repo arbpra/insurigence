@@ -52,33 +52,38 @@ const Footer = () => {
 
                   <motion.div variants={fadeUp} className="d-flex align-items-start gap-2 mb-3">
                     <i className="bi bi-envelope icon-circle"></i>
-                    <p className="mb-0">info@insurigence.com</p>
+                    <p className="mb-0"><a href="mailto:contact@insurigence.ai">contact@insurigence.ai</a></p>
                   </motion.div>
 
                   <motion.div variants={fadeUp} className="d-flex align-items-start gap-2 mb-3">
                     <i className="bi bi-telephone icon-circle"></i>
-                    <p className="mb-0">+123 456 789 10</p>
+                    <p className="mb-0"><a href="tel:2698586288">(269) 858-6288</a></p>
                   </motion.div>
 
-                  <motion.div variants={fadeUp} className="d-flex align-items-start gap-2">
+                  {/* <motion.div variants={fadeUp} className="d-flex align-items-start gap-2">
                     <i className="bi bi-geo-alt icon-circle"></i>
                     <p className="mb-0">
                       abc road, abc area, abc state, Country.
                     </p>
-                  </motion.div>
+                  </motion.div> */}
                 </div>
 
                 {/* Social Icons */}
-                <motion.div variants={fadeUp} className="cs_social_btns cs_style_1">
-                  {["facebook", "twitter-x", "linkedin", "instagram"].map((icon, i) => (
+                <motion.div variants={fadeUp} className="cs_social_btns cs_style_1 d-flex gap-3">
+                  {[
+                    { icon: "facebook", link: "https://www.facebook.com/profile.php?viewas=100000686899395&id=61587482870837" },
+                    { icon: "linkedin", link: "https://www.linkedin.com/company/insurigence" }
+                  ].map((item, i) => (
                     <motion.a
                       key={i}
-                      href="#"
-                      className="cs_center cs_radius_50"
-                      whileHover={{ y: -4, scale: 1.1 }}
+                      href={item.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="social-icon"
+                      whileHover={{ scale: 1.15, y: -5 }}
                       transition={{ duration: 0.3 }}
                     >
-                      <i className={`bi bi-${icon}`}></i>
+                      <i className={`bi bi-${item.icon}`}></i>
                     </motion.a>
                   ))}
                 </motion.div>
@@ -86,29 +91,33 @@ const Footer = () => {
 
               {/* Links Section */}
               <motion.div className="cs_footer_links_wrapper" variants={container}>
-
                 {[
                   {
                     title: "Services",
-                    links: ["Platform", "How It Works", "Who It's For", "Early Access"]
+                    subtitle: ["Platform", "How It Works", "Who It's For", "Early Access"],
+                    links: ["/", "/", "who-is-it-for", "/"]
                   },
                   {
                     title: "Company",
-                    links: ["About", "Careers", "Contact"]
+                    subtitle: ["About", "Careers", "Contact"],
+                    links: ["/", "/", "/"]
                   },
                   {
                     title: "Resources",
-                    links: ["Portfolio", "Community", "Guides", "Docs", "Blog", "Press"]
+                    subtitle: ["Portfolio", "Community", "Guides", "Docs", "Blog", "Press"],
+                    links: ["/", "/", "/", "/", "/", "/"]
                   },
                   {
                     title: "Legal",
-                    links: ["Privacy", "Terms", "Security", "FAQ"]
+                    subtitle: ["Privacy", "Terms", "Security", "FAQ"],
+                    links: ["/", "/", "/", "/"]
                   }
                 ].map((section, i) => (
                   <motion.div key={i} className="cs_footer_widget" variants={fadeUp}>
                     <h2 className="cs_footer_widget_title cs_fs_20 cs_medium cs_white_color cs_mb_27">
                       {section.title}
                     </h2>
+
                     <ul className="cs_footer_menu cs_mp_0">
                       {section.links.map((link, idx) => (
                         <motion.li
@@ -116,15 +125,15 @@ const Footer = () => {
                           whileHover={{ x: 5 }}
                           transition={{ duration: 0.2 }}
                         >
-                          <Link href="#">{link}</Link>
+                          <Link href={link}>
+                            {section.subtitle[idx]}
+                          </Link>
                         </motion.li>
                       ))}
                     </ul>
                   </motion.div>
                 ))}
-
               </motion.div>
-
             </div>
           </div>
         </motion.div>

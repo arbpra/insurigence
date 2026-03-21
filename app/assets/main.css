@@ -157,7 +157,7 @@ button {
 
 a:hover {
   text-decoration: none;
-  color: var(--accent-color);
+  color: #00e6a7;
 }
 
 table {
@@ -2397,10 +2397,13 @@ label {
   border: 0;
   color: var(--white-color);
   background-color: transparent;
+  font-size: 20px;
 }
 
+
+
 .cs_social_btns.cs_style_1 a:hover {
-  color: var(--accent-color);
+  color: #00e6a7;
 }
 
 /*-----------------------------------
@@ -11105,3 +11108,4 @@ footer{padding-top: 60px;}
 }
 
 .cs_sidebar_close{color: #00e6a7;}
+

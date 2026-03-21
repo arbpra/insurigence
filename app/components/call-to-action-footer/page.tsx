@@ -84,7 +84,7 @@ const CallToActionFooter = () => {
         >
 
           <motion.a
-            href="#contact"
+            href="https://meetings-na2.hubspot.com/logan-kutz"
             whileHover={{ y: -5, scale: 1.05 }}
             transition={{ duration: 0.3 }}
             className="inline-flex items-center gap-2 px-8 py-2 text-base font-medium rounded-md border-2"
@@ -99,7 +99,7 @@ const CallToActionFooter = () => {
 
           <motion.div whileHover={{ y: -5, scale: 1.05 }} transition={{ duration: 0.3 }}>
             <Link
-              href="/sample-proposal"
+              href="/contact"
               className="inline-flex items-center gap-2 px-8 py-2 text-base font-medium rounded-md border-2"
               style={{
                 borderColor: "#0D2137",

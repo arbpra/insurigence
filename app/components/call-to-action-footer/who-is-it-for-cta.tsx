@@ -107,7 +107,7 @@ const WhoIsItForCTA = () => {
                 </motion.h1>
 
                 <motion.a
-                  href="#contact"
+                  href="https://meetings-na2.hubspot.com/logan-kutz"
                   whileHover={{ y: -5, scale: 1.05 }}
                   transition={{ duration: 0.3 }}
                   className="inline-flex items-center gap-2 px-8 py-2 text-base font-medium rounded-md border-2"
@@ -117,7 +117,7 @@ const WhoIsItForCTA = () => {
                     backgroundColor: "#fff"
                   }}
                 >
-                  See A Sample Proposal
+                  Request A Demo
                 </motion.a>
 
 
