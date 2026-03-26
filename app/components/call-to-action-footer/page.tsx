@@ -72,7 +72,7 @@ const CallToActionFooter = () => {
 
         <motion.p
           variants={fadeUp}
-          className="text-base sm:text-lg md:text-xl max-w-2xl mx-auto leading-relaxed mb-10 text-center text-[#535353] font-normal"
+          className="text-base sm:text-lg md:text-xl max-w-2xl mx-auto leading-relaxed mb-10 text-center font-normal"
           style={{ fontFamily: "Helvetica" }}
         >
           Commercial insurance will continue to grow in complexity. The tools supporting agents should evolve with it.
@@ -99,12 +99,12 @@ const CallToActionFooter = () => {
 
           <motion.div whileHover={{ y: -5, scale: 1.05 }} transition={{ duration: 0.3 }}>
             <Link
-              href="/contact"
+              href="/talk-to-insurigence"
               className="inline-flex items-center gap-2 px-8 py-2 text-base font-medium rounded-md border-2"
               style={{
-                borderColor: "#0D2137",
+                borderColor: "#07496c",
                 color: "#fff",
-                backgroundColor: "#0D2137"
+                backgroundColor: "#07496c"
               }}
             >
               Contact Us

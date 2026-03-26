@@ -2,8 +2,9 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { motion } from "framer-motion";
+import homeBanner from '@/attached_assets/talk-to-insurigence-cta-2.webp';
 import Image from 'next/image';
-import CTAImage from '@/attached_assets/cta-2.webp';
+import LogoMarker from '@/attached_assets/logo-marker-right-2.webp';
 
 
 const container = {
@@ -51,10 +52,10 @@ const fadeRight = {
   }
 };
 
-const WhoIsItForCTA = () => {
+const EarlyAccessCTA2 = () => {
 
   return (
-    <section className="w-full relative overflow-hidden" style={{ background: "#00e6a7" }}>
+    <section className="w-full relative overflow-hidden" style={{ background: "#07496c" }}>
       <div className="cs_height_60 cs_height_lg_80"></div>
       <div className="container">
         <div className="row cs_gap_y_40 align-items-center">
@@ -68,7 +69,7 @@ const WhoIsItForCTA = () => {
               variants={fadeLeft}
               transition={{ duration: 0.6 }}
             >
-              <Image src={CTAImage} alt="img" className="w-full h-auto rounded-lg" />
+              <Image src={homeBanner} alt="img" className="w-full h-auto rounded-lg" />
             </motion.div>
           </div>
 
@@ -93,18 +94,33 @@ const WhoIsItForCTA = () => {
                   }}
                 >
                   <span className="text-white">
-                    See How
+                    Building
                   </span>{" "}
-                  <span className="text-[#07496c]">
+                  <span className="text-[#00e6a7]">
                     Insurigence
                   </span>{" "}
                   <span className="text-white">
-                    Can
+                    with
                   </span>{" "}
-                  <span className="text-[#07496c]">
-                    Support Your Team
+                  <span className="text-[#00e6a7]">
+                    Industry Input
                   </span>
                 </motion.h1>
+
+                <motion.p
+                  variants={fadeUp}
+                  className="cs_section_heading_text mb-4 text-white"
+                >
+                  We're working closely with commercial insurance professionals to shape the platform as it evolves.
+                </motion.p>
+
+                <motion.p
+                  variants={fadeUp}
+                  className="cs_section_heading_text mb-4 text-white"
+                >
+                  If you're interested in contributing feedback or learning more, we encourage you to get in touch.
+
+                </motion.p>
 
                 <motion.a
                   href="https://meetings-na2.hubspot.com/logan-kutz"
@@ -125,12 +141,19 @@ const WhoIsItForCTA = () => {
             </div>
           </div>
 
-        </div>
-      </div>   
-      <div className="cs_height_60 cs_height_lg_80"></div>   
 
+
+        </div>
+        <span className="cs_wheel_shape absolute left-0 bottom-2/5 -translate-y-1/2">
+        <Image src={LogoMarker} alt="img" width={121} height={116} />
+      </span>
+      </div>
+      
+
+      <div className="cs_height_60 cs_height_lg_80"></div>
+      
     </section>
   );
 };
 
-export default WhoIsItForCTA;
+export default EarlyAccessCTA2;

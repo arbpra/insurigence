@@ -59,13 +59,13 @@ const WhoIsItForAbout = () => {
             <div className="cs_about_content">
 
               <motion.div
-                className="cs_section_heading cs_style_1 text-center max-w-3xl mx-auto"
+                className="cs_section_heading cs_style_1 text-center max-w-2xl mx-auto"
                 initial="hidden"
                 whileInView="visible"
                 viewport={{ once: false, amount: 0.2 }}
                 transition={{ staggerChildren: 0.2 }}
               >
-                <motion.p variants={fadeUp} className="text-sm sm:text-base md:text-lg text-gray-600 leading-relaxed mb-2">
+                <motion.p variants={fadeUp} className="cs_section_heading_text mb-4">
                   Insurigence is designed for commercial insurance teams that want clearer placement decisions, fewer declinations, and less reliance on informal or inconsistent processes. The platform helps agencies and underwriting teams evaluate risks more confidently and bring greater consistency to the commercial placement workflow.
                 </motion.p>
 

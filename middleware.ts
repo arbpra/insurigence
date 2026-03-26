@@ -22,6 +22,8 @@ const PUBLIC_PATHS = [
   '/for-producers',
   '/use-cases',
   '/who-is-it-for',
+  '/early-access',
+  '/talk-to-insurigence',
 ];
 
 function isPublicPath(pathname: string): boolean {

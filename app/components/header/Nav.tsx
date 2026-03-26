@@ -70,7 +70,7 @@ export default function Nav({ setMobileToggle }: NavProps) {
       </li>
 
       <li>
-        <Link href="#">Early Access</Link>
+        <Link href="/early-access">Early Access</Link>
       </li>
 
 
@@ -164,7 +164,7 @@ export default function Nav({ setMobileToggle }: NavProps) {
         </DropDown>
       </li> */}
       <li>
-        <Link href="/contact-us" onClick={() => setMobileToggle(false)}>
+        <Link href="/talk-to-insurigence" onClick={() => setMobileToggle(false)}>
           Contact Us
         </Link>
       </li>

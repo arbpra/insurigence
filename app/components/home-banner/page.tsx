@@ -33,7 +33,7 @@ const HeroBanner = () => {
     <section
       className="w-full relative overflow-hidden flex items-end sm:items-center min-h-[600px] sm:min-h-[600px] lg:min-h-[700px]"
       style={{
-        backgroundImage: `linear-gradient(rgba(5,49,76,0.8), rgba(5,49,76,0.8)), url(${homeBanner.src})`,
+        backgroundImage: `linear-gradient(rgba(77, 101, 116, 0.8), rgba(5,49,76,0.8)), url(${homeBanner.src})`,
         backgroundSize: "cover",
         backgroundPosition: "center",
       }}
@@ -121,7 +121,7 @@ const HeroBanner = () => {
 
           <motion.div whileHover={{ y: -5, scale: 1.05 }}>
             <Link
-              href="/contact"
+              href="/talk-to-insurigence"
               className="inline-flex items-center gap-2 px-8 py-2 text-base font-medium rounded-md border-2"
               style={{
                 borderColor: "#fff",

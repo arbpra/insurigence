@@ -1,6 +1,6 @@
 "use client"
 import React, { useEffect, useState } from 'react';
-import homeBanner from '@/attached_assets/early-access.webp';
+import homeBanner from '@/attached_assets/talk-to-insurigence-banner.webp';
 import Link from 'next/link';
 import { motion } from "framer-motion";
 import Image from 'next/image';
@@ -76,31 +76,28 @@ const WhoIsItForBanner = () => {
         {/* Heading */}
         <motion.h1
           variants={fadeUp}
-          className="text-3xl sm:text-3xl md:text-4xl lg:text-6xl font-normal tracking-tight leading-tight pt-20 mb-6"
+          className="text-3xl sm:text-3xl md:text-4xl lg:text-5xl font-normal tracking-tight leading-tight pt-20 mb-6"
           style={{
             fontFamily: "Helvetica",
             letterSpacing: "-0.03em",
           }}
         >
-          <span className="text-white">
-            Who
-          </span>{" "}
           <span className="text-[#00E6A7]">
-            Insurigence
+            Get in Touch
           </span>{" "}
           <span className="text-white">
-            Is For
+            with the Insurigence Team
           </span>
         </motion.h1>
 
         {/* Paragraph */}
         <motion.p
           variants={fadeUp}
-          className="text-sm sm:text-base md:text-lg lg:text-xl max-w-3xl mx-auto leading-relaxed text-white/90"
+          className="sm:text-base md:text-lg lg:text-xl max-w-3xl mx-auto leading-relaxed text-white/90"
           style={{ fontFamily: "Helvetica" }}
         >
-          Insurigence is built for commercial insurance teams that want clearer placement decisions, fewer declinations, and less reliance on tribal knowledge.
-        </motion.p>       
+          Our team is working closely with agencies and commercial insurance professionals as we prepare for launch, and we welcome the opportunity to connect.
+        </motion.p>
 
       </motion.div>
 

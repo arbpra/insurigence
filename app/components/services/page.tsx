@@ -82,37 +82,37 @@ const Services = () => {
 
 
   const settings = {
-  dots: false,
-  infinite: true,
-  speed: 2000,
-  slidesToShow: slidesToShow,   // 👈 dynamic
-  slidesToScroll: 1,
-  arrows: false,
-  swipeToSlide: true,
-  autoplay: true,
-  autoplaySpeed: 4000,
+    dots: false,
+    infinite: true,
+    speed: 2000,
+    slidesToShow: slidesToShow,   // 👈 dynamic
+    slidesToScroll: 1,
+    arrows: false,
+    swipeToSlide: true,
+    autoplay: true,
+    autoplaySpeed: 4000,
 
-  responsive: [
-    {
-      breakpoint: 480,
-      settings: { slidesToShow: 1 }
-    },
-    {
-      breakpoint: 768,
-      settings: { slidesToShow: 2 }
-    },
-    {
-      breakpoint: 1024,
-      settings: { slidesToShow: 3 }
-    },
-    {
-      breakpoint: 1400,
-      settings: { slidesToShow: 4 }
-    }
-  ]
-};
+    responsive: [
+      {
+        breakpoint: 480,
+        settings: { slidesToShow: 1 }
+      },
+      {
+        breakpoint: 768,
+        settings: { slidesToShow: 2 }
+      },
+      {
+        breakpoint: 1024,
+        settings: { slidesToShow: 3 }
+      },
+      {
+        breakpoint: 1400,
+        settings: { slidesToShow: 4 }
+      }
+    ]
+  };
 
-  
+
 
   const next = () => {
     sliderRef.current?.slickNext();
@@ -140,13 +140,20 @@ const Services = () => {
           viewport={{ once: false, amount: 0.3 }}
           variants={container}
         >
-          <div className="cs_section_heading cs_style_1 text-center">
+          <div className="cs_section_heading cs_style_1 text-left">
             <motion.h2
               variants={fadeUp}
               className="text-3xl sm:text-3xl md:text-4xl lg:text-4xl mb-2 font-medium"
             >
               Who Insurigence Is Built For
             </motion.h2>
+
+            <motion.p
+              variants={fadeUp}
+              className="cs_section_heading_text mb-4"
+            >
+              Insurigence is built for professionals who handle commercial insurance every day.
+            </motion.p>
           </div>
 
           <motion.div
@@ -199,10 +206,13 @@ const Services = () => {
                       />
                     </motion.div>
 
-                    <div className="cs_post_content cs_white_bg text-center">
-                      <h3 className="text-lg sm:text-xl md:text-xl font-medium mb-2">
+                    <div
+                      className="cs_post_content cs_white_bg text-center"
+                      style={{ minHeight: "80px" }}
+                    >
+                      <h5 className="cs_section_heading_text font-medium mb-2">
                         {item.title}
-                      </h3>
+                      </h5>
                     </div>
                   </motion.article>
 

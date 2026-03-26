@@ -2,8 +2,9 @@
 import Image from "next/image";
 import { motion } from "framer-motion";
 import Link from 'next/link';
-import AboutUsImage from '@/attached_assets/about-us.webp';
-import ProblemImage from '@/attached_assets/problem.webp';
+import EarlyAccessImage from '@/attached_assets/early-access-about.webp';
+import LogoMarker from '@/attached_assets/logo-marker-right.webp';
+import ProblemImage from '@/attached_assets/why-early-join.webp';
 import React from 'react';
 
 const fadeUp = {
@@ -61,7 +62,7 @@ const AboutUs = () => {
               variants={fadeLeft}
               transition={{ duration: 0.6 }}
             >
-              <Image src={AboutUsImage} alt="img" className="w-full h-auto rounded-lg" />
+              <Image src={EarlyAccessImage} alt="img" className="w-full h-auto rounded-lg" />
             </motion.div>
           </div>
 
@@ -80,24 +81,24 @@ const AboutUs = () => {
                   variants={fadeUp}
                   className="text-2xl sm:text-3xl md:text-4xl lg:text-4xl font-medium tracking-tight mb-4"
                 >
-                  Your Commercial Command Center Solution
+                  Joining the Community
                 </motion.h2>
 
                 <motion.p variants={fadeUp} className="cs_section_heading_text mb-2">
-                  Insurigence brings together structured intake, coverage intelligence, proposal automation, and workflow management into one platform built specifically for independent agencies.
+                  Insurigence is preparing for its initial launch, and we're inviting a limited number of agencies and commercial insurance teams to join our early access group. Early participants will be among the first to explore the platform and help shape its development as we move toward full release.
                 </motion.p>
 
                 <motion.p variants={fadeUp} className="cs_section_heading_text mb-4">
-                  Instead of juggling spreadsheets, forms, and manual processes, producers gain a centralized system designed to help them move commercial opportunities forward with greater confidence and efficiency.
+                  By joining early access, your team will gain insight into upcoming capabilities and have the opportunity to provide feedback that influences how the platform evolves.
                 </motion.p>
 
                 <motion.a
                   variants={fadeUp}
-                  href="/who-is-it-for"
+                  href="/talk-to-insurigence"
                   className="inline-flex items-center gap-2 px-8 py-2 text-base font-medium rounded-md transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 border-2"
                   style={{ borderColor: '#00e6a7', color: '#05314C', backgroundColor: '#00e6a7' }}
                 >
-                  Learn More
+                  Request Early Access
                 </motion.a>
 
               </motion.div>
@@ -107,10 +108,17 @@ const AboutUs = () => {
         </div>
       </div>
 
+      <span className="cs_wheel_shape absolute right-0 top-2/5 -translate-y-1/2">
+        <Image src={LogoMarker} alt="img" width={121} height={116} />
+      </span>
+
       <div className="cs_height_60 cs_height_lg_80"></div>
 
       {/* SECOND SECTION */}
       <div className="container">
+
+        <div className="cs_height_60 cs_height_lg_80"></div>
+        
         <div className="row cs_gap_y_40 align-items-center">
 
           {/* LEFT CONTENT */}
@@ -128,32 +136,31 @@ const AboutUs = () => {
                   variants={fadeUp}
                   className="text-2xl sm:text-3xl md:text-4xl lg:text-4xl font-medium tracking-tight mb-4"
                 >
-                  What People Struggle With
+                  Why Join Early
                 </motion.h2>
 
                 <motion.p
                   variants={fadeUp}
                   className="cs_section_heading_text mb-4"
                 >
-                  Independent producers spend too much time navigating inefficient workflows.
+                  Agencies participating in early access will be able to explore how Insurigence supports the commercial placement process while contributing feedback that helps refine the platform. Early access participants will have the opportunity to:
                 </motion.p>
 
-                <motion.ol
+                <motion.ul
                   variants={fadeUp}
-                  className="blue-num-list list-decimal pl-5 space-y-2 cs_section_heading_text mb-4"
+                  className="blue-num-ullist list-decimal pl-5 space-y-2 sm:text-base text-gray-700"
                 >
-                  <li>Incomplete submissions slow down quoting.</li>
-                  <li>Class codes require guesswork.</li>
-                  <li>Coverage gaps are easy to miss.</li>
-                  <li>Proposals are difficult for clients to understand.</li>
-                  <li>And valuable opportunities often get lost in the process.</li>
-                </motion.ol>
+                  <li>Experience the platform before public launch</li>
+                  <li>Provide feedback that helps shape product development</li>
+                  <li>Explore tools designed to improve commercial submission workflows</li>
+                  <li>Stay informed as new capabilities are introduced</li>
+                </motion.ul>
 
                 <motion.p
                   variants={fadeUp}
                   className="cs_section_heading_text mb-4"
                 >
-                  Commercial insurance shouldn't require this much friction. Insurigence is designed to simplify the entire workflow - from intake to proposal.
+                  This stage is focused on learning from real agency workflows and ensuring the platform supports how commercial teams actually operate.
                 </motion.p>
 
               </motion.div>
@@ -176,6 +183,7 @@ const AboutUs = () => {
         </div>
       </div>
 
+      <div className="h-10 sm:h-10 lg:h-40"></div>
     </section>
   );
 };

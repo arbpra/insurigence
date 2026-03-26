@@ -83,24 +83,21 @@ const WhoIsItForBanner = () => {
           }}
         >
           <span className="text-white">
-            Who
+            Early Access to
           </span>{" "}
           <span className="text-[#00E6A7]">
             Insurigence
-          </span>{" "}
-          <span className="text-white">
-            Is For
           </span>
         </motion.h1>
 
         {/* Paragraph */}
         <motion.p
           variants={fadeUp}
-          className="text-sm sm:text-base md:text-lg lg:text-xl max-w-3xl mx-auto leading-relaxed text-white/90"
+          className="text-sm sm:text-base md:text-lg lg:text-xl max-w-3xl mx-auto leading-relaxed mb-10 text-white/90"
           style={{ fontFamily: "Helvetica" }}
         >
           Insurigence is built for commercial insurance teams that want clearer placement decisions, fewer declinations, and less reliance on tribal knowledge.
-        </motion.p>       
+        </motion.p>
 
       </motion.div>
 
