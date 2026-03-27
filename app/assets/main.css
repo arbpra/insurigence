@@ -10204,7 +10204,7 @@ label {
   }
 
   .header_sticky_style1.cs-gescout_sticky .cs_nav .cs_nav_list>li>a {
-    color: #fff;
+    /* color: #fff; */
   }
 
 
@@ -11148,4 +11148,29 @@ textarea:not(:placeholder-shown) {
   padding: 5px 0px 5px 85px;
   color: #07496c;
   margin-left: -70px;
+}
+
+/* Scroll To Top Button */
+.scroll-top {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background-color: #07496c;
+  color: #fff;
+  border: none;
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  cursor: pointer;
+  z-index: 9999;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.scroll-top:hover {
+  transform: translateY(-4px);
+}
+
+.scroll-top svg{
+  display: initial;
 }

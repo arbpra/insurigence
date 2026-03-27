@@ -47,7 +47,9 @@ const Footer = () => {
                 <div className="cs_text_widget mb-5">
 
                   <motion.div variants={fadeUp}>
+                    <Link href="/" className={`flex items-center`} data-testid="logo-link">
                     <Image src={LogoWhite} alt="img" height={32} className="cs_mb_30" />
+                    </Link>
                   </motion.div>
 
                   <motion.div variants={fadeUp} className="d-flex align-items-start gap-2 mb-3">
@@ -95,12 +97,12 @@ const Footer = () => {
                   {
                     title: "Services",
                     subtitle: ["Platform", "How It Works", "Who It's For", "Early Access"],
-                    links: ["/", "/", "who-is-it-for", "/"]
+                    links: ["/", "/", "who-is-it-for", "/early-access"]
                   },
                   {
                     title: "Company",
                     subtitle: ["About", "Careers", "Contact"],
-                    links: ["/", "/", "/"]
+                    links: ["/", "/", "/talk-to-insurigence"]
                   },
                   {
                     title: "Resources",

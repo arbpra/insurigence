@@ -5,6 +5,7 @@ import 'bootstrap-icons/font/bootstrap-icons.css';
 import './globals.css';
 import "./assets/main.css";
 import "slick-carousel/slick/slick.css";
+import ScrollToTop from "@/app/components/footer/ScrollToTop";
 
 const inter = Inter({
   subsets: ['latin'],
@@ -30,6 +31,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
         {children}
+        <ScrollToTop />
       </body>
     </html>
   );
