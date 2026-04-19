@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { motion } from "framer-motion";
-import homeBanner from '@/attached_assets/talk-to-insurigence-cta-2.webp';
+import homeBanner from '@/attached_assets/platform-2.webp';
 import Image from 'next/image';
 import LogoMarker from '@/attached_assets/logo-marker.webp';
 
@@ -94,16 +94,13 @@ const EarlyAccessCTA2 = () => {
                   }}
                 >
                   <span className="text-white">
-                    Building
+                    Be One Of The
                   </span>{" "}
                   <span className="text-[#00e6a7]">
-                    Insurigence
+                    First Agents
                   </span>{" "}
                   <span className="text-white">
-                    with
-                  </span>{" "}
-                  <span className="text-[#00e6a7]">
-                    Industry Input
+                    On The Platform
                   </span>
                 </motion.h1>
 
@@ -111,22 +108,16 @@ const EarlyAccessCTA2 = () => {
                   variants={fadeUp}
                   className="cs_section_heading_text mb-4 text-white"
                 >
-                  We're working closely with commercial insurance professionals to shape the platform as it evolves.
+                  We're onboarding a small group of commercial agents before public launch. If you're working with contractors, restaurants, or technology businesses - we'd love to show you what we've built so far.
                 </motion.p>
 
-                <motion.p
-                  variants={fadeUp}
-                  className="cs_section_heading_text mb-4 text-white"
-                >
-                  If you're interested in contributing feedback or learning more, we encourage you to get in touch.
-
-                </motion.p>
+                
 
                 <motion.a
                   href="https://meetings-na2.hubspot.com/logan-kutz"
                   whileHover={{ y: -5, scale: 1.05 }}
                   transition={{ duration: 0.3 }}
-                  className="inline-flex items-center gap-2 px-8 py-2 text-base font-medium rounded-md border-2"
+                  className="inline-flex mb-3 items-center gap-2 px-8 py-2 text-base font-medium rounded-md border-2"
                   style={{
                     borderColor: "#fff",
                     color: "#0D2137",
@@ -135,6 +126,14 @@ const EarlyAccessCTA2 = () => {
                 >
                   Request A Demo
                 </motion.a>
+
+                <motion.p
+                  variants={fadeUp}
+                  className="cs_section_heading_text mb-4 text-white"
+                >
+                  No commitment. No credit card. Just a conversation.
+
+                </motion.p>
 
 
               </motion.div>

@@ -9,7 +9,7 @@ export default function Nav({ setMobileToggle }: NavProps) {
   return (
     <ul className="cs_nav_list fw-medium">
       <li>
-        <Link href="/">Platform</Link>
+        <Link href="/platform">Platform</Link>
       </li>
       {/* <li className="menu-item-has-children">
         <Link href="#">Services</Link>

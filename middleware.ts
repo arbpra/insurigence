@@ -24,6 +24,7 @@ const PUBLIC_PATHS = [
   '/who-is-it-for',
   '/early-access',
   '/talk-to-insurigence',
+  '/platform',
 ];
 
 function isPublicPath(pathname: string): boolean {
