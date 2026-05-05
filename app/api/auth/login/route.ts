@@ -52,14 +52,15 @@ export async function POST(request: NextRequest) {
       data: { lastLoginAt: new Date() },
     });
 
-    await prisma.activityEvent.create({
+    // Non-fatal: activity logging should not block login
+    prisma.activityEvent.create({
       data: {
-        agencyId: user.agencyId,
+        agencyId: user.agencyId ?? undefined,
         userId: user.id,
         eventType: 'USER_LOGIN',
         metadata: { email: user.email },
       },
-    });
+    }).catch((err) => console.error('Activity log error:', err));
 
     const sessionToken = await createSession(user.id);
 

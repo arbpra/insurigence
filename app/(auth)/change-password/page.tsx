@@ -118,6 +118,7 @@ export default function ChangePasswordPage() {
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2"
+                style={{ color: '#111827' }}
                 required
                 data-testid="input-current-password"
               />
@@ -137,6 +138,7 @@ export default function ChangePasswordPage() {
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2"
+                style={{ color: '#111827' }}
                 placeholder="At least 8 characters"
                 required
                 minLength={8}
@@ -158,6 +160,7 @@ export default function ChangePasswordPage() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2"
+                style={{ color: '#111827' }}
                 required
                 minLength={8}
                 data-testid="input-confirm-password"

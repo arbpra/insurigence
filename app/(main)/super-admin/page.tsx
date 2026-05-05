@@ -3,372 +3,413 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useAdminAuth } from './layout';
-import { 
-  Building2, Users, FileText, TrendingUp, LogOut, Plus, 
-  Activity, ChevronRight, AlertCircle, CheckCircle, Clock,
-  BarChart3, UserPlus
-} from 'lucide-react';
+import { Bell, ChevronDown } from 'lucide-react';
+import Logo from '@/app/components/Logo';
 
 interface KPIs {
   totalAgencies: number;
   activeAgencies: number;
   totalUsers: number;
   activeUsersLast7Days: number;
-  leadsLast30Days: number;
+  newLeadsLast30Days: number;
   evaluationsLast30Days: number;
-  proposalsLast30Days: number;
+  quotedLeadsLast30Days: number;
+  proposalsSentLast30Days: number;
+  newLeadsThisWeek: number;
+  newLeadsPrevWeek: number;
+  awaitingReviewCount: number;
+  agenciesOnboardedThisWeek: number;
+  proposalsClosedThisWeek: number;
 }
 
-interface AgencyHealth {
+interface RecentLead {
   id: string;
-  name: string;
+  insuredName: string;
   status: string;
-  subscriptionTier: string;
-  lastActivityAt: string | null;
-  activeUsersLast7Days: number;
-  intakesLast30Days: number;
-  evaluationsLast30Days: number;
-  proposalsLast30Days: number;
-  healthBadge: 'green' | 'yellow' | 'red';
-  totalUsers: number;
-  totalLeads: number;
+  lob: string;
+  createdAt: string;
+  agentName: string | null;
+  coverageTags: string[];
+  businessType: string | null;
 }
 
 interface ActivityEvent {
   id: string;
   eventType: string;
-  agencyId: string | null;
-  userId: string | null;
-  leadId: string | null;
   userName: string | null;
+  entityName: string | null;
   metadata: Record<string, unknown>;
   createdAt: string;
 }
 
-function formatEventType(eventType: string): string {
-  const mapping: Record<string, string> = {
-    INTAKE_SUBMITTED_INTERNAL: 'Internal Intake',
-    INTAKE_SUBMITTED_EXTERNAL: 'External Intake',
-    LEAD_EVALUATED: 'Lead Evaluated',
-    PROPOSAL_CREATED: 'Proposal Created',
-    PROPOSAL_SHARED: 'Proposal Shared',
-    PROPOSAL_VIEWED: 'Proposal Viewed',
-    USER_LOGIN: 'User Login',
-    USER_CREATED: 'User Created',
-    USER_UPDATED: 'User Updated',
-    USER_DEACTIVATED: 'User Deactivated',
-    AGENCY_CREATED: 'Agency Created',
-    AGENCY_UPDATED: 'Agency Updated',
-  };
-  return mapping[eventType] || eventType.replace(/_/g, ' ');
+const STATUS_CONFIG: Record<string, { label: string; dot: string; bg: string; text: string }> = {
+  NEW: { label: 'New', dot: 'bg-gray-400', bg: 'bg-gray-100', text: 'text-gray-600' },
+  WAITING_ON_INFO: { label: 'Evaluated', dot: 'bg-blue-400', bg: 'bg-blue-50', text: 'text-blue-600' },
+  READY_TO_MARKET: { label: 'Evaluated', dot: 'bg-blue-400', bg: 'bg-blue-50', text: 'text-blue-600' },
+  QUOTED: { label: 'Quoted', dot: 'bg-orange-400', bg: 'bg-orange-50', text: 'text-orange-600' },
+  PRESENTED: { label: 'Proposal Sent', dot: 'bg-green-400', bg: 'bg-green-50', text: 'text-green-600' },
+  BOUND: { label: 'Bound', dot: 'bg-teal-400', bg: 'bg-teal-50', text: 'text-teal-600' },
+  LOST: { label: 'Lost', dot: 'bg-red-400', bg: 'bg-red-50', text: 'text-red-500' },
+};
+
+const ACTIVITY_LABEL: Record<string, string> = {
+  INTAKE_SUBMITTED_INTERNAL: 'Internal intake submitted for',
+  INTAKE_SUBMITTED_EXTERNAL: 'External intake submitted for',
+  LEAD_EVALUATED: 'Risk evaluation run on',
+  PROPOSAL_CREATED: 'Proposal created for',
+  PROPOSAL_SHARED: 'Proposal sent to',
+  PROPOSAL_VIEWED: 'Proposal viewed for',
+  USER_LOGIN: 'New User Login',
+  USER_CREATED: 'User created for',
+  USER_UPDATED: 'User updated',
+  USER_DEACTIVATED: 'User deactivated',
+  AGENCY_CREATED: 'Agency created',
+  AGENCY_UPDATED: 'Agency updated',
+};
+
+function getGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good Morning';
+  if (h < 17) return 'Good Afternoon';
+  return 'Good Evening';
 }
 
-function formatTimeAgo(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString();
+function formatPageDate() {
+  return new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
 }
 
-function HealthBadge({ badge }: { badge: 'green' | 'yellow' | 'red' }) {
-  const config = {
-    green: { bg: 'bg-green-100', text: 'text-green-700', icon: CheckCircle, label: 'Healthy' },
-    yellow: { bg: 'bg-amber-100', text: 'text-amber-700', icon: AlertCircle, label: 'Attention' },
-    red: { bg: 'bg-red-100', text: 'text-red-700', icon: AlertCircle, label: 'At Risk' },
-  };
-  const { bg, text, icon: Icon, label } = config[badge];
-  
-  return (
-    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${bg} ${text}`}>
-      <Icon className="w-3 h-3" />
-      {label}
-    </span>
-  );
+function formatSubmitted(dateStr: string) {
+  return new Date(dateStr).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+function timeAgo(dateStr: string) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  const hrs = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins} minutes ago`;
+  if (hrs < 24) return `${hrs} hours ago`;
+  if (days === 1) return 'Yesterday';
+  return `${days} days ago`;
 }
 
 export default function SuperAdminHome() {
-  const { logout, authFetch } = useAdminAuth();
+  const { logout, authFetch, user } = useAdminAuth();
   const [kpis, setKpis] = useState<KPIs | null>(null);
-  const [agencyHealth, setAgencyHealth] = useState<AgencyHealth[]>([]);
+  const [recentLeads, setRecentLeads] = useState<RecentLead[]>([]);
   const [recentActivity, setRecentActivity] = useState<ActivityEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const fetchDashboard = async () => {
-      try {
-        const res = await authFetch('/api/super-admin/dashboard');
-        if (res.ok) {
-          const data = await res.json();
+    authFetch('/api/super-admin/dashboard')
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (data) {
           setKpis(data.kpis);
-          setAgencyHealth(data.agencyHealth);
-          setRecentActivity(data.recentActivity);
+          setRecentLeads(data.recentLeads || []);
+          setRecentActivity(data.recentActivity || []);
         }
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchDashboard();
+      })
+      .finally(() => setIsLoading(false));
   }, [authFetch]);
 
-  const kpiCards = [
-    { label: 'Total Agencies', value: kpis?.totalAgencies || 0, icon: Building2, color: '#0D2137' },
-    { label: 'Active Agencies', value: kpis?.activeAgencies || 0, icon: TrendingUp, color: '#00E6A7' },
-    { label: 'Total Users', value: kpis?.totalUsers || 0, icon: Users, color: '#0D2137' },
-    { label: 'Active Users (7d)', value: kpis?.activeUsersLast7Days || 0, icon: Users, color: '#00E6A7' },
-    { label: 'Leads (30d)', value: kpis?.leadsLast30Days || 0, icon: FileText, color: '#0D2137' },
-    { label: 'Evaluations (30d)', value: kpis?.evaluationsLast30Days || 0, icon: BarChart3, color: '#00E6A7' },
-    { label: 'Proposals (30d)', value: kpis?.proposalsLast30Days || 0, icon: FileText, color: '#0D2137' },
+  const firstName = user?.firstName || 'Admin';
+  const lastName = user?.lastName || '';
+  const initials = `${firstName[0] || ''}${lastName[0] || ''}`.toUpperCase();
+
+  const weeklyChange = kpis
+    ? kpis.newLeadsPrevWeek === 0
+      ? kpis.newLeadsThisWeek > 0 ? 100 : 0
+      : Math.round(((kpis.newLeadsThisWeek - kpis.newLeadsPrevWeek) / kpis.newLeadsPrevWeek) * 100)
+    : 0;
+
+  const statCards = [
+    {
+      label: 'NEW LEADS',
+      value: kpis?.newLeadsLast30Days ?? 0,
+      subtext: `${weeklyChange >= 0 ? '↑' : '↓'} ${Math.abs(weeklyChange)}% this week`,
+      subtextClass: weeklyChange >= 0 ? 'text-green-600' : 'text-red-500',
+    },
+    {
+      label: 'EVALUATED',
+      value: kpis?.evaluationsLast30Days ?? 0,
+      subtext: `${kpis?.awaitingReviewCount ?? 0} awaiting review`,
+      subtextClass: 'text-gray-400',
+    },
+    {
+      label: 'QUOTED',
+      value: kpis?.quotedLeadsLast30Days ?? 0,
+      subtext: '',
+      subtextClass: 'text-gray-400',
+    },
+    {
+      label: 'PROPOSALS SENT',
+      value: kpis?.proposalsSentLast30Days ?? 0,
+      subtext: `${kpis?.proposalsClosedThisWeek ?? 0} closed this week`,
+      subtextClass: 'text-gray-400',
+    },
+    {
+      label: 'TOTAL AGENCIES',
+      value: kpis?.totalAgencies ?? 0,
+      subtext: `${kpis?.agenciesOnboardedThisWeek ?? 0} onboarded this week`,
+      subtextClass: 'text-[#00e6a7]',
+    },
+    {
+      label: 'ACTIVE AGENCIES',
+      value: kpis?.activeAgencies ?? 0,
+      subtext: 'Active in last 7 days',
+      subtextClass: 'text-gray-400',
+    },
+    {
+      label: 'TOTAL USERS',
+      value: kpis?.totalUsers ?? 0,
+      subtext: 'Across all agencies',
+      subtextClass: 'text-gray-400',
+    },
+    {
+      label: 'ACTIVE USERS',
+      value: kpis?.activeUsersLast7Days ?? 0,
+      subtext: 'Logged in last 7 days',
+      subtextClass: 'text-gray-400',
+    },
   ];
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#F5F7FA' }}>
+    <div className="min-h-screen bg-[#F5F7FA]">
+      {/* ── Header ── */}
       <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div 
-              className="w-10 h-10 rounded-lg flex items-center justify-center"
-              style={{ backgroundColor: '#0D2137' }}
-            >
-              <Building2 className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold" style={{ color: '#0D2137' }}>Super Admin Console</h1>
-              <p className="text-sm text-gray-500">Insurigence Platform Management</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <nav className="hidden md:flex items-center gap-1">
-              <Link
-                href="/super-admin/agencies"
-                className="px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
-              >
-                Agencies
-              </Link>
-              <Link
-                href="/super-admin/users"
-                className="px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
-              >
-                Users
-              </Link>
-              <Link
-                href="/super-admin/activity"
-                className="px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
-              >
-                Activity
-              </Link>
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-8">
+            <Logo size="sm" />
+            <nav className="hidden md:flex items-center">
+              {[
+                { label: 'Overview', href: '/super-admin', active: true },
+                { label: 'Leads', href: '/super-admin/agencies' },
+                { label: 'Proposals', href: '#' },
+                { label: 'Reports', href: '/super-admin/activity' },
+                { label: 'Intake', href: '#' },
+              ].map((item) => (
+                <Link
+                  key={item.label}
+                  href={item.href}
+                  className={`px-4 h-16 flex items-center text-sm font-medium border-b-2 transition-colors ${
+                    item.active
+                      ? 'border-[#0D2137] text-[#0D2137]'
+                      : 'border-transparent text-gray-500 hover:text-gray-800'
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              ))}
             </nav>
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg">
+              <Bell className="w-5 h-5" />
+            </button>
             <button
               onClick={logout}
-              className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+              className="flex items-center gap-1.5 ml-1"
               data-testid="button-logout"
             >
-              <LogOut className="w-4 h-4" />
-              Logout
+              <div
+                className="w-9 h-9 rounded-full border-2 border-[#0D2137] flex items-center justify-center text-xs font-bold text-[#0D2137]"
+              >
+                {initials || 'SA'}
+              </div>
+              <ChevronDown className="w-4 h-4 text-gray-400" />
             </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8">
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-8">
-          {kpiCards.map((kpi, idx) => (
-            <div key={idx} className="bg-white rounded-xl border border-gray-200 p-4" data-testid={`kpi-${kpi.label.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}>
-              <div className="flex items-center gap-2 mb-2">
-                <kpi.icon className="w-4 h-4" style={{ color: kpi.color }} />
-                <span className="text-xs text-gray-500 truncate">{kpi.label}</span>
-              </div>
-              <p className="text-2xl font-bold" style={{ color: kpi.color }} data-testid={`value-${kpi.label.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}>
-                {isLoading ? '...' : kpi.value}
+      {/* ── Main ── */}
+      <main className="max-w-7xl mx-auto px-6 py-8">
+
+        {/* Greeting row */}
+        <div className="flex items-start justify-between mb-8">
+          <div>
+            <p className="text-sm text-gray-400 mb-1">{formatPageDate()}</p>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-[2rem] font-bold text-[#0D2137] leading-tight">
+                {getGreeting()}, {firstName}
+              </h1>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-gray-200 bg-white text-xs font-medium text-gray-600">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#00e6a7]" />
+                Super Admin
+              </span>
+            </div>
+          </div>
+          <div className="hidden md:flex items-center gap-6 pt-3">
+            <Link href="/super-admin/agencies" className="text-sm text-gray-500 hover:text-[#0D2137] transition-colors">
+              Agencies
+            </Link>
+            <Link href="/super-admin/users" className="text-sm text-gray-500 hover:text-[#0D2137] transition-colors">
+              Users
+            </Link>
+            <Link href="/super-admin/activity" className="text-sm text-gray-500 hover:text-[#0D2137] transition-colors">
+              Activity Insights
+            </Link>
+          </div>
+        </div>
+
+        {/* Stat cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 mb-8">
+          {statCards.map((card, i) => (
+            <div
+              key={i}
+              className="bg-white rounded-xl border border-gray-200 p-4"
+              data-testid={`kpi-${card.label.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}
+            >
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2 leading-tight">
+                {card.label}
               </p>
+              <p
+                className="text-[2rem] font-light text-[#0D2137] leading-none mb-1.5"
+                data-testid={`value-${card.label.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}
+              >
+                {isLoading ? '—' : card.value}
+              </p>
+              {card.subtext && (
+                <p className={`text-xs leading-tight ${card.subtextClass}`}>{card.subtext}</p>
+              )}
             </div>
           ))}
         </div>
 
-        <div className="flex flex-wrap gap-3 mb-8">
-          <Link
-            href="/super-admin/agencies?create=true"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium"
-            style={{ backgroundColor: '#0D2137' }}
-            data-testid="button-create-agency"
-          >
-            <Plus className="w-4 h-4" />
-            Create Agency
-          </Link>
-          <Link
-            href="/super-admin/users?create=true"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium"
-            style={{ backgroundColor: '#00E6A7' }}
-            data-testid="button-add-user"
-          >
-            <UserPlus className="w-4 h-4" />
-            Add User
-          </Link>
-          <Link
-            href="/super-admin/activity"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50"
-            data-testid="button-view-activity"
-          >
-            <Activity className="w-4 h-4" />
-            View All Activity
-          </Link>
-        </div>
-
+        {/* Bottom panels */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-gray-900">Agency Health</h2>
-                <Link 
-                  href="/super-admin/agencies" 
-                  className="text-sm font-medium flex items-center gap-1"
-                  style={{ color: '#00E6A7' }}
-                >
-                  View All
-                  <ChevronRight className="w-4 h-4" />
-                </Link>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200">
-                      <th className="text-left text-xs font-medium text-gray-500 uppercase px-6 py-3">Agency</th>
-                      <th className="text-left text-xs font-medium text-gray-500 uppercase px-4 py-3">Status</th>
-                      <th className="text-left text-xs font-medium text-gray-500 uppercase px-4 py-3">Health</th>
-                      <th className="text-center text-xs font-medium text-gray-500 uppercase px-4 py-3">Users (7d)</th>
-                      <th className="text-center text-xs font-medium text-gray-500 uppercase px-4 py-3">Intakes (30d)</th>
-                      <th className="text-center text-xs font-medium text-gray-500 uppercase px-4 py-3">Evals (30d)</th>
-                      <th className="text-center text-xs font-medium text-gray-500 uppercase px-4 py-3">Proposals (30d)</th>
-                      <th className="text-left text-xs font-medium text-gray-500 uppercase px-4 py-3">Last Activity</th>
+
+          {/* Recent Leads */}
+          <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="px-6 py-4 flex items-center justify-between border-b border-gray-100">
+              <h2 className="text-base font-semibold text-[#0D2137]">Recent Leads</h2>
+              <Link
+                href="/super-admin/agencies"
+                className="text-sm font-medium text-[#00e6a7] hover:opacity-75 transition-opacity"
+              >
+                View all →
+              </Link>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    {['Business', 'Type', 'Coverage', 'Submitted', 'Agent', 'Status'].map((h) => (
+                      <th
+                        key={h}
+                        className="text-left text-[10px] font-semibold text-[#00e6a7] uppercase tracking-wide px-5 py-3 first:pl-6"
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-10 text-center text-gray-400 text-sm">
+                        Loading…
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {isLoading ? (
-                      <tr>
-                        <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
-                          Loading...
-                        </td>
-                      </tr>
-                    ) : agencyHealth.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
-                          No agencies found
-                        </td>
-                      </tr>
-                    ) : (
-                      agencyHealth.map((agency) => (
-                        <tr key={agency.id} className="hover:bg-gray-50" data-testid={`row-agency-health-${agency.id}`}>
-                          <td className="px-6 py-4">
-                            <Link 
-                              href={`/super-admin/agencies/${agency.id}`}
-                              className="font-medium text-gray-900 hover:underline"
-                              data-testid={`link-agency-${agency.id}`}
-                            >
-                              {agency.name}
-                            </Link>
-                            <p className="text-xs text-gray-500">{agency.subscriptionTier}</p>
+                  ) : recentLeads.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-10 text-center text-gray-400 text-sm">
+                        No leads found
+                      </td>
+                    </tr>
+                  ) : (
+                    recentLeads.map((lead) => {
+                      const s = STATUS_CONFIG[lead.status] || {
+                        label: lead.status,
+                        dot: 'bg-gray-400',
+                        bg: 'bg-gray-100',
+                        text: 'text-gray-600',
+                      };
+                      return (
+                        <tr key={lead.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="pl-6 pr-4 py-3">
+                            <p className="font-medium text-[#0D2137]">{lead.insuredName}</p>
                           </td>
-                          <td className="px-4 py-4">
-                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                              agency.status === 'ACTIVE' 
-                                ? 'bg-green-100 text-green-700' 
-                                : 'bg-gray-100 text-gray-600'
-                            }`}>
-                              {agency.status}
+                          <td className="px-5 py-3 text-gray-500">{lead.businessType || '—'}</td>
+                          <td className="px-5 py-3">
+                            <div className="flex gap-1 flex-wrap">
+                              {(lead.coverageTags?.length ? lead.coverageTags : ['GL']).map((tag) => (
+                                <span
+                                  key={tag}
+                                  className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-[11px] rounded font-medium"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="px-5 py-3 text-gray-500 whitespace-nowrap">
+                            {formatSubmitted(lead.createdAt)}
+                          </td>
+                          <td className="px-5 py-3 text-gray-500">{lead.agentName || '—'}</td>
+                          <td className="px-5 py-3">
+                            <span
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${s.bg} ${s.text}`}
+                            >
+                              <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
+                              {s.label}
                             </span>
                           </td>
-                          <td className="px-4 py-4">
-                            <HealthBadge badge={agency.healthBadge} />
-                          </td>
-                          <td className="px-4 py-4 text-center text-sm text-gray-600">
-                            {agency.activeUsersLast7Days}
-                          </td>
-                          <td className="px-4 py-4 text-center text-sm text-gray-600">
-                            {agency.intakesLast30Days}
-                          </td>
-                          <td className="px-4 py-4 text-center text-sm text-gray-600">
-                            {agency.evaluationsLast30Days}
-                          </td>
-                          <td className="px-4 py-4 text-center text-sm text-gray-600">
-                            {agency.proposalsLast30Days}
-                          </td>
-                          <td className="px-4 py-4 text-sm text-gray-500">
-                            {agency.lastActivityAt ? (
-                              <span className="flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                {formatTimeAgo(agency.lastActivityAt)}
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">Never</span>
-                            )}
-                          </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
 
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-gray-900">Recent Activity</h2>
-                <Link 
-                  href="/super-admin/activity" 
-                  className="text-sm font-medium flex items-center gap-1"
-                  style={{ color: '#00E6A7' }}
-                >
-                  View All
-                  <ChevronRight className="w-4 h-4" />
-                </Link>
-              </div>
-              <div className="divide-y divide-gray-100 max-h-[500px] overflow-y-auto">
-                {isLoading ? (
-                  <div className="px-6 py-8 text-center text-gray-500">Loading...</div>
-                ) : recentActivity.length === 0 ? (
-                  <div className="px-6 py-8 text-center text-gray-500">No recent activity</div>
-                ) : (
-                  recentActivity.slice(0, 15).map((event) => (
-                    <div key={event.id} className="px-4 py-3 hover:bg-gray-50" data-testid={`activity-event-${event.id}`}>
-                      <div className="flex items-start gap-3">
-                        <div 
-                          className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
-                          style={{ backgroundColor: '#0D213715' }}
-                        >
-                          <Activity className="w-4 h-4" style={{ color: '#0D2137' }} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900">
-                            {formatEventType(event.eventType)}
-                          </p>
-                          {event.userName && (
-                            <p className="text-xs text-gray-500 truncate">by {event.userName}</p>
-                          )}
-                          {event.metadata && Boolean((event.metadata as Record<string, unknown>).insuredName) && (
-                            <p className="text-xs text-gray-500 truncate">
-                              {String((event.metadata as Record<string, unknown>).insuredName)}
-                            </p>
-                          )}
-                          <p className="text-xs text-gray-400 mt-1">
-                            {formatTimeAgo(event.createdAt)}
-                          </p>
-                        </div>
-                      </div>
+          {/* Recent Activity */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100">
+              <h2 className="text-base font-semibold text-[#0D2137]">Recent Activity</h2>
+            </div>
+            <div className="divide-y divide-gray-100 max-h-[540px] overflow-y-auto">
+              {isLoading ? (
+                <div className="px-6 py-10 text-center text-gray-400 text-sm">Loading…</div>
+              ) : recentActivity.length === 0 ? (
+                <div className="px-6 py-10 text-center text-gray-400 text-sm">No recent activity</div>
+              ) : (
+                recentActivity.slice(0, 12).map((event) => (
+                  <div key={event.id} className="px-4 py-4 flex items-start gap-3 hover:bg-gray-50 transition-colors">
+                    <div className="w-9 h-9 rounded-full bg-gray-100 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-gray-400 leading-snug">
+                        {ACTIVITY_LABEL[event.eventType] || event.eventType.replace(/_/g, ' ')}
+                      </p>
+                      <p className="text-sm font-semibold text-[#0D2137] truncate leading-snug mt-0.5">
+                        {event.entityName ||
+                          (event.metadata?.insuredName as string) ||
+                          (event.metadata?.agencyName as string) ||
+                          'Unknown'}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {timeAgo(event.createdAt)}
+                        {event.userName ? ` · ${event.userName}` : ''}
+                      </p>
                     </div>
-                  ))
-                )}
-              </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
+
         </div>
       </main>
     </div>

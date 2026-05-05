@@ -138,8 +138,8 @@ function LoginContent() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2"
-                  style={{ '--tw-ring-color': '#00E6A7' } as React.CSSProperties}
+                  className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 placeholder-gray-400"
+                  style={{ '--tw-ring-color': '#00E6A7', color: '#111827' } as React.CSSProperties}
                   placeholder="you@company.com"
                   required
                   autoComplete="email"
@@ -160,7 +160,8 @@ function LoginContent() {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2"
+                  className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 placeholder-gray-400"
+                  style={{ color: '#111827' }}
                   placeholder="Enter your password"
                   required
                   autoComplete="current-password"
