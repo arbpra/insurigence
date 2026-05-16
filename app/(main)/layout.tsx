@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Logo from '@/app/components/Logo';
+import { Bell, ChevronDown } from 'lucide-react';
 import { LogOut, User, Shield } from 'lucide-react';
 
 interface AuthUser {
@@ -77,23 +78,27 @@ export default function MainLayout({
     ? `${user.firstName} ${user.lastName}` 
     : user.email;
 
+  const firstName = user?.firstName || 'Admin';
+  const lastName = user?.lastName || '';
+  const initials = `${firstName[0] || ''}${lastName[0] || ''}`.toUpperCase();
+
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
+      <header className="border-b border-gray-200 sticky top-0 z-50" style={{ backgroundColor: '#05314c'}}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <Logo size="sm" />
+            <Logo size="md" />
             <nav className="flex items-center gap-6">
               <Link 
                 href="/dashboard" 
-                className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors" 
+                className="text-sm font-medium text-white hover:text-gray-300 transition-colors" 
                 data-testid="link-dashboard"
               >
                 Dashboard
               </Link>
               <Link 
                 href="/intake/commercial-gl" 
-                className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors" 
+                className="text-sm font-medium text-white hover:text-gray-300 transition-colors" 
                 data-testid="link-new-intake"
               >
                 New Intake
@@ -101,7 +106,7 @@ export default function MainLayout({
               {user.role === 'SUPER_ADMIN' && (
                 <Link 
                   href="/super-admin" 
-                  className="text-sm font-medium text-purple-600 hover:text-purple-700 transition-colors flex items-center gap-1" 
+                  className="text-sm font-medium text-white hover:text-gray-300 transition-colors flex items-center gap-1" 
                   data-testid="link-super-admin"
                 >
                   <Shield className="w-4 h-4" />
@@ -109,7 +114,24 @@ export default function MainLayout({
                 </Link>
               )}
             </nav>
-            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+            <button className="p-2 text-white hover:text-gray-300 rounded-lg">
+              <Bell className="w-5 h-5" />
+            </button>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 ml-1"
+              data-testid="button-logout"
+            >
+              <div
+                className="w-9 h-9 rounded-full border-2 border-[#fff] flex items-center justify-center text-xs font-bold text-[#fff]"
+              >
+                {initials || 'SA'}
+              </div>
+              <ChevronDown className="w-4 h-4 text-white" />
+            </button>
+          </div>
+            {/* <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 text-sm text-gray-600">
                 <User className="w-4 h-4" />
                 <span data-testid="text-user-name">{displayName}</span>
@@ -130,7 +152,7 @@ export default function MainLayout({
               >
                 <LogOut className="w-4 h-4" />
               </button>
-            </div>
+            </div> */}
           </div>
         </div>
       </header>

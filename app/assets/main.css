@@ -97,7 +97,7 @@ h6 {
 }
 
 p {
-  margin-bottom: 15px;
+  /* margin-bottom: 15px; */
   line-height: 1.6em;
 }
 
@@ -172,7 +172,7 @@ table th {
 
 table td,
 table th {
-  border-top: 1px solid var(--border-color);
+  /* border-top: 1px solid var(--border-color); */
   padding: 11px 10px;
 }
 

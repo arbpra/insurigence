@@ -43,13 +43,13 @@ interface ActivityEvent {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; dot: string; bg: string; text: string }> = {
-  NEW: { label: 'New', dot: 'bg-gray-400', bg: 'bg-gray-100', text: 'text-gray-600' },
-  WAITING_ON_INFO: { label: 'Evaluated', dot: 'bg-blue-400', bg: 'bg-blue-50', text: 'text-blue-600' },
-  READY_TO_MARKET: { label: 'Evaluated', dot: 'bg-blue-400', bg: 'bg-blue-50', text: 'text-blue-600' },
-  QUOTED: { label: 'Quoted', dot: 'bg-orange-400', bg: 'bg-orange-50', text: 'text-orange-600' },
-  PRESENTED: { label: 'Proposal Sent', dot: 'bg-green-400', bg: 'bg-green-50', text: 'text-green-600' },
-  BOUND: { label: 'Bound', dot: 'bg-teal-400', bg: 'bg-teal-50', text: 'text-teal-600' },
-  LOST: { label: 'Lost', dot: 'bg-red-400', bg: 'bg-red-50', text: 'text-red-500' },
+  NEW: { label: 'New', dot: 'bg-white', bg: 'bg-green-100', text: 'text-white' },
+  WAITING_ON_INFO: { label: 'Evaluated', dot: 'bg-white', bg: 'bg-blue-50', text: 'text-blue-600' },
+  READY_TO_MARKET: { label: 'Evaluated', dot: 'bg-white', bg: 'bg-blue-50', text: 'text-blue-600' },
+  QUOTED: { label: 'Quoted', dot: 'bg-white', bg: 'bg-orange-50', text: 'text-orange-600' },
+  PRESENTED: { label: 'Proposal Sent', dot: 'bg-white', bg: 'bg-green-50', text: 'text-green-600' },
+  BOUND: { label: 'Bound', dot: 'bg-white', bg: 'bg-teal-50', text: 'text-teal-600' },
+  LOST: { label: 'Lost', dot: 'bg-white', bg: 'bg-red-50', text: 'text-red-500' },
 };
 
 const ACTIVITY_LABEL: Record<string, string> = {
@@ -139,48 +139,56 @@ export default function SuperAdminHome() {
       value: kpis?.newLeadsLast30Days ?? 0,
       subtext: `${weeklyChange >= 0 ? '↑' : '↓'} ${Math.abs(weeklyChange)}% this week`,
       subtextClass: weeklyChange >= 0 ? 'text-green-600' : 'text-red-500',
+      borderClass: '#185FA5',
     },
     {
       label: 'EVALUATED',
       value: kpis?.evaluationsLast30Days ?? 0,
       subtext: `${kpis?.awaitingReviewCount ?? 0} awaiting review`,
       subtextClass: 'text-gray-400',
+      borderClass: '#1D9E75',
     },
     {
       label: 'QUOTED',
       value: kpis?.quotedLeadsLast30Days ?? 0,
       subtext: '',
       subtextClass: 'text-gray-400',
+      borderClass: '#D85A30',
     },
     {
       label: 'PROPOSALS SENT',
       value: kpis?.proposalsSentLast30Days ?? 0,
       subtext: `${kpis?.proposalsClosedThisWeek ?? 0} closed this week`,
       subtextClass: 'text-gray-400',
+      borderClass: '#00E9B0',
     },
     {
       label: 'TOTAL AGENCIES',
       value: kpis?.totalAgencies ?? 0,
       subtext: `${kpis?.agenciesOnboardedThisWeek ?? 0} onboarded this week`,
       subtextClass: 'text-[#00e6a7]',
+      borderClass: '#FF6B6B',
     },
     {
       label: 'ACTIVE AGENCIES',
       value: kpis?.activeAgencies ?? 0,
       subtext: 'Active in last 7 days',
       subtextClass: 'text-gray-400',
+      borderClass: '#185FA5',
     },
     {
       label: 'TOTAL USERS',
       value: kpis?.totalUsers ?? 0,
       subtext: 'Across all agencies',
       subtextClass: 'text-gray-400',
+      borderClass: '#1D9E75',
     },
     {
       label: 'ACTIVE USERS',
       value: kpis?.activeUsersLast7Days ?? 0,
       subtext: 'Logged in last 7 days',
       subtextClass: 'text-gray-400',
+      borderClass: '#D85A30',
     },
   ];
 
@@ -188,60 +196,11 @@ export default function SuperAdminHome() {
     <div className="min-h-screen bg-[#F5F7FA]">
       {/* ── Header ── */}
       <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <Logo size="sm" />
-            <nav className="hidden md:flex items-center">
-              {[
-                { label: 'Overview', href: '/super-admin', active: true },
-                { label: 'Leads', href: '/super-admin/agencies' },
-                { label: 'Proposals', href: '#' },
-                { label: 'Reports', href: '/super-admin/activity' },
-                { label: 'Intake', href: '#' },
-              ].map((item) => (
-                <Link
-                  key={item.label}
-                  href={item.href}
-                  className={`px-4 h-16 flex items-center text-sm font-medium border-b-2 transition-colors ${
-                    item.active
-                      ? 'border-[#0D2137] text-[#0D2137]'
-                      : 'border-transparent text-gray-500 hover:text-gray-800'
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
-          </div>
-          <div className="flex items-center gap-2">
-            <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg">
-              <Bell className="w-5 h-5" />
-            </button>
-            <button
-              onClick={logout}
-              className="flex items-center gap-1.5 ml-1"
-              data-testid="button-logout"
-            >
-              <div
-                className="w-9 h-9 rounded-full border-2 border-[#0D2137] flex items-center justify-center text-xs font-bold text-[#0D2137]"
-              >
-                {initials || 'SA'}
-              </div>
-              <ChevronDown className="w-4 h-4 text-gray-400" />
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* ── Main ── */}
-      <main className="max-w-7xl mx-auto px-6 py-8">
-
-        {/* Greeting row */}
-        <div className="flex items-start justify-between mb-8">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-start justify-between gap-4">
           <div>
-            <p className="text-sm text-gray-400 mb-1">{formatPageDate()}</p>
+            <p className="text-sm text-600 mb-1">{formatPageDate()}</p>
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-[2rem] font-bold text-[#0D2137] leading-tight">
+              <h1 className="text-2xl font-bold text-[#0D2137] leading-tight">
                 {getGreeting()}, {firstName}
               </h1>
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-gray-200 bg-white text-xs font-medium text-gray-600">
@@ -262,26 +221,33 @@ export default function SuperAdminHome() {
             </Link>
           </div>
         </div>
+      </header>
+
+      {/* ── Main ── */}
+
+      <main className="max-w-7xl mx-auto px-6 py-8">
 
         {/* Stat cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 mb-8">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-16 gap-3 mb-8">
           {statCards.map((card, i) => (
             <div
               key={i}
-              className="bg-white rounded-xl border border-gray-200 p-4"
+              className="bg-white rounded-xl border-gray-200 p-4"
               data-testid={`kpi-${card.label.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}
+              style={{ borderTop: `4px solid ${card.borderClass}`, borderBottom: '1px solid #dee2e6', borderLeft: '1px solid #dee2e6', borderRight: '1px solid #dee2e6'}}
             >
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2 leading-tight">
+              <p className="text-xs uppercase text-gray-600 font-bold mb-2" >
                 {card.label}
               </p>
               <p
-                className="text-[2rem] font-light text-[#0D2137] leading-none mb-1.5"
+                className="text-[2rem] font-medium text-[#0D2137] leading-none mb-2"
                 data-testid={`value-${card.label.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}
+                style={{color:`${card.borderClass}`}}
               >
                 {isLoading ? '—' : card.value}
               </p>
               {card.subtext && (
-                <p className={`text-xs leading-tight ${card.subtextClass}`}>{card.subtext}</p>
+                <p className={`text-2xs leading-tight ${card.subtextClass}`}>{card.subtext}</p>
               )}
             </div>
           ))}
@@ -293,10 +259,10 @@ export default function SuperAdminHome() {
           {/* Recent Leads */}
           <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="px-6 py-4 flex items-center justify-between border-b border-gray-100">
-              <h2 className="text-base font-semibold text-[#0D2137]">Recent Leads</h2>
+              <h2 className="text-xl font-semibold text-[#07496C]" style={{ margin: '0px' }}>Recent Leads</h2>
               <Link
                 href="/super-admin/agencies"
-                className="text-sm font-medium text-[#00e6a7] hover:opacity-75 transition-opacity"
+                className="text-2sm font-medium text-[#1D9E75] hover:opacity-75 transition-opacity"
               >
                 View all →
               </Link>
@@ -304,18 +270,18 @@ export default function SuperAdminHome() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-100">
+                  <tr className="bg-gray-50 border-b border-gray-200" style={{ backgroundColor: 'rgb(92, 104, 124)' }}>
                     {['Business', 'Type', 'Coverage', 'Submitted', 'Agent', 'Status'].map((h) => (
                       <th
                         key={h}
-                        className="text-left text-[10px] font-semibold text-[#00e6a7] uppercase tracking-wide px-5 py-3 first:pl-6"
+                        className="text-center text-xs font-medium uppercase px-6 py-3" style={{ color: '#fff' }}
                       >
                         {h}
                       </th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-gray-200">
                   {isLoading ? (
                     <tr>
                       <td colSpan={6} className="px-6 py-10 text-center text-gray-400 text-sm">
@@ -332,9 +298,9 @@ export default function SuperAdminHome() {
                     recentLeads.map((lead) => {
                       const s = STATUS_CONFIG[lead.status] || {
                         label: lead.status,
-                        dot: 'bg-gray-400',
+                        dot: 'bg-white',
                         bg: 'bg-gray-100',
-                        text: 'text-gray-600',
+                        text: 'text-white',
                       };
                       return (
                         <tr key={lead.id} className="hover:bg-gray-50 transition-colors">
@@ -347,7 +313,7 @@ export default function SuperAdminHome() {
                               {(lead.coverageTags?.length ? lead.coverageTags : ['GL']).map((tag) => (
                                 <span
                                   key={tag}
-                                  className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-[11px] rounded font-medium"
+                                  className="px-1.5 py-0.5 bg-gray-100 text-white text-[11px] rounded font-medium"
                                 >
                                   {tag}
                                 </span>
@@ -378,9 +344,9 @@ export default function SuperAdminHome() {
           {/* Recent Activity */}
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100">
-              <h2 className="text-base font-semibold text-[#0D2137]">Recent Activity</h2>
+              <h2 className="text-xl font-semibold text-[#07496C]" style={{ margin: '0px' }}>Recent Activity</h2>
             </div>
-            <div className="divide-y divide-gray-100 max-h-[540px] overflow-y-auto">
+            <div className="divide-y divide-gray-200 max-h-[540px] overflow-y-auto">
               {isLoading ? (
                 <div className="px-6 py-10 text-center text-gray-400 text-sm">Loading…</div>
               ) : recentActivity.length === 0 ? (
@@ -388,9 +354,9 @@ export default function SuperAdminHome() {
               ) : (
                 recentActivity.slice(0, 12).map((event) => (
                   <div key={event.id} className="px-4 py-4 flex items-start gap-3 hover:bg-gray-50 transition-colors">
-                    <div className="w-9 h-9 rounded-full bg-gray-100 flex-shrink-0" />
+                    <div className="w-9 h-9 rounded-full bg-green-600 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs text-gray-400 leading-snug">
+                      <p className="text-xs text-400 leading-snug">
                         {ACTIVITY_LABEL[event.eventType] || event.eventType.replace(/_/g, ' ')}
                       </p>
                       <p className="text-sm font-semibold text-[#0D2137] truncate leading-snug mt-0.5">
@@ -399,7 +365,7 @@ export default function SuperAdminHome() {
                           (event.metadata?.agencyName as string) ||
                           'Unknown'}
                       </p>
-                      <p className="text-xs text-gray-400 mt-1">
+                      <p className="text-xs text-400 mt-1">
                         {timeAgo(event.createdAt)}
                         {event.userName ? ` · ${event.userName}` : ''}
                       </p>

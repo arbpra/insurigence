@@ -188,12 +188,12 @@ export default function ActivityPage() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="text-left text-xs font-medium text-gray-500 uppercase px-6 py-3">Event</th>
-                  <th className="text-left text-xs font-medium text-gray-500 uppercase px-4 py-3">Agency</th>
-                  <th className="text-left text-xs font-medium text-gray-500 uppercase px-4 py-3">User</th>
-                  <th className="text-left text-xs font-medium text-gray-500 uppercase px-4 py-3">Details</th>
-                  <th className="text-left text-xs font-medium text-gray-500 uppercase px-4 py-3">Time</th>
+                <tr className="bg-gray-50 border-b border-gray-200" style={{ backgroundColor: 'rgb(92, 104, 124)'}}>
+                  <th className="text-left text-xs font-medium uppercase px-6 py-3" style={{color:'#fff'}}>Event</th>
+                  <th className="text-left text-xs font-medium uppercase px-4 py-3" style={{color:'#fff'}}>Agency</th>
+                  <th className="text-left text-xs font-medium uppercase px-4 py-3" style={{color:'#fff'}}>User</th>
+                  <th className="text-left text-xs font-medium uppercase px-4 py-3" style={{color:'#fff'}}>Details</th>
+                  <th className="text-left text-xs font-medium uppercase px-4 py-3" style={{color:'#fff'}}>Time</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">

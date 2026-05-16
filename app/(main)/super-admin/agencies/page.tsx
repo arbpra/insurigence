@@ -349,19 +349,19 @@ export default function AgenciesPage() {
           
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Agency</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Health</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Tier</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Leads</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Users</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Last Activity</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Actions</th>
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200" style={{ backgroundColor: 'rgb(92, 104, 124)'}}>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{color:'#fff'}}>Agency</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{color:'#fff'}}>Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{color:'#fff'}}>Health</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{color:'#fff'}}>Tier</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase" style={{color:'#fff'}}>Leads</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase" style={{color:'#fff'}}>Users</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase" style={{color:'#fff'}}>Last Activity</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase" style={{color:'#fff'}}>Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-200">
                 {filteredAgencies.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-4 py-12 text-center">
@@ -419,8 +419,8 @@ export default function AgenciesPage() {
                         </td>
                         <td className="px-4 py-4">
                           <span 
-                            className="inline-block px-2.5 py-1 rounded-full text-xs font-medium text-white"
-                            style={{ backgroundColor: tierColors[agency.subscriptionTier] }}
+                            className="inline-block px-2.5 py-1 text-xs font-medium text-white"
+                            style={{ backgroundColor: tierColors[agency.subscriptionTier], borderRadius: '5px' }}
                           >
                             {tierLabels[agency.subscriptionTier]}
                           </span>

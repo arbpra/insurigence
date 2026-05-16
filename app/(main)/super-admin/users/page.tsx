@@ -179,25 +179,27 @@ export default function UsersPage() {
       <main className="max-w-7xl mx-auto px-4 py-8">
         {stats && (
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-            <div className="bg-white rounded-xl border border-gray-200 p-4" data-testid="stat-total-users">
-              <p className="text-xs text-gray-500">Total Users</p>
-              <p className="text-2xl font-bold" style={{ color: '#0D2137' }}>{stats.totalUsers}</p>
+            <div className="bg-white rounded-xl px-4 py-3" style={{ borderTop: '4px solid #185FA5', borderBottom: '1px solid #dee2e6', borderLeft: '1px solid #dee2e6', borderRight: '1px solid #dee2e6'}} data-testid="stat-total-users">
+              <p className="text-xs uppercase text-gray-500">Total Users</p>
+              <p className="text-2xl font-bold" style={{ color: '#185FA5' }}>{stats.totalUsers}</p>
             </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-4" data-testid="stat-active-users">
-              <p className="text-xs text-gray-500">Active Users</p>
-              <p className="text-2xl font-bold" style={{ color: '#00E6A7' }}>{stats.activeUsers}</p>
+
+            <div className="bg-white rounded-xl px-4 py-3" style={{ borderTop: '4px solid #1D9E75', borderBottom: '1px solid #dee2e6', borderLeft: '1px solid #dee2e6', borderRight: '1px solid #dee2e6'}} data-testid="stat-active-users">            
+              <p className="text-xs uppercase text-gray-500">Active Users</p>
+              <p className="text-2xl font-bold" style={{ color: '#1D9E75' }}>{stats.activeUsers}</p>
             </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-4" data-testid="stat-super-admins">
-              <p className="text-xs text-gray-500">Super Admins</p>
-              <p className="text-2xl font-bold text-purple-600">{stats.superAdmins}</p>
+            <div className="bg-white rounded-xl px-4 py-3" style={{ borderTop: '4px solid #D85A30', borderBottom: '1px solid #dee2e6', borderLeft: '1px solid #dee2e6', borderRight: '1px solid #dee2e6'}} data-testid="stat-super-admins">                        
+              <p className="text-xs uppercase text-gray-500">Super Admins</p>
+              <p className="text-2xl font-bold" style={{ color: '#D85A30' }}>{stats.superAdmins}</p>
             </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-4" data-testid="stat-agency-admins">
-              <p className="text-xs text-gray-500">Agency Admins</p>
-              <p className="text-2xl font-bold text-blue-600">{stats.admins}</p>
+
+            <div className="bg-white rounded-xl px-4 py-3" style={{ borderTop: '4px solid #00E9B0', borderBottom: '1px solid #dee2e6', borderLeft: '1px solid #dee2e6', borderRight: '1px solid #dee2e6'}} data-testid="stat-agency-admins">                                    
+              <p className="text-xs uppercase text-gray-500">Agency Admins</p>
+              <p className="text-2xl font-bold" style={{ color: '#00E9B0' }}>{stats.admins}</p>
             </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-4" data-testid="stat-agents">
-              <p className="text-xs text-gray-500">Agents</p>
-              <p className="text-2xl font-bold text-gray-600">{stats.agents}</p>
+            <div className="bg-white rounded-xl px-4 py-3" style={{ borderTop: '4px solid #FF6B6B', borderBottom: '1px solid #dee2e6', borderLeft: '1px solid #dee2e6', borderRight: '1px solid #dee2e6'}} data-testid="stat-agents">                                                
+              <p className="text-xs uppercase text-gray-500">Agents</p>
+              <p className="text-2xl font-bold" style={{ color: '#FF6B6B' }}>{stats.agents}</p>
             </div>
           </div>
         )}
@@ -250,7 +252,7 @@ export default function UsersPage() {
             <button
               onClick={() => setShowCreateModal(true)}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium"
-              style={{ backgroundColor: '#00E6A7' }}
+              style={{ backgroundColor: '#00e6a7' }}
               data-testid="button-create-user"
             >
               <Plus className="w-4 h-4" />
@@ -261,14 +263,14 @@ export default function UsersPage() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="text-left text-xs font-medium text-gray-500 uppercase px-6 py-3">User</th>
-                  <th className="text-left text-xs font-medium text-gray-500 uppercase px-4 py-3">Role</th>
-                  <th className="text-left text-xs font-medium text-gray-500 uppercase px-4 py-3">Agency</th>
-                  <th className="text-left text-xs font-medium text-gray-500 uppercase px-4 py-3">Status</th>
-                  <th className="text-left text-xs font-medium text-gray-500 uppercase px-4 py-3">Last Login</th>
-                  <th className="text-left text-xs font-medium text-gray-500 uppercase px-4 py-3">Created</th>
-                  <th className="text-center text-xs font-medium text-gray-500 uppercase px-4 py-3">Actions</th>
+                <tr className="bg-gray-50 border-b border-gray-200" style={{ backgroundColor: 'rgb(92, 104, 124)'}}>
+                  <th className="text-left text-xs font-medium uppercase px-6 py-3" style={{color:'#fff'}}>User</th>
+                  <th className="text-left text-xs font-medium uppercase px-4 py-3" style={{color:'#fff'}}>Role</th>
+                  <th className="text-left text-xs font-medium uppercase px-4 py-3" style={{color:'#fff'}}>Agency</th>
+                  <th className="text-left text-xs font-medium uppercase px-4 py-3" style={{color:'#fff'}}>Status</th>
+                  <th className="text-left text-xs font-medium uppercase px-4 py-3" style={{color:'#fff'}}>Last Login</th>
+                  <th className="text-left text-xs font-medium uppercase px-4 py-3" style={{color:'#fff'}}>Created</th>
+                  <th className="text-center text-xs font-medium uppercase px-4 py-3" style={{color:'#fff'}}>Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -289,7 +291,7 @@ export default function UsersPage() {
                             <UserIcon className="w-4 h-4" style={{ color: '#0D2137' }} />
                           </div>
                           <div>
-                            <p className="font-medium text-gray-900">
+                            <p className="font-medium text-gray-900" style={{ color: '#185FA5' }}>
                               {user.firstName || user.lastName
                                 ? `${user.firstName || ''} ${user.lastName || ''}`.trim()
                                 : 'Unnamed User'}

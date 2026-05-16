@@ -5,7 +5,7 @@
 :root {
   --font-inter: 'Inter', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
-  
+
   /* Insurigence Brand Tokens - Updated 2026 */
   --brand-primary: #0D2137;
   --brand-accent: #00E6A7;
@@ -14,7 +14,7 @@
   --brand-text: #0D2137;
   --brand-text-muted: #64748B;
   --brand-text-subtle: #94A3B8;
-  
+
   /* Market Classification Colors */
   --market-standard: #059669;
   --market-standard-bg: #ECFDF5;
@@ -27,7 +27,8 @@
   --market-borderline-border: #BAE6FD;
 }
 
-html, body {
+html,
+body {
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;
@@ -51,36 +52,37 @@ body {
 }
 
 @layer components {
+
   /* Brand Button - Primary */
   .btn-brand-primary {
     @apply inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
     background-color: var(--brand-primary);
   }
-  
+
   .btn-brand-primary:focus {
     --tw-ring-color: var(--brand-primary);
   }
-  
+
   /* Brand Button - Accent */
   .btn-brand-accent {
     @apply inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
     background-color: var(--brand-accent);
   }
-  
+
   /* Brand Button - Secondary */
   .btn-brand-secondary {
     @apply inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold bg-white border border-slate-200 text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
   }
-  
+
   /* Brand Card */
   .brand-card {
     @apply bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm;
   }
-  
+
   .brand-card-interactive {
     @apply bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm transition-all hover:shadow-md hover:border-slate-300;
   }
-  
+
   /* Brand Badges */
   .badge-standard {
     @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border;
@@ -88,21 +90,21 @@ body {
     color: var(--market-standard);
     border-color: var(--market-standard-border);
   }
-  
+
   .badge-es {
     @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border;
     background-color: var(--market-es-bg);
     color: var(--market-es);
     border-color: var(--market-es-border);
   }
-  
+
   .badge-borderline {
     @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border;
     background-color: var(--market-borderline-bg);
     color: var(--market-borderline);
     border-color: var(--market-borderline-border);
   }
-  
+
   .badge-new {
     @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200;
   }
@@ -112,17 +114,17 @@ body {
     @apply text-lg font-semibold mb-4;
     color: var(--brand-primary);
   }
-  
+
   /* Page Header */
   .page-header {
     @apply mb-8;
   }
-  
+
   .page-header-title {
     @apply text-3xl font-bold tracking-tight;
     color: var(--brand-primary);
   }
-  
+
   .page-header-subtitle {
     @apply mt-1 text-base;
     color: var(--brand-text-muted);
@@ -178,19 +180,70 @@ body {
   .status-rejected {
     @apply bg-red-50 text-red-700 border border-red-200;
   }
-  
+
   /* KPI Tile */
   .kpi-tile {
     @apply bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm;
   }
-  
+
   .kpi-value {
     @apply text-3xl font-bold;
     color: var(--brand-primary);
   }
-  
+
   .kpi-label {
     @apply text-sm mt-1;
     color: var(--brand-text-muted);
   }
+}
+
+.bg-red-50, .text-red-700 {
+  background-color: rgb(228, 84, 84);
+   border-radius: 5px;
+}
+
+.text-red-600, .bg-red-100 {
+  color: #fff;
+
+}
+
+.bg-red-50:hover {
+  border: 1px solid rgb(228, 84, 84);
+  color: rgb(228, 84, 84);
+}
+
+.bg-green-100{
+  background-color: rgb(21 128 61);
+  border-radius: 5px;
+}
+
+.text-green-700 {
+  color: #fff;
+}
+
+.text-blue-700{
+  color: #fff;
+}
+.bg-blue-100{
+  background-color: rgb(45, 98, 241);
+  border-radius: 5px;
+}
+
+.text-purple-700{
+  color: #fff;  
+}
+
+.bg-purple-100{
+  background-color: rgb(148, 51, 233);
+  border-radius: 5px;
+}
+
+.text-gray-700{
+  color: #fff;  
+}
+
+
+.bg-gray-100{
+  background-color: rgb(92, 104, 124);
+  border-radius: 5px;
 }

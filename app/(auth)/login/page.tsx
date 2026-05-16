@@ -3,6 +3,34 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Logo from '@/app/components/Logo';
+import signinBanner from '@/attached_assets/bgSignin.webp';
+import { motion } from "framer-motion";
+import Link from 'next/link';
+import { Check } from "lucide-react";
+
+const container = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1
+    }
+  }
+};
+
+const fadeUp = {
+  hidden: { y: 20, opacity: 0 },
+  visible: { y: 0, opacity: 1 }
+};
+
+const items = [
+  { title: 'Collaborate', content: 'Work seamlessly with your team' },
+  { title: 'Track & Grow', content: 'Monitor performance and close more deals' },
+  { title: 'Stay Protected', content: 'Enterprise-grade security you can trust' }
+];
+
+
+
 
 function LoginContent() {
   const router = useRouter();
@@ -64,37 +92,120 @@ function LoginContent() {
   };
 
   return (
-    <div className="min-h-screen flex" style={{ backgroundColor: '#F5F7FA' }}>
-      <div className="hidden lg:flex lg:w-1/2 flex-col justify-center px-12" style={{ backgroundColor: '#0D2137' }}>
-        <div className="max-w-md">
-          <div className="mb-8">
-            <Logo size="lg" />
+    <div className="min-h-screen flex" style={{ backgroundColor: '#ffffff' }}>
+      <div className="hidden lg:flex lg:w-3/5 flex-col min-h-screen px-10" style={{
+        backgroundImage: `url(${signinBanner.src})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      }}>
+
+        {/* Content */}
+        <motion.div
+          className="relative flex flex-col h-full max-w-5xl mx-auto px-4 sm:px-6 py-16 sm:py-24 text-left"
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: false, amount: 0.4 }}
+          variants={container}
+        >
+
+          {/* Heading */}
+          <motion.h1
+            variants={fadeUp}
+            className="text-3xl sm:text-3xl md:text-4xl lg:text-4xl font-normal tracking-tight leading-tight mb-6"
+            style={{
+              fontFamily: "Helvetica",
+              letterSpacing: "-0.03em",
+              textAlign: "left",
+            }}
+          >
+            <span className="text-white">
+              Welcome to
+            </span>{" "}
+            <span className="text-[#00E6A7]">
+              Insurigence
+            </span>
+          </motion.h1>
+
+          {/* Paragraph */}
+          <motion.p
+            variants={fadeUp}
+            className="text-sm sm:text-base md:text-lg lg:text-xl max-w-3xl leading-relaxed mb-10 text-white/90"
+            style={{ fontFamily: "Helvetica" }}
+          >
+            The modern platform for high-performing insurance teams.
+          </motion.p>
+
+          {/* Cards */}
+          <div className="mt-auto pb-1">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {items.map((item, index) => (
+                <motion.div
+                  key={index}
+                  transition={{ delay: index * 0.2 }}
+                  className={`p-4 rounded-2xl
+                    bg-white/10 border border-white/20
+                    text-white shadow-lg backdrop-blur-md
+                    hover:scale-[1.02] transition"
+
+                    ${index === 0
+                      ? "bg-white text-[#0B4A6F] border-white"
+                      : "bg-white/10 text-white border-white/20 backdrop-blur-md"
+                      }
+                    `}>
+                  {/* Number Circle */}
+                  <div
+                    className="flex items-center justify-center w-10 h-10 rounded-full text-black text-lg font-semibold"
+                    style={{ background: "#B8FFE8" }}
+                  >
+                    {index + 1}
+                  </div>
+
+                  {/* Text Content */}
+                  <div className="mt-6">
+                    <h1 className={`text-2xl font-medium
+                      ${index === 0
+                        ? "text"
+                        : "text-white"
+                      }          
+                    `}>
+                      {item.title}
+                    </h1>
+
+                    <p className={`text-sm text-white/80 leading-relaxed mt-3
+
+                    ${index === 0
+                        ? "text-black"
+                        : "text-white"
+                      }
+                      
+                      `}>
+                      {item.content}
+                    </p>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
           </div>
-          <h1 className="text-4xl font-bold text-white mb-4">
-            Insurance Placement Intelligence
-          </h1>
-          <p className="text-xl text-white/80">
-            Make confident placement decisions faster with market insights, carrier matching, and professional proposals.
-          </p>
-        </div>
+
+        </motion.div>
       </div>
 
-      <div className="flex-1 flex items-center justify-center p-8">
+      <div className="flex-1 flex items-center justify-center p-4 lg:p-8 w-full lg:w-2/5">
         <div className="w-full max-w-md">
-          <div className="lg:hidden mb-8 text-center">
+          <div className="mb-8 text-center" style={{ margin: '0 20%' }}>
             <Logo size="md" />
           </div>
 
-          <div className="bg-white rounded-2xl shadow-xl p-8">
-            <h2 className="text-2xl font-bold mb-2" style={{ color: '#0D2137' }}>
+          <div className="p-8">
+            {/* <h2 className="text-2xl font-bold mb-2" style={{ color: '#0D2137' }}>
               Welcome back
-            </h2>
-            <p className="text-gray-500 mb-16">
-              Sign in to access your dashboard
+            </h2> */}
+            <p className="text-600 mb-16 text-center" style={{ color: '#07496c', fontSize: '1.125rem' }}>
+              Sign in to your Insurigence account.
             </p>
 
             {error && (
-              <div 
+              <div
                 className="mb-4 p-4 rounded-lg text-sm"
                 style={{ backgroundColor: '#FEE2E2', color: '#991B1B' }}
                 data-testid="login-error"
@@ -126,10 +237,10 @@ function LoginContent() {
 
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
-                <label 
-                  htmlFor="email" 
+                <label
+                  htmlFor="email"
                   className="block text-sm font-medium mb-2"
-                  style={{ color: '#374151' }}
+                  style={{ color: '#07496c' }}
                 >
                   Email Address
                 </label>
@@ -148,10 +259,10 @@ function LoginContent() {
               </div>
 
               <div>
-                <label 
-                  htmlFor="password" 
+                <label
+                  htmlFor="password"
                   className="block text-sm font-medium mb-2"
-                  style={{ color: '#374151' }}
+                  style={{ color: '#07496c' }}
                 >
                   Password
                 </label>
@@ -172,8 +283,8 @@ function LoginContent() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-3 px-4 rounded-lg font-semibold transition-all duration-200 hover:opacity-90 disabled:opacity-50 border-2"
-                style={{ backgroundColor: 'transparent', borderColor: '#0D2137', color: '#0D2137' }}
+                className="w-full py-2 px-3 rounded-lg font-semibold transition-all duration-200 hover:opacity-90 disabled:opacity-50 border-2"
+                style={{ backgroundColor: '#00E9B0', borderColor: '#00E9B0', color: '#07496c' }}
                 data-testid="button-login"
               >
                 {isLoading ? 'Signing in...' : 'Sign In with Email'}
