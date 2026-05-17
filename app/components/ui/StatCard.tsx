@@ -59,14 +59,15 @@ export function StatCard({
 
   return (
     <div 
-      className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-sm"
+      className="bg-white rounded-xl border-slate-200/80 p-4 shadow-sm"
       data-testid={testId}
+      style={{ borderTop: `4px solid ${styles.valueColor}`, borderBottom: '1px solid #dee2e6', borderLeft: '1px solid #dee2e6', borderRight: '1px solid #dee2e6'}}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           <p 
-            className="text-sm font-medium truncate"
-            style={{ color: 'var(--brand-text-muted)' }}
+            className="text-sm uppercase font-medium truncate"
+            style={{ color: 'var(--brand-text)' }}
           >
             {label}
           </p>

@@ -117,8 +117,8 @@ export default function ActivityPage() {
               <Activity className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold" style={{ color: '#0D2137' }}>Activity Analytics</h1>
-              <p className="text-sm text-gray-500">Platform-wide activity monitoring</p>
+              <h1 className="text-xl font-bold mb-1" style={{ color: '#0D2137' }}>Activity Analytics</h1>
+              <p className="text-2sm text-600">Platform-wide activity monitoring</p>
             </div>
           </div>
         </div>
@@ -126,16 +126,19 @@ export default function ActivityPage() {
 
       <main className="max-w-7xl mx-auto px-4 py-8">
         <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6" data-testid="event-summary">
-          <h2 className="text-sm font-medium text-gray-500 mb-4">Event Summary ({range})</h2>
+          <h2 className="text-sm font-bold text-500 mb-4">Event Summary ({range})</h2>
+          
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            <div className="p-4 bg-gray-50 rounded-lg" data-testid="stat-total-events">
-              <p className="text-2xl font-bold" style={{ color: '#0D2137' }}>{totalEvents}</p>
-              <p className="text-xs text-gray-500">Total Events</p>
+            
+            <div className="p-4 bg-gray-50 rounded-lg" data-testid="stat-total-events" style={{ borderTop: '4px solid #185FA5', borderBottom: '1px solid #dee2e6', borderLeft: '1px solid #dee2e6', borderRight: '1px solid #dee2e6'}}>
+              <p className="text-2xl font-bold mb-2" style={{ color: '#185FA5' }}>{totalEvents}</p>
+              <p className="text-xs uppercase font-bold text-500">Total Events</p>
             </div>
+
             {Object.entries(summary).slice(0, 5).map(([type, count]) => (
-              <div key={type} className="p-4 bg-gray-50 rounded-lg">
-                <p className="text-2xl font-bold" style={{ color: '#00E6A7' }}>{count}</p>
-                <p className="text-xs text-gray-500 truncate">
+              <div key={type} className="p-4 bg-gray-50 rounded-lg" style={{ borderTop: '4px solid #D85A30', borderBottom: '1px solid #dee2e6', borderLeft: '1px solid #dee2e6', borderRight: '1px solid #dee2e6'}}>
+                <p className="text-2xl font-bold mb-2" style={{ color: '#D85A30' }}>{count}</p>
+                <p className="text-xs uppercase font-bold text-500">
                   {eventTypeLabels[type]?.label || type.replace(/_/g, ' ')}
                 </p>
               </div>

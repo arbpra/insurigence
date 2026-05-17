@@ -169,8 +169,8 @@ export default function UsersPage() {
               <Users className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold" style={{ color: '#0D2137' }}>User Management</h1>
-              <p className="text-sm text-gray-500">Manage users across all agencies</p>
+              <h1 className="text-xl font-bold mb-1" style={{ color: '#0D2137' }}>User Management</h1>
+              <p className="text-2sm text-600">Manage users across all agencies</p>
             </div>
           </div>
         </div>

@@ -11,7 +11,7 @@ export function PageHeader({ title, subtitle, actions }: PageHeaderProps) {
     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
       <div>
         <h1 
-          className="text-2xl font-bold tracking-tight"
+          className="text-2xl font-bold tracking-tight mb-1"
           style={{ color: 'var(--brand-primary)' }}
           data-testid="page-title"
         >

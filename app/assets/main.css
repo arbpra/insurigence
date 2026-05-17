@@ -11127,7 +11127,7 @@ input:not(:placeholder-shown),
 textarea:not(:placeholder-shown) {
   background-color: transparent;
   border: 1px solid #00e6a7;
-  color: #fff;
+  color: #111;
 }
 
 .why-should-panel .cs_card.cs_style_2 .cs_card_icon {

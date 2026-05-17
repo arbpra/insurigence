@@ -382,6 +382,7 @@ export default function DashboardPage() {
       )}
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8" data-testid="kpi-cards">
+        
         <StatCard
           label="Total Leads"
           value={stats.totalLeads}
@@ -441,7 +442,7 @@ export default function DashboardPage() {
 
       <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm mb-6">
         <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <h2 className="text-lg font-semibold" style={{ color: 'var(--brand-primary)' }}>
+          <h2 className="text-xl font-semibold text-[#07496C]" style={{ margin: '0px' }}>
             Recent Leads
           </h2>
           <div className="flex items-center gap-3 flex-wrap">

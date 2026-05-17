@@ -65,18 +65,19 @@ export function DataTable<T>({
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="bg-slate-50/80 border-b border-slate-200">
+            <tr className="bg-gray-50 border-b border-gray-200" style={{ backgroundColor: 'rgb(92, 104, 124)'}}>
               {columns.map((column) => (
                 <th
                   key={column.key}
                   className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 ${column.className || ''}`}
+                  style={{color:'#fff'}}
                 >
                   {column.header}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-gray-200">
             {data.map((item) => (
               <tr
                 key={keyExtractor(item)}

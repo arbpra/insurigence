@@ -115,7 +115,7 @@ export function AppLayout({ children, userRole: propUserRole }: AppLayoutProps) 
         data-testid="app-sidebar"
       >
         <div className="flex flex-col h-full">
-          <div className="p-5 border-b border-slate-100">
+          <div className="p-4 border-b border-slate-100">
             <Link href="/dashboard" className="flex items-center gap-3" data-testid="logo-link">
               <div 
                 className="w-10 h-10 rounded-xl flex items-center justify-center"
@@ -126,10 +126,10 @@ export function AppLayout({ children, userRole: propUserRole }: AppLayoutProps) 
                 </svg>
               </div>
               <div>
-                <h1 className="text-lg font-bold" style={{ color: 'var(--brand-primary)' }}>
+                <h1 className="text-lg font-bold mb-1" style={{ color: 'var(--brand-primary)' }}>
                   Insurigence
                 </h1>
-                <p className="text-[10px] font-medium tracking-wide uppercase" style={{ color: 'var(--brand-text-muted)' }}>
+                <p className="text-[11px] font-bold tracking-wide uppercase" style={{ color: 'var(--brand-text-muted)' }}>
                   Placement Intelligence
                 </p>
               </div>
@@ -182,7 +182,7 @@ export function AppLayout({ children, userRole: propUserRole }: AppLayoutProps) 
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="sticky top-0 z-30 bg-white border-b border-slate-200/80 px-4 lg:px-6">
+        {/* <header className="sticky top-0 z-30 bg-white border-b border-slate-200/80 px-4 lg:px-6">
           <div className="flex items-center justify-between h-16">
             <button
               onClick={() => setSidebarOpen(true)}
@@ -216,7 +216,7 @@ export function AppLayout({ children, userRole: propUserRole }: AppLayoutProps) 
               </div>
             </div>
           </div>
-        </header>
+        </header> */}
 
         <main className="flex-1 p-4 lg:p-6 overflow-auto">
           <div className="max-w-7xl mx-auto">
