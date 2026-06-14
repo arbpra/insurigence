@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { randomBytes } from 'crypto';
+import { getAuthContext } from '@/lib/super-admin-auth';
 
 function generatePublicToken(): string {
   return randomBytes(32).toString('hex');
@@ -11,12 +12,10 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: leadId } = await params;
-    const agencyId = process.env.DEV_AGENCY_ID;
+    const auth = await getAuthContext(request);
+    if (!auth.valid || !auth.user) return auth.response!;
 
-    if (!agencyId) {
-      return NextResponse.json({ error: 'DEV_AGENCY_ID not configured' }, { status: 500 });
-    }
+    const { id: leadId } = await params;
 
     const lead = await prisma.lead.findUnique({
       where: { id: leadId },
@@ -33,9 +32,11 @@ export async function POST(
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
     }
 
-    if (lead.agencyId !== agencyId) {
+    if (auth.user.role !== 'SUPER_ADMIN' && lead.agencyId !== auth.user.agencyId) {
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
     }
+
+    const agencyId = lead.agencyId;
 
     const responses = lead.intakeSubmission?.responses as Record<string, unknown> || {};
     const answers = (responses?.answers || responses) as Record<string, unknown>;
@@ -119,12 +120,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: leadId } = await params;
-    const agencyId = process.env.DEV_AGENCY_ID;
+    const auth = await getAuthContext(request);
+    if (!auth.valid || !auth.user) return auth.response!;
 
-    if (!agencyId) {
-      return NextResponse.json({ error: 'DEV_AGENCY_ID not configured' }, { status: 500 });
-    }
+    const { id: leadId } = await params;
 
     const lead = await prisma.lead.findUnique({
       where: { id: leadId },
@@ -146,7 +145,7 @@ export async function GET(
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
     }
 
-    if (lead.agencyId !== agencyId) {
+    if (auth.user.role !== 'SUPER_ADMIN' && lead.agencyId !== auth.user.agencyId) {
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
     }
 
@@ -214,20 +213,22 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await getAuthContext(request);
+    if (!auth.valid || !auth.user) return auth.response!;
+
     const { id: leadId } = await params;
-    const agencyId = process.env.DEV_AGENCY_ID;
     const body = await request.json();
     const { proposalId, agentRecommendation, status } = body;
-
-    if (!agencyId) {
-      return NextResponse.json({ error: 'DEV_AGENCY_ID not configured' }, { status: 500 });
-    }
 
     const proposal = await prisma.proposal.findUnique({
       where: { id: proposalId },
     });
 
-    if (!proposal || proposal.leadId !== leadId || proposal.agencyId !== agencyId) {
+    if (
+      !proposal ||
+      proposal.leadId !== leadId ||
+      (auth.user.role !== 'SUPER_ADMIN' && proposal.agencyId !== auth.user.agencyId)
+    ) {
       return NextResponse.json({ error: 'Proposal not found' }, { status: 404 });
     }
 

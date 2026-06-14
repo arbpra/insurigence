@@ -363,17 +363,39 @@ model Proposal {
   lead      Lead           @relation(fields: [leadId], references: [id])
 }
 
-model AiRun {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  agencyId  String   @db.ObjectId
-  leadId    String?  @db.ObjectId
-  purpose   String
-  model     String?
-  output    Json
-  createdAt DateTime @default(now())
+enum AiRunStatus {
+  COMPLETED
+  FAILED
+}
 
-  agency    Agency   @relation(fields: [agencyId], references: [id])
-  lead      Lead?    @relation(fields: [leadId], references: [id])
+model AiRun {
+  id            String      @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId      String?     @db.ObjectId
+  leadId        String?     @db.ObjectId
+  purpose       String
+  status        AiRunStatus @default(COMPLETED)
+  model         String?
+  promptVersion String?
+
+  // What was sent to the model (for audit/history) and what came back.
+  inputSnapshot Json?
+  output        Json
+  usage         Json?
+  error         String?
+
+  // Agent review trail. Set when a licensed agent reviews/approves the output.
+  reviewedById  String?     @db.ObjectId
+  reviewedAt    DateTime?
+
+  createdAt     DateTime    @default(now())
+
+  agency        Agency?     @relation(fields: [agencyId], references: [id])
+  lead          Lead?       @relation(fields: [leadId], references: [id])
+
+  @@index([agencyId])
+  @@index([leadId])
+  @@index([purpose])
+  @@index([createdAt])
 }
 
 model BillingAccount {

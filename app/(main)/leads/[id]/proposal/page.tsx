@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import SmartIntakePanel from '@/components/ai/SmartIntakePanel';
+import CoverageExplanationPanel from '@/components/ai/CoverageExplanationPanel';
 
 interface InsuredSummary {
   name: string;
@@ -490,6 +492,10 @@ export default function ProposalPage() {
             )}
           </div>
         </div>
+
+        <SmartIntakePanel leadId={leadId} />
+
+        <CoverageExplanationPanel leadId={leadId} />
 
         <div className="brand-card p-8 mb-8" data-testid="section-recommendation">
           <div className="flex items-center gap-3 mb-6">

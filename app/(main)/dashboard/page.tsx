@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader, StatCard, Badge, Button, DataTable } from '@/components/ui';
+import QuickRiskGuide from '@/components/ai/QuickRiskGuide';
 
 interface Lead {
   id: string;
@@ -439,6 +440,8 @@ export default function DashboardPage() {
           }
         />
       </div>
+
+      <QuickRiskGuide />
 
       <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm mb-6">
         <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

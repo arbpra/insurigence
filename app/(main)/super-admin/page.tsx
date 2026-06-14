@@ -219,6 +219,9 @@ export default function SuperAdminHome() {
             <Link href="/super-admin/activity" className="text-sm text-gray-500 hover:text-[#0D2137] transition-colors">
               Activity Insights
             </Link>
+            <Link href="/super-admin/ai-lab" className="text-sm text-gray-500 hover:text-[#0D2137] transition-colors">
+              AI Lab
+            </Link>
           </div>
         </div>
       </header>
