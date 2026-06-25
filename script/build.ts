@@ -6,6 +6,13 @@ async function buildAll() {
   await rm("dist", { recursive: true, force: true });
   await mkdir("dist", { recursive: true });
 
+  // Always regenerate the Prisma client against the current schema before
+  // building. This guarantees the generated types match prisma/schema.prisma
+  // even when the deploy reuses a cached node_modules (otherwise a stale client
+  // breaks the TypeScript build, e.g. "Property 'acordDraft' does not exist").
+  console.log("Generating Prisma client...");
+  execSync("npx prisma generate", { stdio: "inherit" });
+
   console.log("Building Next.js app...");
   execSync("npx next build", { stdio: "inherit" });
 
