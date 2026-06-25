@@ -398,6 +398,45 @@ model AiRun {
   @@index([createdAt])
 }
 
+enum AcordFormType {
+  ACORD_125
+  ACORD_126
+  ACORD_140
+  ACORD_25
+  ACORD_130
+}
+
+enum AcordDraftStatus {
+  DRAFT
+  REVIEWED
+  EXPORTED
+}
+
+/// Generated ACORD form data — stored separately from the original intake for
+/// audit/history, per the AI build direction. `fields` holds the mapped form
+/// values (agent-editable); `missingFields` are required keys still blank.
+model AcordDraft {
+  id            String           @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId      String           @db.ObjectId
+  leadId        String           @db.ObjectId
+  formType      AcordFormType
+  status        AcordDraftStatus @default(DRAFT)
+
+  fields        Json
+  missingFields String[]         @default([])
+
+  // Agent review/approval trail before export.
+  reviewedById  String?          @db.ObjectId
+  reviewedAt    DateTime?
+
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([agencyId])
+  @@index([leadId])
+  @@index([formType])
+}
+
 model BillingAccount {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   agencyId  String   @unique @db.ObjectId

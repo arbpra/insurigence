@@ -5,6 +5,10 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import SmartIntakePanel from '@/components/ai/SmartIntakePanel';
 import CoverageExplanationPanel from '@/components/ai/CoverageExplanationPanel';
+import ProposalLanguagePanel from '@/components/ai/ProposalLanguagePanel';
+import DocumentSummaryPanel from '@/components/ai/DocumentSummaryPanel';
+import CoiAssistantPanel from '@/components/ai/CoiAssistantPanel';
+import AcordPanel from '@/components/ai/AcordPanel';
 
 interface InsuredSummary {
   name: string;
@@ -496,6 +500,14 @@ export default function ProposalPage() {
         <SmartIntakePanel leadId={leadId} />
 
         <CoverageExplanationPanel leadId={leadId} />
+
+        <ProposalLanguagePanel leadId={leadId} />
+
+        <DocumentSummaryPanel leadId={leadId} />
+
+        <CoiAssistantPanel leadId={leadId} />
+
+        <AcordPanel leadId={leadId} />
 
         <div className="brand-card p-8 mb-8" data-testid="section-recommendation">
           <div className="flex items-center gap-3 mb-6">

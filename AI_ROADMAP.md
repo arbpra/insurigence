@@ -156,9 +156,33 @@ Pipeline: **guardrails → versioned prompt → OpenAI JSON mode → Zod validat
 - **Day 6.5 — Fix:** converted `app/api/leads/[id]/proposal` (GET/POST/PATCH) off the dev-only `DEV_AGENCY_ID` env crutch to session auth (`getAuthContext`) scoped by the lead's agency, consistent with the rest of the app. Unblocked the proposal page.
 - **Day 7 — Feature 3: Coverage Explanation Assistant.** `app/api/ai/coverage-explanation/[leadId]` (GET saved / POST generate) + `app/components/ai/CoverageExplanationPanel.tsx` on the proposal page. Agent picks coverages from a curated list; AI explains each (why it matters / when it applies / if missing) tailored to the lead's business. AI explains relevance only — it does not decide the business needs/has a coverage.
 
+- **Day 8 — Feature 4: Proposal Language Assistant.** `app/api/ai/proposal-language/[leadId]` (GET saved / POST generate) + `app/components/ai/ProposalLanguagePanel.tsx` on the proposal page. Generates a client-ready executive summary, "what we recommend and why", and option-comparison narrative from the rules-engine evaluation + carrier fits. Each section has a copy button. Writes only from the provided structured data — no invented carriers/pricing.
+
 Pattern established for all features: explicit JSON shape in the prompt + tolerant schema + GET-caches/POST-generates so we don't re-pay OpenAI on page loads.
 
-Next up: **Feature 4 — Proposal Language Assistant** (executive summary, "what we recommend and why", option comparison, from quote + evaluation data).
+## Phase 1 COMPLETE ✅
+
+All five initial AI features are built on the shared foundation: Smart Intake Assistant (1), Quick Risk Guide (2), Coverage Explanation Assistant (3), Proposal Language Assistant (4). (Feature numbering per brief; build order differed.)
+
+### Phase 2 progress
+
+- **Day 9 — Feature 5: Document Summary (extraction core).** `app/api/ai/document-summary/[leadId]` (GET saved / POST extract from pasted text) + `app/components/ai/DocumentSummaryPanel.tsx` on the proposal page. Extracts carrier, effective/expiration dates, coverage lines (limit + deductible), and flags potential gaps. Stored in AiRun for audit. **Day 10 adds binary PDF upload + text extraction** on top of this core.
+
+- **Day 10 — Feature 5: PDF upload + parsing.** Added `unpdf`-based `lib/ai/pdf.ts` (extract text from PDF), shared `lib/ai/runDocumentSummary.ts` helper, and `app/api/ai/document-summary/[leadId]/upload` (multipart PDF → text → same extraction). The panel now has an **Upload PDF** button (10 MB cap, rejects scanned/image PDFs with no text). Verified end-to-end: PDF bytes → text → structured extraction.
+
+- **Day 11 — Feature 6: COI Assistant.** `app/api/ai/coi/[leadId]` (GET saved / POST draft) + `app/components/ai/CoiAssistantPanel.tsx` on the proposal page. Agent enters certificate holder / project / wording + additional-insured / waiver toggles; AI drafts COI fields (pulling policy data from the latest Document Summary), a missing-info checklist, flags unusual wording, and suggests endorsement review. Draft only — never confirms coverage or issues a COI.
+
+- **Day 12 — Features 7/8: ACORD mapping engine (deterministic core).** New `AcordDraft` model (stored separately from intake, with status + review trail + missingFields). Reusable mapping layer under `lib/acord/` (`types`, `acord125` spec+mapper, `index` registry + `buildAcordDraft`/`detectMissing`). `app/api/acord/[leadId]` GET drafts / POST generate-and-save. Mapping is fully deterministic; AI is reserved for ambiguous-field cleanup (next). Verified: full intake → no missing; sparse intake → flags the 5 missing required fields.
+
+- **Day 13 — ACORD review/edit UI + AI description cleanup.** Generate route now reuses the lead's latest Smart Intake `cleanBusinessDescription` for Description of Operations (AI-assisted cleanup, no new prompt). `app/api/acord/[leadId]/[draftId]` GET/PATCH (save edits + approve, recomputes missingFields deterministically). `app/components/ai/AcordPanel.tsx` on the proposal page: form selector, generate, editable fields by section with missing-required highlighted, Save / Approve for Export (review trail) / Unapprove. "Generated draft. Agent review required." banner. Export PDF button stubbed.
+
+- **Day 14 — ACORD PDF export.** `pdf-lib`-based `lib/acord/pdf.ts` generates a clean sectioned PDF of the mapped fields. `app/api/acord/[leadId]/[draftId]/pdf` GET exports it — gated to REVIEWED/EXPORTED drafts (agent approval required first), marks EXPORTED on first download. Panel's Export PDF button now active once approved. Verified: valid PDF, correct sections/labels/values, wrapped description, disclaimer footer. (Renders agency data — not the licensed ACORD-branded template; pdf-lib can fill official fillable PDFs later if the agency provides them.)
+
+- **Day 15 — ACORD forms 126 / 140 / 25.** Extracted shared `lib/acord/util.ts` (`pick`), added specs `acord126` (GL section), `acord140` (Property section), `acord25` (Certificate of Liability), and registered all in the registry. No engine/UI/PDF/route changes needed — they all read the registry. The form selector now offers all four; each gets deterministic mapping, per-form required-field validation, agent review/edit, and PDF export. Verified all four map + validate (140 flags premisesAddress, 25 flags certificateHolder, as expected). ACORD 130 (WC) deferred per brief.
+
+## Phase 2 COMPLETE ✅
+
+Features 5 (Document Summary + PDF), 6 (COI Assistant), 7/8 (ACORD generation: 125/126/140/25 with mapping, AI-assisted description, agent review/approve, PDF export). All 8 AI features from the brief are built.
 
 ## Open decisions
 
