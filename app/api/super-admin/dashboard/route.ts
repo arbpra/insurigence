@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
   if (!auth.valid) return auth.response!;
 
   try {
+    const showArchived = request.nextUrl.searchParams.get('archived') === 'true';
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -165,6 +166,9 @@ export async function GET(request: NextRequest) {
     const recentLeadsData = await prisma.lead.findMany({
       take: 10,
       orderBy: { createdAt: 'desc' },
+      where: showArchived
+        ? { archivedAt: { not: null } }
+        : { OR: [{ archivedAt: null }, { archivedAt: { isSet: false } }] },
       include: {
         assignedTo: { select: { firstName: true, lastName: true } },
         intakeSubmission: { select: { responses: true } },
@@ -192,6 +196,16 @@ export async function GET(request: NextRequest) {
         agentName,
         coverageTags: ['GL'],
         businessType,
+        // Fields for the lead-details modal.
+        primaryContactEmail: lead.primaryContactEmail,
+        source: lead.source,
+        marketClassification: lead.marketClassification,
+        marketConfidence: lead.marketConfidence,
+        marketReasonCodes: lead.marketReasonCodes,
+        archivedAt: lead.archivedAt,
+        intakeSubmission: lead.intakeSubmission
+          ? { responses: lead.intakeSubmission.responses }
+          : undefined,
       };
     });
 

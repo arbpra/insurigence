@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { useAdminAuth } from './layout';
 import { Bell, ChevronDown } from 'lucide-react';
 import Logo from '@/app/components/Logo';
+import LeadDetailsModal from '@/components/LeadDetailsModal';
 
 interface KPIs {
   totalAgencies: number;
@@ -31,6 +32,13 @@ interface RecentLead {
   agentName: string | null;
   coverageTags: string[];
   businessType: string | null;
+  primaryContactEmail?: string | null;
+  source?: string;
+  marketClassification: string | null;
+  marketConfidence: number | null;
+  marketReasonCodes?: string[];
+  archivedAt?: string | null;
+  intakeSubmission?: { responses: Record<string, unknown> };
 }
 
 interface ActivityEvent {
@@ -109,10 +117,12 @@ export default function SuperAdminHome() {
   const [recentLeads, setRecentLeads] = useState<RecentLead[]>([]);
   const [recentActivity, setRecentActivity] = useState<ActivityEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedLead, setSelectedLead] = useState<RecentLead | null>(null);
+  const [view, setView] = useState<'active' | 'archived'>('active');
 
-  useEffect(() => {
-    authFetch('/api/super-admin/dashboard')
-      .then((res) => res.ok ? res.json() : null)
+  const loadDashboard = () => {
+    authFetch(`/api/super-admin/dashboard${view === 'archived' ? '?archived=true' : ''}`)
+      .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data) {
           setKpis(data.kpis);
@@ -121,7 +131,12 @@ export default function SuperAdminHome() {
         }
       })
       .finally(() => setIsLoading(false));
-  }, [authFetch]);
+  };
+
+  useEffect(() => {
+    loadDashboard();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authFetch, view]);
 
   const firstName = user?.firstName || 'Admin';
   const lastName = user?.lastName || '';
@@ -262,7 +277,27 @@ export default function SuperAdminHome() {
           {/* Recent Leads */}
           <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="px-6 py-4 flex items-center justify-between border-b border-gray-100">
-              <h2 className="text-xl font-semibold text-[#07496C]" style={{ margin: '0px' }}>Recent Leads</h2>
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl font-semibold text-[#07496C]" style={{ margin: '0px' }}>
+                  {view === 'archived' ? 'Archived Leads' : 'Recent Leads'}
+                </h2>
+                <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden text-xs">
+                  <button
+                    onClick={() => setView('active')}
+                    className={`px-3 py-1 ${view === 'active' ? 'bg-[#07496C] text-white' : 'bg-white text-gray-500'}`}
+                    data-testid="view-active"
+                  >
+                    Active
+                  </button>
+                  <button
+                    onClick={() => setView('archived')}
+                    className={`px-3 py-1 ${view === 'archived' ? 'bg-[#07496C] text-white' : 'bg-white text-gray-500'}`}
+                    data-testid="view-archived"
+                  >
+                    Archived
+                  </button>
+                </div>
+              </div>
               <Link
                 href="/super-admin/agencies"
                 className="text-2sm font-medium text-[#1D9E75] hover:opacity-75 transition-opacity"
@@ -308,7 +343,14 @@ export default function SuperAdminHome() {
                       return (
                         <tr key={lead.id} className="hover:bg-gray-50 transition-colors">
                           <td className="pl-6 pr-4 py-3">
-                            <p className="font-medium text-[#0D2137]">{lead.insuredName}</p>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedLead(lead)}
+                              className="font-medium text-[#0D2137] hover:text-[#1D9E75] hover:underline text-left"
+                              data-testid={`button-lead-details-${lead.id}`}
+                            >
+                              {lead.insuredName}
+                            </button>
                           </td>
                           <td className="px-5 py-3 text-gray-500">{lead.businessType || '—'}</td>
                           <td className="px-5 py-3">
@@ -381,6 +423,17 @@ export default function SuperAdminHome() {
 
         </div>
       </main>
+
+      {selectedLead && (
+        <LeadDetailsModal
+          lead={selectedLead}
+          onClose={() => setSelectedLead(null)}
+          onChanged={() => {
+            setSelectedLead(null);
+            loadDashboard();
+          }}
+        />
+      )}
     </div>
   );
 }

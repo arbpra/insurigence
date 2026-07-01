@@ -20,7 +20,16 @@ export async function GET(request: NextRequest) {
       agencyId = user.agencyId;
     }
 
-    const whereClause = agencyId ? { agencyId } : {};
+    const showArchived = request.nextUrl.searchParams.get('archived') === 'true';
+    // A lead is "active" when archivedAt is null OR unset. Legacy leads created
+    // before this field existed have it unset, so both must be matched — Prisma's
+    // MongoDB connector treats null and unset as distinct.
+    const whereClause = {
+      ...(agencyId ? { agencyId } : {}),
+      ...(showArchived
+        ? { archivedAt: { not: null } }
+        : { OR: [{ archivedAt: null }, { archivedAt: { isSet: false } }] }),
+    };
 
     const leads = await prisma.lead.findMany({
       where: whereClause,

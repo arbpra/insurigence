@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader, StatCard, Badge, Button, DataTable } from '@/components/ui';
 import QuickRiskGuide from '@/components/ai/QuickRiskGuide';
+import LeadDetailsModal from '@/components/LeadDetailsModal';
 
 interface Lead {
   id: string;
@@ -17,6 +18,7 @@ interface Lead {
   marketClassification: string | null;
   marketConfidence: number | null;
   marketReasonCodes: string[];
+  archivedAt?: string | null;
   createdAt: string;
   intakeSubmission?: {
     id: string;
@@ -45,7 +47,7 @@ interface Stats {
   borderlineCount: number;
 }
 
-type MarketFilter = 'all' | 'STANDARD' | 'EXCESS_SURPLUS' | 'BORDERLINE' | 'pending';
+type MarketFilter = 'all' | 'STANDARD' | 'EXCESS_SURPLUS' | 'BORDERLINE' | 'pending' | 'evaluated';
 type StatusFilter = 'all' | 'NEW' | 'EVALUATED' | 'QUOTED' | 'BOUND';
 
 export default function DashboardPage() {
@@ -70,10 +72,22 @@ export default function DashboardPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [marketFilter, setMarketFilter] = useState<MarketFilter>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [view, setView] = useState<'active' | 'archived'>('active');
+  const leadsRef = useRef<HTMLDivElement>(null);
+
+  // Click a KPI card → filter the leads table to that category and scroll to it.
+  const drillDown = (filter: MarketFilter) => {
+    setMarketFilter(filter);
+    setStatusFilter('all');
+    setTimeout(() => leadsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+  };
 
   useEffect(() => {
+    setIsLoading(true);
     fetchLeads();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
 
   const evaluateLead = async (leadId: string) => {
     setEvaluatingLeadId(leadId);
@@ -102,7 +116,7 @@ export default function DashboardPage() {
 
   const fetchLeads = async () => {
     try {
-      const response = await fetch('/api/leads');
+      const response = await fetch(`/api/leads${view === 'archived' ? '?archived=true' : ''}`);
       if (!response.ok) {
         throw new Error('Failed to fetch leads');
       }
@@ -186,9 +200,15 @@ export default function DashboardPage() {
   };
 
   const filteredLeads = leads.filter(lead => {
-    if (marketFilter !== 'all') {
-      if (marketFilter === 'pending' && lead.marketClassification !== null) return false;
-      if (marketFilter !== 'pending' && lead.marketClassification !== marketFilter) return false;
+    if (marketFilter === 'pending' && lead.marketClassification !== null) return false;
+    if (marketFilter === 'evaluated' && lead.marketClassification === null) return false;
+    if (
+      marketFilter !== 'all' &&
+      marketFilter !== 'pending' &&
+      marketFilter !== 'evaluated' &&
+      lead.marketClassification !== marketFilter
+    ) {
+      return false;
     }
     if (statusFilter !== 'all' && lead.status !== statusFilter) return false;
     return true;
@@ -207,7 +227,14 @@ export default function DashboardPage() {
       render: (lead: Lead) => (
         <div>
           <div className="flex items-center gap-2">
-            <p className="font-medium text-slate-900">{lead.insuredName}</p>
+            <button
+              type="button"
+              onClick={() => setSelectedLead(lead)}
+              className="font-medium text-slate-900 hover:text-[var(--brand-accent)] hover:underline text-left"
+              data-testid={`button-lead-details-${lead.id}`}
+            >
+              {lead.insuredName}
+            </button>
             {lead.source === 'EXTERNAL' && (
               <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
                 External
@@ -389,6 +416,8 @@ export default function DashboardPage() {
           value={stats.totalLeads}
           variant="default"
           testId="stat-total-leads"
+          onClick={() => drillDown('all')}
+          active={marketFilter === 'all'}
           icon={
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -400,6 +429,8 @@ export default function DashboardPage() {
           value={stats.evaluated}
           variant="accent"
           testId="stat-evaluated"
+          onClick={() => drillDown('evaluated')}
+          active={marketFilter === 'evaluated'}
           icon={
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -411,6 +442,8 @@ export default function DashboardPage() {
           value={stats.standardCount}
           variant="standard"
           testId="stat-standard"
+          onClick={() => drillDown('STANDARD')}
+          active={marketFilter === 'STANDARD'}
           icon={
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 13l4 4L19 7" />
@@ -422,6 +455,8 @@ export default function DashboardPage() {
           value={stats.esCount}
           variant="es"
           testId="stat-es"
+          onClick={() => drillDown('EXCESS_SURPLUS')}
+          active={marketFilter === 'EXCESS_SURPLUS'}
           icon={
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -433,6 +468,8 @@ export default function DashboardPage() {
           value={stats.borderlineCount}
           variant="borderline"
           testId="stat-borderline"
+          onClick={() => drillDown('BORDERLINE')}
+          active={marketFilter === 'BORDERLINE'}
           icon={
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -443,11 +480,29 @@ export default function DashboardPage() {
 
       <QuickRiskGuide />
 
-      <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm mb-6">
+      <div ref={leadsRef} className="bg-white rounded-xl border border-slate-200/80 shadow-sm mb-6 scroll-mt-6">
         <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <h2 className="text-xl font-semibold text-[#07496C]" style={{ margin: '0px' }}>
-            Recent Leads
-          </h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl font-semibold text-[#07496C]" style={{ margin: '0px' }}>
+              {view === 'archived' ? 'Archived Leads' : 'Recent Leads'}
+            </h2>
+            <div className="inline-flex rounded-lg border border-slate-200 overflow-hidden text-xs">
+              <button
+                onClick={() => setView('active')}
+                className={`px-3 py-1.5 ${view === 'active' ? 'bg-[#07496C] text-white' : 'bg-white text-slate-500'}`}
+                data-testid="view-active"
+              >
+                Active
+              </button>
+              <button
+                onClick={() => setView('archived')}
+                className={`px-3 py-1.5 ${view === 'archived' ? 'bg-[#07496C] text-white' : 'bg-white text-slate-500'}`}
+                data-testid="view-archived"
+              >
+                Archived
+              </button>
+            </div>
+          </div>
           <div className="flex items-center gap-3 flex-wrap">
             <select
               value={marketFilter}
@@ -457,6 +512,7 @@ export default function DashboardPage() {
               data-testid="filter-market"
             >
               <option value="all">All Markets</option>
+              <option value="evaluated">Evaluated</option>
               <option value="STANDARD">Standard</option>
               <option value="EXCESS_SURPLUS">E&S</option>
               <option value="BORDERLINE">Borderline</option>
@@ -514,6 +570,17 @@ export default function DashboardPage() {
           />
         )}
       </div>
+
+      {selectedLead && (
+        <LeadDetailsModal
+          lead={selectedLead}
+          onClose={() => setSelectedLead(null)}
+          onChanged={() => {
+            setSelectedLead(null);
+            fetchLeads();
+          }}
+        />
+      )}
     </AppLayout>
   );
 }

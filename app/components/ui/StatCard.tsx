@@ -10,15 +10,19 @@ interface StatCardProps {
   };
   variant?: 'default' | 'standard' | 'es' | 'borderline' | 'accent';
   testId?: string;
+  onClick?: () => void;
+  active?: boolean;
 }
 
-export function StatCard({ 
-  label, 
-  value, 
+export function StatCard({
+  label,
+  value,
   icon,
   trend,
   variant = 'default',
-  testId
+  testId,
+  onClick,
+  active,
 }: StatCardProps) {
   const getVariantStyles = () => {
     switch (variant) {
@@ -58,10 +62,21 @@ export function StatCard({
   const styles = getVariantStyles();
 
   return (
-    <div 
-      className="bg-white rounded-xl border-slate-200/80 p-4 shadow-sm"
+    <div
+      className={`bg-white rounded-xl border-slate-200/80 p-4 shadow-sm ${onClick ? 'cursor-pointer transition-shadow hover:shadow-md' : ''}`}
       data-testid={testId}
-      style={{ borderTop: `4px solid ${styles.valueColor}`, borderBottom: '1px solid #dee2e6', borderLeft: '1px solid #dee2e6', borderRight: '1px solid #dee2e6'}}
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
+      style={{
+        borderTop: `4px solid ${styles.valueColor}`,
+        borderBottom: '1px solid #dee2e6',
+        borderLeft: '1px solid #dee2e6',
+        borderRight: '1px solid #dee2e6',
+        outline: active ? `2px solid ${styles.valueColor}` : undefined,
+        outlineOffset: active ? '1px' : undefined,
+      }}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
