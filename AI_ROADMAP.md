@@ -180,6 +180,13 @@ All five initial AI features are built on the shared foundation: Smart Intake As
 
 - **Day 15 — ACORD forms 126 / 140 / 25.** Extracted shared `lib/acord/util.ts` (`pick`), added specs `acord126` (GL section), `acord140` (Property section), `acord25` (Certificate of Liability), and registered all in the registry. No engine/UI/PDF/route changes needed — they all read the registry. The form selector now offers all four; each gets deterministic mapping, per-form required-field validation, agent review/edit, and PDF export. Verified all four map + validate (140 flags premisesAddress, 25 flags certificateHolder, as expected). ACORD 130 (WC) deferred per brief.
 
+### Client add-on — Premium Indication (inside Quick Risk Guide)
+
+- **Deterministic benchmark, AI explains only.** `lib/premium/benchmark.ts` computes an estimated **annual premium RANGE** + confidence (Low/Med/High) from structured GL facts (industry class rate × revenue, adjusted for market type / tenure / losses). Never an exact number, never a quote. Insufficient data → "Insufficient information to provide a reliable indication."
+- Quick Risk Guide prompt now also parses `parsedFacts` (revenue/state/employees/etc.) from the free text; the route runs the benchmark, then `premiumExplanationPrompt` (AI) writes the plain-language reasoning. Both risk guide + premium indication saved to AiRun for audit.
+- UI: Premium Indication card in the Quick Risk Guide output (range, confidence, reasoning, factors considered, factors that may change pricing, and the full mandatory disclaimer). Internal-facing; "Not a quote" labeled.
+- Guardrails enforced: ranges only, no carrier-specific pricing, no binding/rating, disclaimer everywhere, rules-first.
+
 ## Phase 2 COMPLETE ✅
 
 Features 5 (Document Summary + PDF), 6 (COI Assistant), 7/8 (ACORD generation: 125/126/140/25 with mapping, AI-assisted description, agent review/approve, PDF export). All 8 AI features from the brief are built.

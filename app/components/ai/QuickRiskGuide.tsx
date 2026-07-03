@@ -5,12 +5,25 @@ import { Button } from '@/components/ui';
 import AiDisclaimer from '@/components/ai/AiDisclaimer';
 import AiAssistedBadge from '@/components/ai/AiAssistedBadge';
 
+interface PremiumIndication {
+  insufficient: boolean;
+  annualLow?: number;
+  annualHigh?: number;
+  confidence?: 'LOW' | 'MEDIUM' | 'HIGH';
+  basis?: string;
+  reasoning: string;
+  factorsConsidered: string[];
+  factorsThatMayChangePricing: string[];
+  disclaimer: string;
+}
+
 interface QuickRiskGuideData {
   likelyMarketDirection: 'STANDARD' | 'EXCESS_SURPLUS' | 'BORDERLINE';
   keyRiskConcerns: string[];
   coverageConsiderations: string[];
   suggestedClassification: { naicsCandidates?: string[]; notes: string };
   recommendedNextSteps: string[];
+  premiumIndication?: PremiumIndication;
 }
 
 interface ApiResult {
@@ -164,6 +177,10 @@ export default function QuickRiskGuide() {
                 <p className="text-sm text-slate-700">{result.data.suggestedClassification.notes}</p>
               </div>
 
+              {result.data.premiumIndication && (
+                <PremiumIndicationCard indication={result.data.premiumIndication} />
+              )}
+
               <GuideList title="Recommended next steps" items={result.data.recommendedNextSteps} />
             </div>
           )}
@@ -189,6 +206,88 @@ function GuideList({ title, items }: { title: string; items: string[] }) {
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+const CONFIDENCE_STYLE: Record<string, { bg: string; text: string; label: string }> = {
+  LOW: { bg: 'bg-red-50', text: 'text-red-600', label: 'Low confidence' },
+  MEDIUM: { bg: 'bg-amber-50', text: 'text-amber-700', label: 'Medium confidence' },
+  HIGH: { bg: 'bg-green-50', text: 'text-green-700', label: 'High confidence' },
+};
+
+function money(n?: number) {
+  return typeof n === 'number' ? `$${n.toLocaleString('en-US')}` : '—';
+}
+
+function PremiumIndicationCard({
+  indication,
+}: {
+  indication: NonNullable<QuickRiskGuideData['premiumIndication']>;
+}) {
+  const conf = indication.confidence ? CONFIDENCE_STYLE[indication.confidence] : null;
+
+  return (
+    <div className="rounded-lg border-2 border-violet-200 bg-violet-50/30 p-4" data-testid="premium-indication">
+      <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+        <p className="text-xs uppercase font-bold text-violet-700">Premium Indication</p>
+        <span className="text-[11px] uppercase tracking-wide text-slate-400">Not a quote · Internal</span>
+      </div>
+
+      {indication.insufficient ? (
+        <p className="text-sm text-slate-600 mb-3">
+          Insufficient information to provide a reliable indication.
+        </p>
+      ) : (
+        <>
+          <div className="flex items-baseline gap-3 flex-wrap mb-2">
+            <span className="text-2xl font-bold text-[#07496C]">
+              {money(indication.annualLow)} – {money(indication.annualHigh)}
+            </span>
+            <span className="text-xs text-slate-500">estimated annual premium indication</span>
+            {conf && (
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${conf.bg} ${conf.text}`}>
+                {conf.label}
+              </span>
+            )}
+          </div>
+
+          <p className="text-sm text-slate-700 mb-3">{indication.reasoning}</p>
+
+          {indication.factorsConsidered.length > 0 && (
+            <div className="mb-3">
+              <p className="text-[11px] uppercase font-bold text-slate-500 mb-1">Factors considered</p>
+              <ul className="space-y-1">
+                {indication.factorsConsidered.map((f, i) => (
+                  <li key={i} className="text-xs text-slate-600 flex gap-2">
+                    <span className="text-violet-500">•</span>
+                    <span>{f}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {indication.factorsThatMayChangePricing.length > 0 && (
+            <div className="mb-3">
+              <p className="text-[11px] uppercase font-bold text-slate-500 mb-1">
+                Factors that may change pricing
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {indication.factorsThatMayChangePricing.map((f, i) => (
+                  <span key={i} className="text-[11px] px-2 py-0.5 bg-white border border-slate-200 rounded text-slate-600">
+                    {f}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      <p className="text-[11px] leading-snug text-slate-500 border-t border-violet-200 pt-2 mt-1">
+        {indication.disclaimer}
+      </p>
     </div>
   );
 }

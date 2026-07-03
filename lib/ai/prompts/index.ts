@@ -6,6 +6,7 @@
 export type { PromptDefinition } from './types';
 export { smartIntakePrompt } from './smartIntake';
 export { quickRiskGuidePrompt } from './quickRiskGuide';
+export { premiumExplanationPrompt } from './premiumExplanation';
 export { coverageExplanationPrompt } from './coverageExplanation';
 export { proposalLanguagePrompt } from './proposalLanguage';
 export { documentSummaryPrompt } from './documentSummary';

@@ -162,6 +162,36 @@ export const CoverageExplanationSchema = z.object({
 });
 export type CoverageExplanationOutput = z.infer<typeof CoverageExplanationSchema>;
 
+/** Coerce a value to a number (accepts "150000", "$150k", 150000) or null. */
+const zNullableNumber = z.preprocess((v) => {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (typeof v === 'string') {
+    let s = v.toLowerCase().replace(/[$,\s]/g, '');
+    let mult = 1;
+    if (s.endsWith('k')) { mult = 1_000; s = s.slice(0, -1); }
+    else if (s.endsWith('m')) { mult = 1_000_000; s = s.slice(0, -1); }
+    const n = parseFloat(s);
+    return Number.isFinite(n) ? n * mult : null;
+  }
+  return null;
+}, z.number().nullable());
+
+/**
+ * Structured facts parsed from the agent's free-text description. These feed the
+ * deterministic premium benchmark — the AI parses the agent's own words into
+ * numbers; it does not compute pricing.
+ */
+export const ParsedRiskFactsSchema = z.object({
+  industry: z.string().default(''),
+  revenue: zNullableNumber.default(null),
+  employees: zNullableNumber.default(null),
+  state: z.string().default('').describe('Two-letter state code if determinable, else blank.'),
+  yearsInBusiness: zNullableNumber.default(null),
+  priorLosses: z.boolean().nullable().default(null),
+  requestedLimit: zNullableNumber.default(null),
+});
+
 /** Feature 2 — Quick Risk Guide (internal guidance only). */
 export const QuickRiskGuideSchema = z.object({
   likelyMarketDirection: z
@@ -171,5 +201,17 @@ export const QuickRiskGuideSchema = z.object({
   coverageConsiderations: z.array(z.string()),
   suggestedClassification: SuggestedClassificationSchema,
   recommendedNextSteps: z.array(z.string()),
+  parsedFacts: ParsedRiskFactsSchema.default({}),
 });
 export type QuickRiskGuideOutput = z.infer<typeof QuickRiskGuideSchema>;
+
+/**
+ * Premium Indication — AI explanation only. The range, confidence, and factor
+ * lists come from the deterministic benchmark; the AI writes a short plain-
+ * language reasoning paragraph explaining the given range. It must not restate
+ * different numbers or call it a quote.
+ */
+export const PremiumExplanationSchema = z.object({
+  reasoning: z.string().describe('Plain-language explanation of what drives the given range.'),
+});
+export type PremiumExplanationOutput = z.infer<typeof PremiumExplanationSchema>;

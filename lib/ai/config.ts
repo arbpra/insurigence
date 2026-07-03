@@ -45,6 +45,7 @@ export const AI_GUARDRAILS = [
 export const AI_PURPOSES = {
   SMART_INTAKE: 'smart_intake_assistant',
   QUICK_RISK_GUIDE: 'quick_risk_guide',
+  PREMIUM_INDICATION: 'premium_indication',
   COVERAGE_EXPLANATION: 'coverage_explanation',
   PROPOSAL_LANGUAGE: 'proposal_language',
   DOCUMENT_SUMMARY: 'document_summary',
@@ -53,3 +54,13 @@ export const AI_PURPOSES = {
 } as const;
 
 export type AiPurpose = (typeof AI_PURPOSES)[keyof typeof AI_PURPOSES];
+
+/**
+ * Mandatory disclaimer for the Premium Indication feature. Shown anywhere a
+ * premium indication appears. This is NOT a quote — ranges only.
+ */
+export const PREMIUM_INDICATION_DISCLAIMER =
+  'This is a generalized premium indication only and is not a quote, binder, or offer of insurance. ' +
+  'Actual premiums vary based on underwriting review, carrier appetite, class codes, coverage limits, ' +
+  'loss history, state rating rules, endorsements, and other factors. Final pricing must be confirmed ' +
+  'by a licensed agent and insurance carrier.';
