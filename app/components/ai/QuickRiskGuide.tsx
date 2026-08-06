@@ -17,6 +17,16 @@ interface PremiumIndication {
   disclaimer: string;
 }
 
+interface CoverageRecommendation {
+  coverageName: string;
+  recommendationLevel: 'STRONGLY_RECOMMENDED' | 'RECOMMENDED' | 'CONSIDER' | 'NOT_TYPICALLY_NEEDED';
+  reason: string;
+  agentExplanation: string;
+  triggeringExposures: string[];
+  crossSellOpportunity: boolean;
+  disclaimer: string;
+}
+
 interface QuickRiskGuideData {
   likelyMarketDirection: 'STANDARD' | 'EXCESS_SURPLUS' | 'BORDERLINE';
   keyRiskConcerns: string[];
@@ -24,6 +34,8 @@ interface QuickRiskGuideData {
   suggestedClassification: { naicsCandidates?: string[]; notes: string };
   recommendedNextSteps: string[];
   premiumIndication?: PremiumIndication;
+  coverageRecommendations?: CoverageRecommendation[];
+  coverageDisclaimer?: string;
 }
 
 interface ApiResult {
@@ -177,6 +189,13 @@ export default function QuickRiskGuide() {
                 <p className="text-sm text-slate-700">{result.data.suggestedClassification.notes}</p>
               </div>
 
+              {result.data.coverageRecommendations && result.data.coverageRecommendations.length > 0 && (
+                <CoverageRecommendationsCard
+                  recommendations={result.data.coverageRecommendations}
+                  disclaimer={result.data.coverageDisclaimer}
+                />
+              )}
+
               {result.data.premiumIndication && (
                 <PremiumIndicationCard indication={result.data.premiumIndication} />
               )}
@@ -205,6 +224,68 @@ function GuideList({ title, items }: { title: string; items: string[] }) {
             </li>
           ))}
         </ul>
+      )}
+    </div>
+  );
+}
+
+const LEVEL_STYLE: Record<string, { bg: string; text: string; label: string }> = {
+  STRONGLY_RECOMMENDED: { bg: 'bg-green-100', text: 'text-green-800', label: 'Strongly Recommended' },
+  RECOMMENDED: { bg: 'bg-emerald-50', text: 'text-emerald-700', label: 'Recommended' },
+  CONSIDER: { bg: 'bg-amber-50', text: 'text-amber-700', label: 'Consider' },
+  NOT_TYPICALLY_NEEDED: { bg: 'bg-slate-100', text: 'text-slate-500', label: 'Not Typically Needed' },
+};
+
+function CoverageRecommendationsCard({
+  recommendations,
+  disclaimer,
+}: {
+  recommendations: CoverageRecommendation[];
+  disclaimer?: string;
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200 p-4" data-testid="coverage-recommendations">
+      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+        <p className="text-xs uppercase font-bold text-slate-500">Recommended Coverages</p>
+        <span className="text-[11px] uppercase tracking-wide text-slate-400">Guidance · agent review required</span>
+      </div>
+
+      <div className="space-y-2">
+        {recommendations.map((r) => {
+          const s = LEVEL_STYLE[r.recommendationLevel] ?? LEVEL_STYLE.CONSIDER;
+          return (
+            <div key={r.coverageName} className="rounded-md border border-slate-100 p-3">
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <span className="font-semibold text-[#07496C] text-sm">{r.coverageName}</span>
+                <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${s.bg} ${s.text}`}>
+                  {s.label}
+                </span>
+                {r.crossSellOpportunity && (
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 font-medium">
+                    Cross-sell
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-slate-700">{r.agentExplanation}</p>
+              <p className="text-xs text-slate-500 mt-1">Why: {r.reason}</p>
+              {r.triggeringExposures.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {r.triggeringExposures.map((e) => (
+                    <span key={e} className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded">
+                      {e.replace(/_/g, ' ')}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {disclaimer && (
+        <p className="text-[11px] leading-snug text-slate-500 border-t border-slate-200 pt-2 mt-3">
+          {disclaimer}
+        </p>
       )}
     </div>
   );

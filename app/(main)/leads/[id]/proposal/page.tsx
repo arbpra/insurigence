@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import SmartIntakePanel from '@/components/ai/SmartIntakePanel';
+import CoverageRecommendationsPanel from '@/components/ai/CoverageRecommendationsPanel';
 import CoverageExplanationPanel from '@/components/ai/CoverageExplanationPanel';
 import ProposalLanguagePanel from '@/components/ai/ProposalLanguagePanel';
 import DocumentSummaryPanel from '@/components/ai/DocumentSummaryPanel';
@@ -498,6 +499,8 @@ export default function ProposalPage() {
         </div>
 
         <SmartIntakePanel leadId={leadId} />
+
+        <CoverageRecommendationsPanel leadId={leadId} />
 
         <CoverageExplanationPanel leadId={leadId} />
 

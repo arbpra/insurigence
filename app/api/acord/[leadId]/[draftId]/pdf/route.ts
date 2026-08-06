@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { getAuthContext } from '@/lib/super-admin-auth';
 import { getAcordForm } from '@/lib/acord';
 import { generateAcordPdf } from '@/lib/acord/pdf';
+import { fillAcordTemplate } from '@/lib/acord/templateFill';
 
 /**
  * Export an ACORD draft to PDF. Only REVIEWED (or already EXPORTED) drafts can be
@@ -35,11 +36,18 @@ export async function GET(
   const spec = getAcordForm(draft.formType);
   if (!spec) return NextResponse.json({ error: 'Unsupported form' }, { status: 400 });
 
-  const pdfBytes = await generateAcordPdf(spec, {
-    fields: (draft.fields as Record<string, string>) ?? {},
-    status: draft.status,
-    missingFields: draft.missingFields,
-  });
+  const fields = (draft.fields as Record<string, string>) ?? {};
+
+  // Prefer the official fillable ACORD template if the agency has provided one;
+  // otherwise export the generated data PDF.
+  const filled = await fillAcordTemplate(draft.formType, fields).catch(() => null);
+  const pdfBytes =
+    filled ??
+    (await generateAcordPdf(spec, {
+      fields,
+      status: draft.status,
+      missingFields: draft.missingFields,
+    }));
 
   // Mark EXPORTED on first export (keep the review trail intact).
   if (draft.status === 'REVIEWED') {

@@ -158,8 +158,43 @@ model User {
   leads        Lead[]   @relation("AssignedLeads")
   activityEvents ActivityEvent[] @relation("UserEvents")
   sessions     Session[]
+  inviteTokens InviteToken[]
+  passwordResetTokens PasswordResetToken[]
 
   @@index([role])
+}
+
+/// One-time password-reset codes. The 6-digit code is stored hashed (never
+/// plaintext), is single-use, expires quickly, and limits verification attempts.
+model PasswordResetToken {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String    @db.ObjectId
+  codeHash  String
+  expiresAt DateTime
+  usedAt    DateTime?
+  attempts  Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// One-time invite links. A separate model (rather than a nullable @unique field
+/// on User) because MongoDB's unique index rejects a second null — every row here
+/// always has a token. The invitee sets their own password via this link, so no
+/// password is ever sent by email.
+model InviteToken {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  token     String    @unique
+  userId    String    @db.ObjectId
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Session {
@@ -438,6 +473,41 @@ model AcordDraft {
   @@index([agencyId])
   @@index([leadId])
   @@index([formType])
+}
+
+/// Agent-editable coverage recommendations for a lead. Seeded deterministically
+/// from intake exposures (+ optional AI-refined explanations), then the agent can
+/// edit levels, remove, or add coverages and approve before use in a proposal.
+/// One current set per lead. Stored separately for audit/history.
+model CoverageRecommendationSet {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId        String    @db.ObjectId
+  leadId          String    @unique @db.ObjectId
+  recommendations Json
+  status          String    @default("DRAFT") // DRAFT | REVIEWED
+  reviewedById    String?   @db.ObjectId
+  reviewedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([agencyId])
+}
+
+/// Super-admin-editable overrides for the coverage rules library. Global (one
+/// row per coverage). Lets non-developers enable/disable coverages, override the
+/// plain-English explanation, and add custom coverages — without code changes.
+/// The engine's conditional level logic stays in code; these overrides are
+/// merged on top of its output.
+model CoverageRuleConfig {
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  coverageName     String   @unique
+  enabled          Boolean  @default(true)
+  agentExplanation String?  // override; null = use library default
+  isCustom         Boolean  @default(false)
+  customLevel      String?  // STRONGLY_RECOMMENDED | RECOMMENDED | CONSIDER | NOT_TYPICALLY_NEEDED
+  customReason     String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
 
 model BillingAccount {

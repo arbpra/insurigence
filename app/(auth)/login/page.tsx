@@ -39,9 +39,13 @@ function LoginContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
+    if (searchParams.get('reset') === '1') {
+      setNotice('Your password has been reset. Please sign in with your new password.');
+    }
     const errorParam = searchParams.get('error');
     if (errorParam === 'not_invited') {
       setError('Access denied. Your account has not been set up yet. Please contact your administrator to get access.');
@@ -200,9 +204,37 @@ function LoginContent() {
             {/* <h2 className="text-2xl font-bold mb-2" style={{ color: '#0D2137' }}>
               Welcome back
             </h2> */}
-            <p className="text-600 mb-16 text-center" style={{ color: '#07496c', fontSize: '1.125rem' }}>
+            <p className="text-600 mb-6 text-center" style={{ color: '#07496c', fontSize: '1.125rem' }}>
               Sign in to your Insurigence account.
             </p>
+
+            {/* Tabs */}
+            <div className="grid grid-cols-2 mb-6">
+              <span
+                className="text-center pb-2 border-b-2 font-medium"
+                style={{ borderColor: '#00E9B0', color: '#07496c' }}
+                data-testid="tab-login"
+              >
+                Login
+              </span>
+              <Link
+                href="/signup"
+                className="text-center pb-2 border-b-2 border-gray-200 text-gray-400 hover:text-gray-600 transition-colors"
+                data-testid="tab-signup"
+              >
+                Sign Up
+              </Link>
+            </div>
+
+            {notice && !error && (
+              <div
+                className="mb-4 p-4 rounded-lg text-sm"
+                style={{ backgroundColor: '#DCFCE7', color: '#166534' }}
+                data-testid="login-notice"
+              >
+                {notice}
+              </div>
+            )}
 
             {error && (
               <div
@@ -259,13 +291,23 @@ function LoginContent() {
               </div>
 
               <div>
-                <label
-                  htmlFor="password"
-                  className="block text-sm font-medium mb-2"
-                  style={{ color: '#07496c' }}
-                >
-                  Password
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label
+                    htmlFor="password"
+                    className="block text-sm font-medium"
+                    style={{ color: '#07496c' }}
+                  >
+                    Password
+                  </label>
+                  <Link
+                    href="/forgot-password"
+                    className="text-sm font-medium hover:opacity-80"
+                    style={{ color: '#00B383' }}
+                    data-testid="link-forgot-password"
+                  >
+                    Forgot your password?
+                  </Link>
+                </div>
                 <input
                   id="password"
                   type="password"
@@ -293,7 +335,10 @@ function LoginContent() {
           </div>
 
           <p className="text-center text-sm text-gray-500 mt-6">
-            Need access? Contact your administrator.
+            Don&apos;t have an account?{' '}
+            <Link href="/signup" className="font-medium" style={{ color: '#00B383' }}>
+              Sign up
+            </Link>
           </p>
         </div>
       </div>

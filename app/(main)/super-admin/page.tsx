@@ -237,6 +237,9 @@ export default function SuperAdminHome() {
             <Link href="/super-admin/ai-lab" className="text-sm text-gray-500 hover:text-[#0D2137] transition-colors">
               AI Lab
             </Link>
+            <Link href="/super-admin/coverage-rules" className="text-sm text-gray-500 hover:text-[#0D2137] transition-colors">
+              Coverage Rules
+            </Link>
           </div>
         </div>
       </header>

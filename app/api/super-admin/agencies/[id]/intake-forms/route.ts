@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { randomBytes } from 'crypto';
 import prisma from '@/lib/prisma';
 import { validateSuperAdmin } from '@/lib/super-admin-auth';
 
@@ -47,6 +48,10 @@ export async function POST(
         lob: lob || 'COMMERCIAL_GL',
         definition,
         isActive: isActive !== false,
+        // publicToken is `String? @unique`: MongoDB's unique index rejects a
+        // second null, so always assign one. The form stays private — public
+        // access requires isPublic (default false), not just a token.
+        publicToken: randomBytes(32).toString('hex'),
       },
     });
 

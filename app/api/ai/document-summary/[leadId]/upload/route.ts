@@ -2,16 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getAuthContext } from '@/lib/super-admin-auth';
 import { extractPdfText } from '@/lib/ai/pdf';
+import { ocrExtractText } from '@/lib/ai/ocr';
 import { runDocumentSummary } from '@/lib/ai/runDocumentSummary';
 
 /**
- * Feature 5 — Document Summary (PDF upload).
- * POST multipart/form-data with a `file` (PDF). Extracts the text and runs the
- * same Document Summary extraction as the pasted-text route.
+ * Feature 5 — Document Summary (file upload).
+ * POST multipart/form-data with a `file` (PDF or image). Text-based PDFs are
+ * parsed directly; scanned PDFs and images are read via OCR (vision). The
+ * extracted text then runs through the same Document Summary extraction.
  */
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
 const MAX_TEXT_CHARS = 50000;
+const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
 
 export async function POST(
   request: NextRequest,
@@ -38,25 +41,48 @@ export async function POST(
   if (!(file instanceof File)) {
     return NextResponse.json({ error: 'No file provided' }, { status: 400 });
   }
-  const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-  if (!isPdf) {
-    return NextResponse.json({ error: 'Only PDF files are supported' }, { status: 400 });
+  const name = file.name.toLowerCase();
+  const isPdf = file.type === 'application/pdf' || name.endsWith('.pdf');
+  const isImage = IMAGE_TYPES.includes(file.type) || /\.(png|jpe?g|webp)$/.test(name);
+  if (!isPdf && !isImage) {
+    return NextResponse.json({ error: 'Only PDF or image files are supported' }, { status: 400 });
   }
   if (file.size > MAX_FILE_BYTES) {
     return NextResponse.json({ error: 'File too large (max 10 MB)' }, { status: 400 });
   }
 
-  let text: string;
-  try {
-    const buffer = await file.arrayBuffer();
-    text = await extractPdfText(buffer);
-  } catch {
-    return NextResponse.json({ error: 'Could not read this PDF' }, { status: 422 });
+  const buffer = new Uint8Array(await file.arrayBuffer());
+  let text = '';
+  let usedOcr = false;
+
+  if (isPdf) {
+    try {
+      text = await extractPdfText(buffer);
+    } catch {
+      text = '';
+    }
+    // Scanned/image-only PDF (no selectable text) → OCR fallback.
+    if (!text) {
+      try {
+        text = await ocrExtractText(buffer, 'application/pdf', file.name);
+        usedOcr = true;
+      } catch {
+        return NextResponse.json({ error: 'Could not read this PDF' }, { status: 422 });
+      }
+    }
+  } else {
+    // Image upload → OCR directly.
+    try {
+      text = await ocrExtractText(buffer, file.type || 'image/png', file.name);
+      usedOcr = true;
+    } catch {
+      return NextResponse.json({ error: 'Could not read this image' }, { status: 422 });
+    }
   }
 
   if (!text) {
     return NextResponse.json(
-      { error: 'No selectable text found — this may be a scanned/image PDF.' },
+      { error: 'No readable text found in this document.' },
       { status: 422 }
     );
   }
@@ -78,6 +104,7 @@ export async function POST(
   return NextResponse.json({
     aiRunId: aiRun?.id ?? null,
     fileName: file.name,
+    usedOcr,
     data: result.data,
     disclaimer: result.disclaimer,
     model: result.model,

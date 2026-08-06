@@ -46,6 +46,7 @@ export const AI_PURPOSES = {
   SMART_INTAKE: 'smart_intake_assistant',
   QUICK_RISK_GUIDE: 'quick_risk_guide',
   PREMIUM_INDICATION: 'premium_indication',
+  COVERAGE_RECOMMENDATIONS: 'coverage_recommendations',
   COVERAGE_EXPLANATION: 'coverage_explanation',
   PROPOSAL_LANGUAGE: 'proposal_language',
   DOCUMENT_SUMMARY: 'document_summary',

@@ -2,10 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthContext } from '@/lib/super-admin-auth';
 import { callPrompt } from '@/lib/ai/aiService';
 import { saveAiRun } from '@/lib/ai/persistence';
-import { quickRiskGuidePrompt, premiumExplanationPrompt } from '@/lib/ai/prompts';
+import {
+  quickRiskGuidePrompt,
+  premiumExplanationPrompt,
+  coverageRecommendationExplanationPrompt,
+} from '@/lib/ai/prompts';
 import { PREMIUM_INDICATION_DISCLAIMER } from '@/lib/ai/config';
 import { computePremiumIndication } from '@/lib/premium/benchmark';
 import type { RiskFacts } from '@/lib/premium/types';
+import { computeCoverageRecommendations, applyAiExplanations } from '@/lib/coverage/engine';
+import { loadCoverageConfigs, applyCoverageConfigs } from '@/lib/coverage/config';
+import { COVERAGE_RECOMMENDATIONS_DISCLAIMER } from '@/lib/coverage/constants';
+import type { RiskExposureFacts } from '@/lib/coverage/types';
 
 /**
  * Feature 2 — Quick Risk Guide (agent-facing) + Premium Indication.
@@ -105,9 +113,63 @@ export async function POST(request: NextRequest) {
     agencyId: auth.user.agencyId,
   }).catch(() => null);
 
+  // --- Coverage Recommendations: deterministic engine, AI explains only ---
+  const exposureFacts: RiskExposureFacts = {
+    industry: parsed.industry || null,
+    revenue: parsed.revenue,
+    employees: parsed.employees,
+    state: parsed.state || null,
+    yearsInBusiness: parsed.yearsInBusiness,
+    priorLosses: parsed.priorLosses,
+    hasBusinessVehicles: parsed.hasBusinessVehicles,
+    customerPropertyInCare: parsed.customerPropertyInCare,
+    mobileEquipment: parsed.mobileEquipment,
+    storesCustomerData: parsed.storesCustomerData,
+    ownsOrLeasesProperty: parsed.ownsOrLeasesProperty,
+    higherLimitsDesired: parsed.higherLimitsDesired,
+  };
+
+  let coverageRecommendations = computeCoverageRecommendations(exposureFacts);
+
+  // AI refines the plain-English explanations only (levels stay deterministic).
+  const coverageExplain = await callPrompt(coverageRecommendationExplanationPrompt, {
+    businessContext: { industry: parsed.industry, description },
+    recommendations: coverageRecommendations.map((r) => ({
+      coverageName: r.coverageName,
+      recommendationLevel: r.recommendationLevel,
+      reason: r.reason,
+    })),
+  }).catch(() => null);
+
+  if (coverageExplain?.ok && coverageExplain.data?.explanations) {
+    coverageRecommendations = applyAiExplanations(coverageRecommendations, coverageExplain.data.explanations);
+  }
+  // Super-admin overrides win (enable/disable, explanation, custom coverages).
+  coverageRecommendations = applyCoverageConfigs(coverageRecommendations, await loadCoverageConfigs());
+
+  await saveAiRun({
+    purpose: coverageRecommendationExplanationPrompt.purpose,
+    result: {
+      ok: true,
+      data: { coverageRecommendations },
+      raw: JSON.stringify(coverageRecommendations),
+      model: result.model,
+      usage: null,
+      disclaimer: COVERAGE_RECOMMENDATIONS_DISCLAIMER,
+      promptVersion: coverageRecommendationExplanationPrompt.version,
+    },
+    input: { description, exposureFacts },
+    agencyId: auth.user.agencyId,
+  }).catch(() => null);
+
   return NextResponse.json({
     aiRunId: aiRun?.id ?? null,
-    data: { ...result.data, premiumIndication },
+    data: {
+      ...result.data,
+      premiumIndication,
+      coverageRecommendations,
+      coverageDisclaimer: COVERAGE_RECOMMENDATIONS_DISCLAIMER,
+    },
     disclaimer: result.disclaimer,
     model: result.model,
     promptVersion: result.promptVersion,

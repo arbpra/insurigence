@@ -127,7 +127,7 @@ export default function DocumentSummaryPanel({ leadId }: { leadId: string }) {
       </div>
 
       <p className="text-xs uppercase font-bold mb-2" style={{ color: 'var(--brand-text-subtle)' }}>
-        Upload a PDF, or paste policy / quote text
+        Upload a PDF or image (scanned OK), or paste policy / quote text
       </p>
       <textarea
         value={text}
@@ -141,7 +141,7 @@ export default function DocumentSummaryPanel({ leadId }: { leadId: string }) {
       <input
         ref={fileInputRef}
         type="file"
-        accept="application/pdf,.pdf"
+        accept="application/pdf,.pdf,image/png,image/jpeg,.png,.jpg,.jpeg,.webp"
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];
@@ -158,7 +158,7 @@ export default function DocumentSummaryPanel({ leadId }: { leadId: string }) {
           className="btn-brand-secondary px-4 py-2"
           data-testid="button-upload-pdf"
         >
-          {uploading ? 'Reading PDF…' : 'Upload PDF'}
+          {uploading ? 'Reading…' : 'Upload PDF / Image'}
         </button>
         <div className="flex items-center gap-3">
           {uploadedName && (

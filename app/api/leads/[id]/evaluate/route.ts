@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getAuthContext } from '@/lib/super-admin-auth';
+import { buildExposureFactsFromIntake } from '@/lib/coverage/factsFromIntake';
+import { computeCoverageRecommendations } from '@/lib/coverage/engine';
+import { loadCoverageConfigs, applyCoverageConfigs } from '@/lib/coverage/config';
+import { COVERAGE_RECOMMENDATIONS_DISCLAIMER } from '@/lib/coverage/constants';
+import { saveAiRun } from '@/lib/ai/persistence';
+import { AI_PURPOSES } from '@/lib/ai/config';
 
 interface AnswersMap {
   [key: string]: unknown;
@@ -559,11 +565,37 @@ export async function POST(
     const excluded = carrierFits.filter(cf => cf.tier === 'NO_FIT' && cf.hasValidRule);
     const needsReview = carrierFits.filter(cf => cf.tier === 'REVIEW_NEEDED');
 
+    // Coverage Recommendations — deterministic, from intake exposures. Persisted
+    // for audit and surfaced on the proposal/evaluation output.
+    const exposureFacts = buildExposureFactsFromIntake(answers);
+    const coverageRecommendations = applyCoverageConfigs(
+      computeCoverageRecommendations(exposureFacts),
+      await loadCoverageConfigs()
+    );
+
+    await saveAiRun({
+      purpose: AI_PURPOSES.COVERAGE_RECOMMENDATIONS,
+      result: {
+        ok: true,
+        data: { coverageRecommendations },
+        raw: JSON.stringify(coverageRecommendations),
+        model: 'rules-engine',
+        usage: null,
+        disclaimer: COVERAGE_RECOMMENDATIONS_DISCLAIMER,
+        promptVersion: 'coverage-engine-1',
+      },
+      input: { source: 'evaluation', exposureFacts },
+      agencyId,
+      leadId,
+    }).catch(() => null);
+
     return NextResponse.json({
       leadId,
       marketClassification: classification,
       marketConfidence: confidence,
       marketReasonCodes: reasonCodes,
+      coverageRecommendations,
+      coverageDisclaimer: COVERAGE_RECOMMENDATIONS_DISCLAIMER,
       summary: {
         recommendedCount: recommended.length,
         excludedCount: excluded.length,

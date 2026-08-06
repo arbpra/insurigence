@@ -177,10 +177,22 @@ const zNullableNumber = z.preprocess((v) => {
   return null;
 }, z.number().nullable());
 
+/** Coerce a value to a tri-state boolean (true / false / null for unknown). */
+const zNullableBoolean = z.preprocess((v) => {
+  if (v === true || v === false) return v;
+  if (typeof v === 'string') {
+    const s = v.trim().toLowerCase();
+    if (['true', 'yes', 'y'].includes(s)) return true;
+    if (['false', 'no', 'n'].includes(s)) return false;
+  }
+  return null;
+}, z.boolean().nullable());
+
 /**
  * Structured facts parsed from the agent's free-text description. These feed the
- * deterministic premium benchmark — the AI parses the agent's own words into
- * numbers; it does not compute pricing.
+ * deterministic premium benchmark and coverage-recommendation engine — the AI
+ * parses the agent's own words into facts; it does not compute pricing or decide
+ * coverage levels.
  */
 export const ParsedRiskFactsSchema = z.object({
   industry: z.string().default(''),
@@ -188,8 +200,16 @@ export const ParsedRiskFactsSchema = z.object({
   employees: zNullableNumber.default(null),
   state: z.string().default('').describe('Two-letter state code if determinable, else blank.'),
   yearsInBusiness: zNullableNumber.default(null),
-  priorLosses: z.boolean().nullable().default(null),
+  priorLosses: zNullableBoolean.default(null),
   requestedLimit: zNullableNumber.default(null),
+
+  // Exposure flags for coverage recommendations (tri-state: true/false/null).
+  hasBusinessVehicles: zNullableBoolean.default(null),
+  customerPropertyInCare: zNullableBoolean.default(null),
+  mobileEquipment: zNullableBoolean.default(null),
+  storesCustomerData: zNullableBoolean.default(null),
+  ownsOrLeasesProperty: zNullableBoolean.default(null),
+  higherLimitsDesired: zNullableBoolean.default(null),
 });
 
 /** Feature 2 — Quick Risk Guide (internal guidance only). */
@@ -215,3 +235,20 @@ export const PremiumExplanationSchema = z.object({
   reasoning: z.string().describe('Plain-language explanation of what drives the given range.'),
 });
 export type PremiumExplanationOutput = z.infer<typeof PremiumExplanationSchema>;
+
+/**
+ * Coverage Recommendations — AI explanation refinement only. The engine has
+ * already decided each coverage and its level; the AI returns a plain-language
+ * `agentExplanation` per coverage, tailored to the business. It must NOT change
+ * levels, add/remove coverages, or guarantee coverage. Keyed by coverageName so
+ * the route can merge it back into the deterministic recommendations.
+ */
+export const CoverageExplanationRefinementSchema = z.object({
+  explanations: z.array(
+    z.object({
+      coverageName: z.string(),
+      agentExplanation: z.string(),
+    })
+  ),
+});
+export type CoverageExplanationRefinementOutput = z.infer<typeof CoverageExplanationRefinementSchema>;

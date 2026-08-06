@@ -52,6 +52,40 @@ const fadeRight = {
 };
 
 const EarlyAccessCTA = () => {
+  const [form, setForm] = useState({ fullName: '', email: '', message: '' });
+  const [status, setStatus] = useState<'idle' | 'sending' | 'sent'>('idle');
+  const [error, setError] = useState('');
+
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (!form.fullName.trim() || !form.email.trim() || !form.message.trim()) {
+      setError('Please fill in your name, email, and message.');
+      return;
+    }
+    setStatus('sending');
+    try {
+      const res = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: form.fullName, email: form.email, message: form.message }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.error || 'Could not send your message. Please try again.');
+        setStatus('idle');
+        return;
+      }
+      setStatus('sent');
+      setForm({ fullName: '', email: '', message: '' });
+    } catch {
+      setError('Network error. Please try again.');
+      setStatus('idle');
+    }
+  };
 
   return (
     <section className="w-full relative overflow-hidden" style={{ background: "#07496c" }}>
@@ -73,14 +107,38 @@ const EarlyAccessCTA = () => {
                   Early Access for Forward-Thinking Agencies Worldwide
                 </motion.h2>
 
-                <form className="rounded-2xl pt-5" data-testid="contact-form">
+                {status === 'sent' ? (
+                  <div className="rounded-2xl bg-white/95 p-8 text-center" data-testid="contact-success">
+                    <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: '#DCFCE7' }}>
+                      <svg className="w-7 h-7" style={{ color: '#16A34A' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <h3 className="text-xl font-semibold mb-2" style={{ color: '#07496c' }}>Message sent!</h3>
+                    <p className="text-sm text-slate-500 mb-4">
+                      Thanks for reaching out — a confirmation has been sent to your email, and our team will follow up shortly.
+                    </p>
+                    <button onClick={() => setStatus('idle')} className="text-sm font-medium" style={{ color: '#00B383' }}>
+                      Send another message
+                    </button>
+                  </div>
+                ) : (
+                <form className="rounded-2xl pt-5" data-testid="contact-form" onSubmit={handleSubmit}>
                   <div className="space-y-5">
+
+                    {error && (
+                      <div className="rounded-md px-4 py-2 text-sm" style={{ backgroundColor: '#FEE2E2', color: '#991B1B' }}>
+                        {error}
+                      </div>
+                    )}
 
                     <div>
                       <input
                         type="text"
                         name="fullName"
-                        className="w-full px-4 py-2 rounded-md border border-slate-300 focus:outline-none focus:ring-2"
+                        value={form.fullName}
+                        onChange={set('fullName')}
+                        className="w-full px-4 py-2 rounded-md border border-slate-300 focus:outline-none focus:ring-2 text-slate-900"
                         placeholder="John"
                         data-testid="input-fullName"
                       />
@@ -90,7 +148,9 @@ const EarlyAccessCTA = () => {
                       <input
                         type="email"
                         name="email"
-                        className="w-full px-4 py-2 rounded-md border border-slate-300 focus:outline-none focus:ring-2"
+                        value={form.email}
+                        onChange={set('email')}
+                        className="w-full px-4 py-2 rounded-md border border-slate-300 focus:outline-none focus:ring-2 text-slate-900"
                         placeholder="john@company.com"
                         data-testid="input-email"
                       />
@@ -100,7 +160,9 @@ const EarlyAccessCTA = () => {
                       <textarea
                         name="message"
                         rows={4}
-                        className="w-full px-4 py-2 rounded-md border border-slate-300 focus:outline-none focus:ring-2"
+                        value={form.message}
+                        onChange={set('message')}
+                        className="w-full px-4 py-2 rounded-md border border-slate-300 focus:outline-none focus:ring-2 text-slate-900"
                         placeholder="Tell us about your needs..."
                         data-testid="textarea-message"
                       />
@@ -108,14 +170,16 @@ const EarlyAccessCTA = () => {
 
                     <button
                       type="submit"
-                      className="py-2 px-4 rounded-md font-semibold transition-all duration-200 hover:opacity-90"
+                      disabled={status === 'sending'}
+                      className="py-2 px-4 rounded-md font-semibold transition-all duration-200 hover:opacity-90 disabled:opacity-60"
                       style={{ backgroundColor: '#00E6A7', color: '#07496c' }}
                       data-testid="button-submit-contact"
                     >
-                      SUBMIT
+                      {status === 'sending' ? 'SENDING…' : 'SUBMIT'}
                     </button>
                   </div>
                 </form>
+                )}
               </div>
             </div>
           </div>
