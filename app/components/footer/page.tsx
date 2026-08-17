@@ -96,14 +96,9 @@ const Footer = () => {
                 {[
                   {
                     title: "Services",
-                    subtitle: ["Platform", "How It Works", "Who It's For", "Early Access"],
-                    links: ["/", "/", "who-is-it-for", "/early-access"]
-                  },
-                  {
-                    title: "Company",
-                    subtitle: ["About", "Careers", "Contact"],
-                    links: ["/", "/", "/talk-to-insurigence"]
-                  },
+                    subtitle: ["How It Works", "The Desk", "Who It's For", "Early Access", "Contact"],
+                    links: ["/how-it-works", "/the-desk", "who-is-it-for", "/early-access", "/talk-to-insurigence"]
+                  },                 
                   {
                     title: "Resources",
                     subtitle: ["Portfolio", "Community", "Guides", "Docs", "Blog", "Press"],

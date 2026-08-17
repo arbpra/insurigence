@@ -9,7 +9,7 @@ export default function Nav({ setMobileToggle }: NavProps) {
   return (
     <ul className="cs_nav_list fw-medium">
       <li>
-        <Link href="/platform">Platform</Link>
+        <Link href="/how-it-works" onClick={() => setMobileToggle(false)}>How It Works</Link>
       </li>
       {/* <li className="menu-item-has-children">
         <Link href="#">Services</Link>
@@ -61,8 +61,8 @@ export default function Nav({ setMobileToggle }: NavProps) {
         </DropDown>
       </li> */}
 
-       <li>
-        <Link href="#">How It Works</Link>
+      <li>
+        <Link href="/the-desk" onClick={() => setMobileToggle(false)}>The Desk</Link>
       </li>
 
       <li>

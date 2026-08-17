@@ -7,6 +7,7 @@ const PUBLIC_PATHS = [
   '/invite',
   '/forgot-password',
   '/contact',
+  '/the-desk',
   '/change-password',
   '/intake/public',
   '/api/contact',
@@ -33,7 +34,6 @@ const PUBLIC_PATHS = [
   '/who-is-it-for',
   '/early-access',
   '/talk-to-insurigence',
-  '/platform',
 ];
 
 function isPublicPath(pathname: string): boolean {

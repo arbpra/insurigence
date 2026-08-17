@@ -46,23 +46,36 @@ export async function POST(request: NextRequest) {
   const data = { name, email, company, message };
 
   // Admin notification (send first — this is the one that must not be lost).
+  // replyTo is the submitter, so hitting Reply in the inbox answers them, not the noreply box.
   const admin = contactAdminEmail(data);
-  const adminResult = await sendEmail({ to: adminTo, subject: admin.subject, html: admin.html, text: admin.text });
+  const adminResult = await sendEmail({
+    to: adminTo,
+    subject: admin.subject,
+    html: admin.html,
+    text: admin.text,
+    replyTo: email,
+  });
 
-  // Confirmation to the submitter.
-  const confirm = contactConfirmationEmail(data);
-  const userResult = await sendEmail({ to: email, subject: confirm.subject, html: confirm.html, text: confirm.text });
-
-  if (!adminResult.ok && !userResult.ok) {
+  // If the notification didn't land, the submission is lost — say so rather than
+  // showing the sender a success screen for a message nobody will ever read.
+  if (!adminResult.ok) {
+    console.error('[contact] admin notification failed for', email, '-', adminResult.error);
     return NextResponse.json(
       { error: adminResult.error || 'Could not send your message. Please try again later.' },
       { status: 502 }
     );
   }
 
+  // Confirmation to the submitter. A failure here is not fatal: we already have the message.
+  const confirm = contactConfirmationEmail(data);
+  const userResult = await sendEmail({ to: email, subject: confirm.subject, html: confirm.html, text: confirm.text });
+  if (!userResult.ok) {
+    console.error('[contact] confirmation to', email, 'failed -', userResult.error);
+  }
+
   return NextResponse.json({
     success: true,
-    adminEmailed: adminResult.ok,
+    adminEmailed: true,
     userEmailed: userResult.ok,
   });
 }

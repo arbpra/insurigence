@@ -20,6 +20,8 @@ export async function sendEmail(params: {
   subject: string;
   html: string;
   text?: string;
+  /** Address a reply should go to instead of EMAIL_FROM (which is a noreply box). */
+  replyTo?: string;
 }): Promise<SendResult> {
   if (!isEmailConfigured()) {
     console.warn('[email] RESEND_API_KEY not set — skipping send to', params.to);
@@ -33,6 +35,7 @@ export async function sendEmail(params: {
       subject: params.subject,
       html: params.html,
       ...(params.text ? { text: params.text } : {}),
+      ...(params.replyTo ? { replyTo: params.replyTo } : {}),
     });
 
     if (error) {
