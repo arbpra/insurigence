@@ -237,3 +237,77 @@ Your message:
 ${data.message}`;
   return { subject, html, text };
 }
+
+/**
+ * Proposal delivered to an insured.
+ *
+ * Deliberately plain: it carries the agency's name and the agent's own words,
+ * and nothing about the quotes themselves. Premiums, carriers, and limits stay
+ * behind the secure link — email is not a private channel, and a forwarded
+ * message should not disclose an insured's pricing.
+ */
+export function proposalSentEmail(params: {
+  insuredName: string;
+  agencyName: string;
+  agentName?: string | null;
+  proposalUrl: string;
+  clientMessage?: string | null;
+  expiresAt?: Date | null;
+  isResend?: boolean;
+}): { subject: string; html: string; text: string } {
+  const from = params.agentName ? `${escapeHtml(params.agentName)} at ${escapeHtml(params.agencyName)}` : escapeHtml(params.agencyName);
+  const subject = params.isResend
+    ? `Reminder: your insurance proposal from ${params.agencyName}`
+    : `Your insurance proposal from ${params.agencyName}`;
+
+  const expiryLine = params.expiresAt
+    ? `<p style="margin:18px 0 0;font-family:${FONT};font-size:13px;color:#8a99ad;line-height:1.6;">This link is available until ${escapeHtml(
+        params.expiresAt.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+      )}.</p>`
+    : '';
+
+  const messageBlock = params.clientMessage?.trim()
+    ? `<div style="background-color:#f8fafc;border-left:3px solid ${MINT};border-radius:0 8px 8px 0;padding:14px 18px;margin:0 0 22px;">
+         <p style="margin:0;font-family:${FONT};font-size:14px;color:#334155;line-height:1.65;white-space:pre-line;">${escapeHtml(params.clientMessage.trim())}</p>
+       </div>`
+    : '';
+
+  const html = layout({
+    title: params.isResend ? 'A reminder about your proposal' : 'Your insurance proposal is ready',
+    preheader: `${params.agencyName} has prepared your insurance proposal.`,
+    body: `
+    <p style="margin:0 0 14px;font-family:${FONT};font-size:15px;color:#334155;line-height:1.65;">
+      Hi ${escapeHtml(params.insuredName)},
+    </p>
+    <p style="margin:0 0 22px;font-family:${FONT};font-size:15px;color:#334155;line-height:1.65;">
+      ${from} has prepared your insurance proposal. You can review the options,
+      compare what each one covers, choose the one that fits, and sign — all from the link below.
+      You do not need an account.
+    </p>
+    ${messageBlock}
+    ${button(params.proposalUrl, 'Review Your Proposal')}
+    <p style="margin:20px 0 0;font-family:${FONT};font-size:13px;color:#64748b;line-height:1.6;">
+      If the button does not work, copy and paste this address into your browser:<br>
+      <span style="color:#00B383;word-break:break-all;">${escapeHtml(params.proposalUrl)}</span>
+    </p>
+    ${expiryLine}
+    <p style="margin:18px 0 0;font-family:${FONT};font-size:13px;color:#8a99ad;line-height:1.6;">
+      This link is personal to you — please don't forward it, as anyone with the link can view your proposal.
+    </p>
+  `,
+  });
+
+  const text = `Hi ${params.insuredName},
+
+${params.agentName ? `${params.agentName} at ${params.agencyName}` : params.agencyName} has prepared your insurance proposal.
+
+Review the options, compare them, choose one, and sign — no account needed:
+${params.proposalUrl}
+${params.clientMessage?.trim() ? `\n${params.clientMessage.trim()}\n` : ''}${
+    params.expiresAt ? `\nThis link is available until ${params.expiresAt.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.` : ''
+  }
+
+This link is personal to you — please don't forward it.`;
+
+  return { subject, html, text };
+}

@@ -63,7 +63,7 @@ export default function ProposalsPage() {
   const getStatusBadgeVariant = (status: string): 'pending' | 'reviewed' | 'converted' | 'new' => {
     switch (status) {
       case 'DRAFT': return 'new';
-      case 'SHARED': return 'reviewed';
+      case 'SENT': return 'reviewed';
       case 'VIEWED': return 'converted';
       default: return 'new';
     }

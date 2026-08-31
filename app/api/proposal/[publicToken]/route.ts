@@ -1,5 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { resolveProposalToken, TOKEN_FAILURE_MESSAGE } from '@/lib/proposals/token';
+import { recordProposalEvent, requestContext } from '@/lib/proposals/events';
+import { assembleProposal } from '@/lib/proposals/assemble';
+
+/**
+ * The insured's view of a proposal. No account, no session — the token is the
+ * only credential, and every access rule lives in resolveProposalToken.
+ *
+ * Two shapes come back, distinguished by `kind`:
+ *   'quote'  — the quote proposal built in Phases 1-5, assembled for the client
+ *              audience so nothing internal is included.
+ *   'legacy' — the original market-classification presentation, unchanged.
+ *
+ * Opening the link marks the proposal viewed and records the event.
+ */
 
 export async function GET(
   request: NextRequest,
@@ -8,38 +23,100 @@ export async function GET(
   try {
     const { publicToken } = await params;
 
-    const proposal = await prisma.proposal.findUnique({
-      where: { publicToken },
-      include: {
-        lead: {
-          include: {
-            intakeSubmission: true,
-          },
-        },
-        agency: true,
-      },
+    const resolution = await resolveProposalToken(publicToken);
+    if (!resolution.ok) {
+      // 410 for a link that existed and no longer works, 404 for one that never
+      // did — enough for an honest message, not enough to probe for valid tokens.
+      const status = resolution.reason === 'not_found' ? 404 : 410;
+      return NextResponse.json(
+        { error: TOKEN_FAILURE_MESSAGE[resolution.reason], reason: resolution.reason },
+        { status }
+      );
+    }
+
+    const proposal = await prisma.proposal.findUniqueOrThrow({
+      where: { id: resolution.proposal.id },
+      include: { lead: { include: { intakeSubmission: true } }, agency: true },
     });
 
-    if (!proposal) {
-      return NextResponse.json({ error: 'Proposal not found' }, { status: 404 });
-    }
+    const isFirstView = !proposal.viewedAt;
 
-    if (proposal.status === 'DRAFT') {
-      return NextResponse.json({ error: 'This proposal is not yet shared' }, { status: 403 });
-    }
-
-    if (!proposal.viewedAt) {
+    // Viewing never advances a proposal past a decision the insured already
+    // made: someone re-reading after selecting or signing stays where they are.
+    if (proposal.status === 'SENT') {
       await prisma.proposal.update({
         where: { id: proposal.id },
-        data: { 
-          viewedAt: new Date(),
-          status: proposal.status === 'SHARED' ? 'VIEWED' : proposal.status,
-        },
+        data: { viewedAt: proposal.viewedAt ?? new Date(), status: 'VIEWED' },
+      });
+    } else if (isFirstView) {
+      await prisma.proposal.update({
+        where: { id: proposal.id },
+        data: { viewedAt: new Date() },
       });
     }
 
-    const snapshot = proposal.snapshot as Record<string, unknown> || {};
-    const responses = proposal.lead.intakeSubmission?.responses as Record<string, unknown> || {};
+    await recordProposalEvent(
+      proposal.id,
+      proposal.agencyId,
+      isFirstView ? 'OPENED' : 'VIEWED',
+      requestContext(request)
+    );
+
+    // A quote proposal is the one with sections.
+    const isQuoteProposal = Array.isArray(proposal.sections);
+
+    if (isQuoteProposal) {
+      // Once signed, serve the frozen document rather than re-assembling from
+      // live data — the insured must always see exactly what they signed.
+      if (proposal.signedSnapshot && proposal.lockedAt) {
+        const signature = await prisma.proposalSignature.findFirst({
+          where: { proposalId: proposal.id },
+          orderBy: { signedAt: 'desc' },
+        });
+        return NextResponse.json({
+          kind: 'quote',
+          proposal: proposal.signedSnapshot,
+          selectedQuoteOptionId: proposal.selectedQuoteOptionId,
+          signedAt: proposal.signedAt?.toISOString() ?? null,
+          signature: signature && {
+            signerName: signature.signerName,
+            signerTitle: signature.signerTitle,
+            signedAt: signature.signedAt.toISOString(),
+            signatureType: signature.signatureType,
+            signatureData: signature.signatureData,
+          },
+        });
+      }
+
+      const [options, createdBy] = await Promise.all([
+        prisma.quoteOption.findMany({
+          where: { leadId: proposal.leadId },
+          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+        }),
+        proposal.createdByUserId
+          ? prisma.user.findUnique({
+              where: { id: proposal.createdByUserId },
+              select: { firstName: true, lastName: true, email: true },
+            })
+          : null,
+      ]);
+
+      const assembled = assembleProposal(
+        { proposal, lead: proposal.lead, agency: proposal.agency, options, createdBy },
+        { audience: 'client' }
+      );
+
+      return NextResponse.json({
+        kind: 'quote',
+        proposal: assembled,
+        selectedQuoteOptionId: proposal.selectedQuoteOptionId,
+        signedAt: proposal.signedAt?.toISOString() ?? null,
+      });
+    }
+
+    // ── Legacy market-classification presentation ──
+    const snapshot = (proposal.snapshot as Record<string, unknown>) || {};
+    const responses = (proposal.lead.intakeSubmission?.responses as Record<string, unknown>) || {};
     const answers = (responses?.answers || responses) as Record<string, unknown>;
     const insuredSummary = (snapshot.insuredSummary || {}) as Record<string, unknown>;
 
@@ -49,13 +126,8 @@ export async function GET(
       reasons: string[];
     }>;
 
-    const clientSafeFits = topFits.map(fit => ({
-      carrierName: fit.carrierName,
-      tier: fit.tier,
-      reason: fit.reasons?.[0] || 'Matches your risk profile',
-    }));
-
     return NextResponse.json({
+      kind: 'legacy',
       proposal: {
         title: proposal.title,
         status: proposal.status,
@@ -72,7 +144,11 @@ export async function GET(
         confidence: proposal.marketConfidence ? Math.round(Number(proposal.marketConfidence)) : null,
         explanation: proposal.marketSummary,
       },
-      carrierFits: clientSafeFits,
+      carrierFits: topFits.map((fit) => ({
+        carrierName: fit.carrierName,
+        tier: fit.tier,
+        reason: fit.reasons?.[0] || 'Matches your risk profile',
+      })),
       agentRecommendation: proposal.agentRecommendation,
       agency: {
         name: proposal.agency.name,

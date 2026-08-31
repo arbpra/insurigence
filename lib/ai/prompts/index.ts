@@ -9,6 +9,8 @@ export { quickRiskGuidePrompt } from './quickRiskGuide';
 export { premiumExplanationPrompt } from './premiumExplanation';
 export { coverageRecommendationExplanationPrompt } from './coverageRecommendationExplanation';
 export { coverageExplanationPrompt } from './coverageExplanation';
+export { coverageBreakdownPrompt } from './coverageBreakdown';
+export { recommendationRationalePrompt } from './recommendationRationale';
 export { proposalLanguagePrompt } from './proposalLanguage';
 export { documentSummaryPrompt } from './documentSummary';
 export { coiDraftPrompt } from './coiDraft';

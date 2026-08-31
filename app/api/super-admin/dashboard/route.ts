@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
       }),
       prisma.proposal.count({
         where: {
-          status: { in: ['SHARED', 'VIEWED', 'ACCEPTED', 'DECLINED'] },
+          status: { in: ['SENT', 'VIEWED', 'OPTION_SELECTED', 'SIGNED', 'DECLINED'] },
           createdAt: { gte: thirtyDaysAgo },
         },
       }),
@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
       }),
       prisma.lead.count({ where: { status: 'WAITING_ON_INFO' } }),
       prisma.proposal.count({
-        where: { status: 'ACCEPTED', updatedAt: { gte: sevenDaysAgo } },
+        where: { status: 'SIGNED', updatedAt: { gte: sevenDaysAgo } },
       }),
     ]);
 

@@ -134,10 +134,10 @@ export default function ProposalPage() {
       const response = await fetch(`/api/leads/${leadId}/proposal`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ proposalId: proposal.id, status: 'SHARED' }),
+        body: JSON.stringify({ proposalId: proposal.id, status: 'SENT' }),
       });
       if (response.ok) {
-        setProposal({ ...proposal, status: 'SHARED' });
+        setProposal({ ...proposal, status: 'SENT' });
       }
     } catch (err) {
       console.error('Failed to share proposal:', err);
@@ -352,7 +352,7 @@ export default function ProposalPage() {
           {proposal && (
             <p className="text-sm mt-2" style={{ color: 'var(--brand-text-subtle)' }}>
               Generated {new Date(proposal.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-              {proposal.status === 'SHARED' && <span className="ml-2" style={{ color: 'var(--brand-accent)' }}>Shared</span>}
+              {proposal.status === 'SENT' && <span className="ml-2" style={{ color: 'var(--brand-accent)' }}>Sent</span>}
               {proposal.status === 'VIEWED' && <span className="ml-2" style={{ color: 'var(--market-standard)' }}>Viewed by client</span>}
             </p>
           )}

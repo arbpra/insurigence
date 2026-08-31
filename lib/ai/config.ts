@@ -48,6 +48,8 @@ export const AI_PURPOSES = {
   PREMIUM_INDICATION: 'premium_indication',
   COVERAGE_RECOMMENDATIONS: 'coverage_recommendations',
   COVERAGE_EXPLANATION: 'coverage_explanation',
+  COVERAGE_BREAKDOWN: 'coverage_breakdown',
+  RECOMMENDATION_RATIONALE: 'recommendation_rationale',
   PROPOSAL_LANGUAGE: 'proposal_language',
   DOCUMENT_SUMMARY: 'document_summary',
   COI_DRAFT: 'coi_draft',

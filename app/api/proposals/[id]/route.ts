@@ -1,5 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { getAuthContext } from '@/lib/super-admin-auth';
+
+/**
+ * Single proposal read/update.
+ *
+ * Scoping previously came from a DEV_AGENCY_ID environment variable rather than
+ * the caller's session, which meant any authenticated user could reach another
+ * agency's proposals once that variable was set. It now uses the session like
+ * every other endpoint.
+ */
+async function authorize(request: NextRequest, proposalId: string) {
+  const auth = await getAuthContext(request);
+  if (!auth.valid || !auth.user) return { error: auth.response! };
+
+  const proposal = await prisma.proposal.findUnique({
+    where: { id: proposalId },
+    include: { lead: true },
+  });
+  if (!proposal) {
+    return { error: NextResponse.json({ error: 'Proposal not found' }, { status: 404 }) };
+  }
+  // Cross-agency access returns 404 rather than 403, as elsewhere.
+  if (auth.user.role !== 'SUPER_ADMIN' && proposal.agencyId !== auth.user.agencyId) {
+    return { error: NextResponse.json({ error: 'Proposal not found' }, { status: 404 }) };
+  }
+  return { proposal, user: auth.user };
+}
 
 export async function GET(
   request: NextRequest,
@@ -7,26 +34,8 @@ export async function GET(
 ) {
   try {
     const { id: proposalId } = await params;
-    const agencyId = process.env.DEV_AGENCY_ID;
-
-    if (!agencyId) {
-      return NextResponse.json({ error: 'DEV_AGENCY_ID not configured' }, { status: 500 });
-    }
-
-    const proposal = await prisma.proposal.findUnique({
-      where: { id: proposalId },
-      include: {
-        lead: true,
-      },
-    });
-
-    if (!proposal) {
-      return NextResponse.json({ error: 'Proposal not found' }, { status: 404 });
-    }
-
-    if (proposal.agencyId !== agencyId) {
-      return NextResponse.json({ error: 'Proposal not found' }, { status: 404 });
-    }
+    const { proposal, error } = await authorize(request, proposalId);
+    if (error) return error;
 
     return NextResponse.json({
       proposal: {
@@ -39,7 +48,7 @@ export async function GET(
         agentRecommendation: proposal.agentRecommendation,
         snapshot: proposal.snapshot,
         publicToken: proposal.publicToken,
-        sharedAt: proposal.sharedAt,
+        sentAt: proposal.sentAt,
         viewedAt: proposal.viewedAt,
         createdAt: proposal.createdAt,
         updatedAt: proposal.updatedAt,
@@ -61,26 +70,19 @@ export async function PATCH(
 ) {
   try {
     const { id: proposalId } = await params;
-    const agencyId = process.env.DEV_AGENCY_ID;
+    const { proposal, error } = await authorize(request, proposalId);
+    if (error) return error;
 
-    if (!agencyId) {
-      return NextResponse.json({ error: 'DEV_AGENCY_ID not configured' }, { status: 500 });
+    // A signed proposal is immutable, the same rule the builder enforces.
+    if (proposal!.lockedAt) {
+      return NextResponse.json(
+        { error: 'This proposal has been signed and can no longer be edited.' },
+        { status: 409 }
+      );
     }
 
     const body = await request.json();
     const { agentRecommendation, status } = body;
-
-    const proposal = await prisma.proposal.findUnique({
-      where: { id: proposalId },
-    });
-
-    if (!proposal) {
-      return NextResponse.json({ error: 'Proposal not found' }, { status: 404 });
-    }
-
-    if (proposal.agencyId !== agencyId) {
-      return NextResponse.json({ error: 'Proposal not found' }, { status: 404 });
-    }
 
     const updateData: Record<string, unknown> = {};
     
@@ -90,8 +92,8 @@ export async function PATCH(
     
     if (status !== undefined) {
       updateData.status = status;
-      if (status === 'SHARED' && !proposal.sharedAt) {
-        updateData.sharedAt = new Date();
+      if (status === 'SENT' && !proposal!.sentAt) {
+        updateData.sentAt = new Date();
       }
     }
 
@@ -107,7 +109,7 @@ export async function PATCH(
         status: updated.status,
         agentRecommendation: updated.agentRecommendation,
         publicToken: updated.publicToken,
-        sharedAt: updated.sharedAt,
+        sentAt: updated.sentAt,
         updatedAt: updated.updatedAt,
       },
     });

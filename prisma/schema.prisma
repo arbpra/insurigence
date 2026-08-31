@@ -39,12 +39,43 @@ enum CarrierMarketType {
   EXCESS_SURPLUS
 }
 
+/// Proposal lifecycle. SHARED and ACCEPTED from the original enum were renamed to
+/// SENT and SIGNED respectively — the concepts are unchanged, the names now match
+/// the client-facing workflow. DECLINED is retained: the insured turning a proposal
+/// down is a real outcome the Super Admin dashboard reports on.
 enum ProposalStatus {
   DRAFT
-  SHARED
+  READY_TO_SEND
+  SENT
   VIEWED
-  ACCEPTED
+  OPTION_SELECTED
+  SIGNED
   DECLINED
+  EXPIRED
+  REVOKED
+}
+
+/// How the insured produced their signature. Both are captured as
+/// ProposalSignature.signatureData — typed as text, drawn as a data URL.
+enum SignatureType {
+  TYPED
+  DRAWN
+}
+
+/// Every insured-facing milestone in a proposal's life, for the E-Sign Activity log.
+enum ProposalEventType {
+  CREATED
+  SENT
+  RESENT
+  OPENED
+  VIEWED
+  OPTION_SELECTED
+  OPTION_CHANGED
+  SIGNED
+  PDF_GENERATED
+  LINK_REVOKED
+  VERSION_CREATED
+  EXPIRED
 }
 
 enum UserRole {
@@ -121,6 +152,9 @@ model Agency {
   brandSecondaryColor  String?
   logoUrl              String?
   proposalFooterText   String?
+  /// Agency's own proposal disclaimer. Null falls back to the platform default
+  /// in lib/proposals/branding.ts, which Super Admin maintains.
+  proposalDisclaimerText String?
 
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
@@ -131,7 +165,7 @@ model Agency {
   leads                Lead[]
   carriers             Carrier[]
   appetiteRules        CarrierAppetiteRule[]
-  quotes               Quote[]
+  quoteOptions         QuoteOption[]
   proposals            Proposal[]
   aiRuns               AiRun[]
   billingAccount       BillingAccount?
@@ -160,6 +194,7 @@ model User {
   sessions     Session[]
   inviteTokens InviteToken[]
   passwordResetTokens PasswordResetToken[]
+  createdProposals Proposal[] @relation("CreatedProposals")
 
   @@index([role])
 }
@@ -270,7 +305,7 @@ model Lead {
   assignedTo             User?              @relation("AssignedLeads", fields: [assignedToId], references: [id])
 
   carrierFits            LeadCarrierFit[]
-  quotes                 Quote[]
+  quoteOptions           QuoteOption[]
   proposals              Proposal[]
   aiRuns                 AiRun[]
 }
@@ -292,7 +327,7 @@ model Carrier {
   appetiteRules CarrierAppetiteRule[]
   appetiteGuides AppetiteGuide[]
   carrierFits   LeadCarrierFit[]
-  quotes        Quote[]
+  quoteOptions  QuoteOption[]
 
   @@unique([agencyId, name])
 }
@@ -362,43 +397,209 @@ model LeadCarrierFit {
   @@unique([leadId, carrierId])
 }
 
-model Quote {
+/// A single carrier quote option attached to a Lead. An agent adds one of these
+/// per quote received back from a carrier, and a Proposal presents several of
+/// them side by side for the insured to compare and choose between.
+///
+/// Money is stored in whole cents as BigInt (matching the rest of the schema) so
+/// premiums are never subject to floating-point drift.
+model QuoteOption {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   agencyId  String   @db.ObjectId
   leadId    String   @db.ObjectId
   carrierId String?  @db.ObjectId
-  quoteName String?
+
+  // ── Identity ──
+  /// Agent-facing label, e.g. "Option 1". Falls back to the carrier name in UI.
+  optionLabel    String?
+  /// Free-text carrier name, used when the quote is from a carrier that is not
+  /// in the agency's carrier list (e.g. an E&S market placed through a broker).
+  carrierName    String?
+  programName    String?
+  lineOfBusiness LineOfBusiness?
+  policyType     String?
+
+  // ── Dates ──
+  effectiveDate       DateTime?
+  expirationDate      DateTime?
+  /// When the carrier's quote itself goes stale, distinct from the policy term.
+  quoteExpirationDate DateTime?
+
+  // ── Cost (whole cents) ──
   premiumAnnualCents BigInt?
+  taxesCents         BigInt?
+  feesCents          BigInt?
   totalAnnualCents   BigInt?
-  coverageSummary Json
+  paymentPlan        String?
+
+  // ── Coverage detail ──
+  /// [{ name, limit, deductible, included, explanation, whyItMatters, agentEdited }]
+  coverages    Json?
+  limits       Json?
+  deductibles  Json?
+  endorsements Json?
+  exclusions   Json?
+
+  notes        String?
+
+  // ── Uploaded carrier quote document ──
+  /// Object key in R2, never a URL. Links are presigned per request so access
+  /// stays behind the agency check and no long-lived public URL ever exists.
+  documentKey         String?
+  documentName        String?
+  documentSize        Int?
+  documentContentType String?
+  documentUploadedAt  DateTime?
+
+  /// Exactly one option per proposal should carry the agent's recommendation.
+  /// Enforced in application code, not by the database.
+  isRecommended Boolean @default(false)
+  /// "Why We Recommend This Option" — agent-written or AI-drafted then edited.
+  /// Lives on the option so it survives before a proposal exists; a proposal
+  /// copies it into Proposal.recommendationText at build time.
+  recommendationRationale String?
+  /// True while the rationale is an unedited AI draft, so unreviewed text
+  /// cannot reach the insured.
+  rationaleAiDrafted      Boolean @default(false)
+  sortOrder     Int     @default(0)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  agency    Agency  @relation(fields: [agencyId], references: [id])
-  lead      Lead    @relation(fields: [leadId], references: [id])
+  agency    Agency   @relation(fields: [agencyId], references: [id])
+  lead      Lead     @relation(fields: [leadId], references: [id])
   carrier   Carrier? @relation(fields: [carrierId], references: [id])
+
+  @@index([agencyId])
+  @@index([leadId])
+  @@index([leadId, sortOrder])
 }
 
 model Proposal {
   id        String        @id @default(auto()) @map("_id") @db.ObjectId
   agencyId  String        @db.ObjectId
   leadId    String        @db.ObjectId
+  createdByUserId String?  @db.ObjectId
+
   status    ProposalStatus @default(DRAFT)
   title     String
+
+  /// Increments each time a sent proposal is edited. A signed version is never
+  /// mutated — editing one creates the next version instead.
+  version   Int            @default(1)
+
+  // ── Market-classification proposal (original feature, retained) ──
   marketClassification MarketClassification?
   marketConfidence Float?
   marketSummary String?
   agentRecommendation String?
   snapshot  Json?
   quoteIds  String[]       @default([])
-  publicToken String?      @unique
-  sharedAt  DateTime?
-  viewedAt  DateTime?
+
+  // ── Quote proposal ──
+  /// The option the insured chose. Set at selection time, before signing.
+  selectedQuoteOptionId String?  @db.ObjectId
+  /// "Why We Recommend This Option" — agent-written or AI-drafted then edited.
+  recommendationText    String?
+  /// Covering note shown to the insured when the proposal is delivered.
+  clientMessage         String?
+  /// Resolved at send time from the agency default so a sent proposal keeps the
+  /// exact disclaimer it was sent with, even if the agency later changes theirs.
+  disclaimerText        String?
+  /// Ordered proposal sections: [{ key, title, enabled, body }]
+  sections              Json?
+
+  // ── Secure client link ──
+  publicToken    String?   @unique
+  tokenRevokedAt DateTime?
+
+  // ── Lifecycle timestamps ──
+  sentAt     DateTime?
+  /// Legacy timestamp from the SHARED status. Retained so existing rows keep
+  /// their history; new code writes sentAt.
+  sharedAt   DateTime?
+  viewedAt   DateTime?
+  selectedAt DateTime?
+  signedAt   DateTime?
+  expiresAt  DateTime?
+  /// Set when a signature completes. A locked proposal is immutable.
+  lockedAt   DateTime?
+  /// The complete client-facing proposal frozen at the moment of signature.
+  ///
+  /// Data sections (options, coverages, comparison) normally render from the
+  /// lead's live quote options, so without this an agent editing a quote after
+  /// signature would silently change the document the insured agreed to. Once
+  /// set, the public view serves this instead of re-assembling.
+  signedSnapshot Json?
+
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
 
-  agency    Agency         @relation(fields: [agencyId], references: [id])
-  lead      Lead           @relation(fields: [leadId], references: [id])
+  agency     Agency        @relation(fields: [agencyId], references: [id])
+  lead       Lead          @relation(fields: [leadId], references: [id])
+  createdBy  User?         @relation("CreatedProposals", fields: [createdByUserId], references: [id])
+
+  signatures ProposalSignature[]
+  events     ProposalActivityEvent[]
+
+  @@index([agencyId])
+  @@index([leadId])
+  @@index([status])
+}
+
+/// An insured's electronic signature on one version of one proposal.
+///
+/// Rows here are append-only evidence: they are never updated or deleted, and they
+/// carry everything needed to demonstrate intent to sign under ESIGN/UETA — who
+/// signed, what they agreed to, which exact proposal version, and from where.
+model ProposalSignature {
+  id         String  @id @default(auto()) @map("_id") @db.ObjectId
+  proposalId String  @db.ObjectId
+  /// Denormalised for agency-scoped queries without joining through Proposal.
+  agencyId   String  @db.ObjectId
+
+  signerName    String
+  signerEmail   String?
+  signerTitle   String?
+  signatureType SignatureType @default(TYPED)
+  /// Typed name, or a data-URL image for a drawn signature.
+  signatureData String
+
+  consentAccepted Boolean @default(false)
+  /// The exact consent wording shown at signing time, stored verbatim.
+  consentText     String?
+
+  /// Which option was selected at the moment of signing, and against which
+  /// version — both frozen here so later edits cannot rewrite what was signed.
+  selectedQuoteOptionId String? @db.ObjectId
+  proposalVersion       Int
+
+  signedAt  DateTime @default(now())
+  ipAddress String?
+  userAgent String?
+
+  proposal  Proposal @relation(fields: [proposalId], references: [id])
+
+  @@index([proposalId])
+  @@index([agencyId])
+}
+
+/// Timeline entry for the E-Sign Activity log shown to the Agent and Agency Admin.
+model ProposalActivityEvent {
+  id         String            @id @default(auto()) @map("_id") @db.ObjectId
+  proposalId String            @db.ObjectId
+  agencyId   String            @db.ObjectId
+  eventType  ProposalEventType
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime          @default(now())
+
+  proposal   Proposal          @relation(fields: [proposalId], references: [id])
+
+  @@index([proposalId])
+  @@index([agencyId])
+  @@index([createdAt])
 }
 
 enum AiRunStatus {

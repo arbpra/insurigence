@@ -162,6 +162,39 @@ export const CoverageExplanationSchema = z.object({
 });
 export type CoverageExplanationOutput = z.infer<typeof CoverageExplanationSchema>;
 
+/**
+ * Feature — Coverage Breakdown (quote proposals).
+ *
+ * Deliberately carries NO limit, deductible, or premium field. Those are
+ * contractual terms echoed from the stored quote option, so the model has no
+ * channel through which to alter them even if it tries. `key` is the join back
+ * to the stored coverage; anything the model invents has no matching key and is
+ * discarded by mergeAiProse.
+ */
+export const CoverageBreakdownItemSchema = z.object({
+  key: z.string().describe('The coverage key exactly as supplied in the input.'),
+  plainLanguage: z.string().default('').describe('Plain-English description of what this coverage does.'),
+  whyItMatters: z.string().default('').describe('Why this coverage matters for this specific business.'),
+  differsFromOthers: z.string().default('').describe('How this option compares with the others on this coverage. Empty when there is nothing meaningful to say.'),
+});
+
+export const CoverageBreakdownSchema = z.object({
+  coverages: z.array(CoverageBreakdownItemSchema),
+});
+export type CoverageBreakdownOutput = z.infer<typeof CoverageBreakdownSchema>;
+
+/**
+ * Feature — "Why We Recommend This Option".
+ *
+ * A single block of prose. No numeric fields, for the same reason as the
+ * coverage breakdown: the model has no channel through which to state a
+ * premium or limit that the agent did not enter.
+ */
+export const RecommendationRationaleSchema = z.object({
+  rationale: z.string().default('').describe('Why this option is the right fit, in the agency voice, 2-4 sentences.'),
+});
+export type RecommendationRationaleOutput = z.infer<typeof RecommendationRationaleSchema>;
+
 /** Coerce a value to a number (accepts "150000", "$150k", 150000) or null. */
 const zNullableNumber = z.preprocess((v) => {
   if (v === null || v === undefined || v === '') return null;

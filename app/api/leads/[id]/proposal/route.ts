@@ -238,8 +238,8 @@ export async function PATCH(
     }
     if (status !== undefined) {
       updateData.status = status;
-      if (status === 'SHARED') {
-        updateData.sharedAt = new Date();
+      if (status === 'SENT') {
+        updateData.sentAt = new Date();
       }
     }
 

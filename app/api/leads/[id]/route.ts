@@ -61,7 +61,7 @@ export async function DELETE(
   // Remove dependent records first (MongoDB has no cascading deletes).
   await prisma.$transaction([
     prisma.leadCarrierFit.deleteMany({ where: { leadId: id } }),
-    prisma.quote.deleteMany({ where: { leadId: id } }),
+    prisma.quoteOption.deleteMany({ where: { leadId: id } }),
     prisma.proposal.deleteMany({ where: { leadId: id } }),
     prisma.aiRun.deleteMany({ where: { leadId: id } }),
     prisma.acordDraft.deleteMany({ where: { leadId: id } }),
