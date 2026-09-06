@@ -185,23 +185,22 @@ export default function LeadsPage() {
           className="flex items-center justify-end gap-2"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Entry point to quote entry and the proposal builder. Without this
-              the whole quote-proposal flow is only reachable by typing a URL. */}
+          {/* Quote entry. The proposal builder is reached from there. */}
           <Button
             variant="primary"
             size="sm"
             href={`/leads/${lead.id}/quotes`}
             testId={`button-quotes-${lead.id}`}
           >
-            Quotes &amp; Proposal
+            Quotes
           </Button>
           <Button
             variant="secondary"
             size="sm"
             href={`/leads/${lead.id}/proposal`}
-            testId={`button-view-${lead.id}`}
+            testId={`button-proposal-${lead.id}`}
           >
-            View
+            Proposal
           </Button>
         </div>
       ),
