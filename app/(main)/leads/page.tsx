@@ -179,14 +179,26 @@ export default function LeadsPage() {
       header: '',
       className: 'text-right',
       render: (lead: Lead) => (
-        <Button
-          variant="secondary"
-          size="sm"
-          href={`/leads/${lead.id}/proposal`}
-          testId={`button-view-${lead.id}`}
-        >
-          View
-        </Button>
+        <div className="flex items-center justify-end gap-2">
+          {/* Entry point to quote entry and the proposal builder. Without this
+              the whole quote-proposal flow is only reachable by typing a URL. */}
+          <Button
+            variant="primary"
+            size="sm"
+            href={`/leads/${lead.id}/quotes`}
+            testId={`button-quotes-${lead.id}`}
+          >
+            Quotes &amp; Proposal
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            href={`/leads/${lead.id}/proposal`}
+            testId={`button-view-${lead.id}`}
+          >
+            View
+          </Button>
+        </div>
       ),
     },
   ];
