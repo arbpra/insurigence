@@ -179,7 +179,12 @@ export default function LeadsPage() {
       header: '',
       className: 'text-right',
       render: (lead: Lead) => (
-        <div className="flex items-center justify-end gap-2">
+        // The row itself is clickable, so a click on these buttons would bubble
+        // up and navigate to the row's destination instead of the button's.
+        <div
+          className="flex items-center justify-end gap-2"
+          onClick={(e) => e.stopPropagation()}
+        >
           {/* Entry point to quote entry and the proposal builder. Without this
               the whole quote-proposal flow is only reachable by typing a URL. */}
           <Button
