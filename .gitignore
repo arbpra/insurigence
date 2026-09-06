@@ -37,4 +37,7 @@ next-env.d.ts
 dist
 server/public
 vite.config.ts.*
-*.tar.gzscript/out/
+*.tar.gz
+
+# Sample PDFs written by script/verify-pdf.ts
+script/out/

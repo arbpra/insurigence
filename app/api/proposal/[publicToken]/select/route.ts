@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { resolveProposalToken, TOKEN_FAILURE_MESSAGE } from '@/lib/proposals/token';
 import { recordProposalEvent, requestContext } from '@/lib/proposals/events';
+import { syncLeadStatus } from '@/lib/proposals/status';
+import { notifyAgentOfActivity } from '@/lib/proposals/notify';
 
 /**
  * The insured chooses an option (requirement 8).
@@ -87,6 +89,9 @@ export async function POST(
         },
       }
     );
+
+    void notifyAgentOfActivity(updated, 'selected');
+    void syncLeadStatus(updated.leadId, 'OPTION_SELECTED');
 
     return NextResponse.json({
       selectedQuoteOptionId: updated.selectedQuoteOptionId,

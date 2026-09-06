@@ -311,3 +311,58 @@ This link is personal to you — please don't forward it.`;
 
   return { subject, html, text };
 }
+
+/**
+ * Tells an agent their client has done something with a proposal
+ * (requirement 12). Email only for MVP; in-app notifications are deferred.
+ *
+ * Unlike the proposal email to the insured, this one may carry figures — it
+ * goes to the agent's own inbox, not to a third party.
+ */
+export function proposalActivityEmail(params: {
+  agentName?: string | null;
+  insuredName: string;
+  event: 'opened' | 'selected' | 'signed';
+  optionLabel?: string | null;
+  optionTotal?: string | null;
+  signerName?: string | null;
+  proposalUrl: string;
+}): { subject: string; html: string; text: string } {
+  const headline =
+    params.event === 'opened' ? `${params.insuredName} opened your proposal`
+    : params.event === 'selected' ? `${params.insuredName} selected an option`
+    : `${params.insuredName} signed your proposal`;
+
+  const detail =
+    params.event === 'opened'
+      ? 'They have viewed the proposal for the first time. No action is needed yet.'
+      : params.event === 'selected'
+        ? `They chose ${escapeHtml(params.optionLabel ?? 'an option')}${params.optionTotal ? ` at ${escapeHtml(params.optionTotal)} per year` : ''}. They have not signed yet, and can still change their mind.`
+        : `${escapeHtml(params.signerName ?? 'They')} signed for ${escapeHtml(params.optionLabel ?? 'the selected option')}${params.optionTotal ? ` at ${escapeHtml(params.optionTotal)} per year` : ''}. The signed proposal and its audit record are saved against the lead.`;
+
+  const nextStep =
+    params.event === 'signed'
+      ? `<p style="margin:0 0 22px;font-family:${FONT};font-size:14px;color:#334155;line-height:1.65;">
+           Coverage is <strong>not</strong> bound. Confirm with the carrier to complete the placement.
+         </p>`
+      : '';
+
+  const html = layout({
+    title: headline,
+    preheader: `${params.insuredName} — proposal ${params.event}.`,
+    body: `
+    ${params.agentName ? `<p style="margin:0 0 14px;font-family:${FONT};font-size:15px;color:#334155;line-height:1.65;">Hi ${escapeHtml(params.agentName)},</p>` : ''}
+    <p style="margin:0 0 20px;font-family:${FONT};font-size:15px;color:#334155;line-height:1.65;">${detail}</p>
+    ${nextStep}
+    ${button(params.proposalUrl, 'Open the proposal')}
+  `,
+  });
+
+  const text = `${headline}
+
+${detail.replace(/<[^>]+>/g, '')}
+${params.event === 'signed' ? '\nCoverage is NOT bound. Confirm with the carrier to complete the placement.\n' : ''}
+${params.proposalUrl}`;
+
+  return { subject: headline, html, text };
+}

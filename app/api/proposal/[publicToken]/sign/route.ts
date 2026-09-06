@@ -7,6 +7,8 @@ import { assembleProposal } from '@/lib/proposals/assemble';
 import {
   parseSignatureInput, ESIGN_CONSENT_TEXT, SignatureValidationError,
 } from '@/lib/proposals/signature';
+import { syncLeadStatus } from '@/lib/proposals/status';
+import { notifyAgentOfActivity } from '@/lib/proposals/notify';
 
 /**
  * The insured signs the proposal (requirement 9).
@@ -137,13 +139,11 @@ export async function POST(
       },
     });
 
-    // Move the lead forward, but never to BOUND — Insurigence does not bind
-    // coverage (requirement 13). PRESENTED is the furthest this may go on its own.
-    if (['NEW', 'WAITING_ON_INFO', 'READY_TO_MARKET', 'QUOTED'].includes(lead.status)) {
-      await prisma.lead
-        .update({ where: { id: lead.id }, data: { status: 'PRESENTED' } })
-        .catch((e) => console.error('[proposal-sign] lead status update failed:', e));
-    }
+    // Lead advances to READY_TO_BIND — never BOUND, which is a carrier action a
+    // person confirms (requirement 13). The rule lives in lib/proposals/status.
+    await syncLeadStatus(lead.id, 'SIGNED');
+
+    void notifyAgentOfActivity(updated, 'signed', { signerName: signature.signerName });
 
     return NextResponse.json({
       signedAt: updated.signedAt?.toISOString() ?? null,

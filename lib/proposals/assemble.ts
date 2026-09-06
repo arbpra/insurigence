@@ -190,38 +190,59 @@ export function assembleProposal(
   return assembled;
 }
 
+export interface Readiness {
+  /** Genuine reasons not to send. Sending is refused while any remain. */
+  blockers: string[];
+  /** Worth knowing, but harmless. Sending is allowed. */
+  hints: string[];
+}
+
 /**
- * Reasons a proposal is not ready to send. Empty means ready.
- * Surfaced in the builder so problems are caught before the insured sees them.
+ * What stands between this proposal and the insured.
+ *
+ * The distinction matters: an empty *optional* section is not a problem, because
+ * a content section with no body renders nothing at all — in the preview, in the
+ * client view, and in the PDF. Treating those as blockers meant an agent who did
+ * not want an Executive Summary could not send the proposal until they either
+ * wrote one or found and switched off three separate sections.
  */
-export function readinessProblems(assembled: AssembledProposal): string[] {
-  const problems: string[] = [];
+export function proposalReadiness(assembled: AssembledProposal): Readiness {
+  const blockers: string[] = [];
+  const hints: string[] = [];
 
   if (assembled.options.length === 0) {
-    problems.push('No quote options have been added.');
+    blockers.push('No quote options have been added.');
   }
   if (assembled.options.length === 1) {
-    problems.push('Only one option — the insured has nothing to compare.');
+    blockers.push('Only one option — the insured has nothing to compare.');
   }
   if (!assembled.recommendation) {
-    problems.push('No option is marked as recommended.');
+    blockers.push('No option is marked as recommended.');
   } else if (!assembled.recommendation.rationale?.trim()) {
-    problems.push('The recommended option has no explanation of why.');
+    blockers.push('The recommended option has no explanation of why.');
   }
+  // Unreviewed AI text is a blocker: requirement 15 says a licensed agent must
+  // review client-facing AI output before it is sent.
   if (assembled.internal?.unreviewedAiCoverages) {
-    problems.push(
+    blockers.push(
       `${assembled.internal.unreviewedAiCoverages} AI-drafted coverage explanation(s) have not been reviewed.`
     );
   }
   if (assembled.internal?.rationaleNeedsReview) {
-    problems.push('The recommendation wording is still an unedited AI draft.');
+    blockers.push('The recommendation wording is still an unedited AI draft.');
   }
+
   const emptyEnabled = assembled.sections.filter(
     (s) => s.enabled && s.body !== null && s.body.trim() === ''
   );
   for (const s of emptyEnabled) {
-    problems.push(`"${s.title}" is switched on but empty.`);
+    hints.push(`"${s.title}" is empty, so it will not appear.`);
   }
 
-  return problems;
+  return { blockers, hints };
+}
+
+/** @deprecated Use proposalReadiness — kept so existing callers keep compiling. */
+export function readinessProblems(assembled: AssembledProposal): string[] {
+  return proposalReadiness(assembled).blockers;
 }

@@ -3,6 +3,8 @@ import prisma from '@/lib/prisma';
 import { resolveProposalToken, TOKEN_FAILURE_MESSAGE } from '@/lib/proposals/token';
 import { recordProposalEvent, requestContext } from '@/lib/proposals/events';
 import { assembleProposal } from '@/lib/proposals/assemble';
+import { markExpiredIfLapsed, syncLeadStatus } from '@/lib/proposals/status';
+import { notifyAgentOfActivity } from '@/lib/proposals/notify';
 
 /**
  * The insured's view of a proposal. No account, no session — the token is the
@@ -39,6 +41,9 @@ export async function GET(
       include: { lead: { include: { intakeSubmission: true } }, agency: true },
     });
 
+    // A lapsed proposal reads as SENT in the agent's list until this runs.
+    await markExpiredIfLapsed(proposal);
+
     const isFirstView = !proposal.viewedAt;
 
     // Viewing never advances a proposal past a decision the insured already
@@ -61,6 +66,13 @@ export async function GET(
       isFirstView ? 'OPENED' : 'VIEWED',
       requestContext(request)
     );
+
+    if (isFirstView) {
+      // Only the first open is worth an email — re-reads are not news, and the
+      // agent should not be pinged every time a client scrolls back.
+      void notifyAgentOfActivity(proposal, 'opened');
+      void syncLeadStatus(proposal.leadId, 'VIEWED');
+    }
 
     // A quote proposal is the one with sections.
     const isQuoteProposal = Array.isArray(proposal.sections);

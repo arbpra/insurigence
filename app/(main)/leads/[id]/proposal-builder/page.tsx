@@ -7,6 +7,7 @@ import { ArrowLeft, AlertTriangle, CheckCircle2, PanelsTopLeft, Eye } from 'luci
 import SectionEditor from '@/app/components/proposals/SectionEditor';
 import ProposalPreview from '@/app/components/proposals/ProposalPreview';
 import SendProposalPanel from '@/app/components/proposals/SendProposalPanel';
+import ActivityLog from '@/app/components/proposals/ActivityLog';
 import type { AssembledProposal } from '@/lib/proposals/assemble';
 import type { ProposalSection } from '@/lib/proposals/sections';
 
@@ -25,11 +26,16 @@ export default function ProposalBuilderPage() {
   const leadId = String(params.id);
 
   const [proposal, setProposal] = useState<AssembledProposal | null>(null);
-  const [readiness, setReadiness] = useState<string[]>([]);
+  const [readiness, setReadiness] = useState<{ blockers: string[]; hints: string[] }>({ blockers: [], hints: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [view, setView] = useState<'build' | 'preview'>('build');
+  const [notice, setNotice] = useState('');
+  /** Set when a save was refused because it would need a new version. */
+  const [versionPrompt, setVersionPrompt] = useState<
+    { patch: Record<string, unknown>; signed: boolean; version: number } | null
+  >(null);
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /**
@@ -49,7 +55,7 @@ export default function ProposalBuilderPage() {
       const json = await res.json();
       if (!res.ok) { setError(json.error || 'Could not load the proposal.'); return; }
       setProposal(json.proposal);
-      setReadiness(json.readiness ?? []);
+      setReadiness(json.readiness ?? { blockers: [], hints: [] });
     } catch {
       setError('Network error. Please try again.');
     } finally {
@@ -79,22 +85,34 @@ export default function ProposalBuilderPage() {
     };
   }, [proposal?.id]);
 
-  const persist = useCallback(async (patch: Record<string, unknown>) => {
+  const persist = useCallback(async (
+    patch: Record<string, unknown>,
+    opts: { createVersion?: boolean } = {}
+  ) => {
     if (!proposal) return;
     setSaving(true);
     try {
       const res = await fetch(`/api/proposals/${proposal.id}/builder`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(patch),
+        body: JSON.stringify(opts.createVersion ? { ...patch, createVersion: true } : patch),
       });
       const json = await res.json();
+
+      // The proposal has already gone to the insured. Editing it forks a new
+      // version, which is the agent's decision to make — so ask rather than
+      // let an autosave quietly create one.
+      if (res.status === 409 && json.canCreateVersion) {
+        setVersionPrompt({ patch, signed: Boolean(json.signed), version: json.currentVersion });
+        return;
+      }
+
       if (!res.ok) { setError(json.error || 'Could not save.'); return; }
       setError('');
-      setReadiness(json.readiness ?? []);
-      // The server returns the assembled proposal; adopt its version of the
-      // sections so normalisation on the server is reflected here.
+      setVersionPrompt(null);
+      setReadiness(json.readiness ?? { blockers: [], hints: [] });
       setProposal(json.proposal);
+      if (json.createdVersion) setNotice(`Created version ${json.version}. The previous version is kept in the history.`);
     } catch {
       setError('Network error — your last change may not be saved.');
     } finally {
@@ -211,9 +229,46 @@ export default function ProposalBuilderPage() {
         </div>
       )}
 
+      {notice && (
+        <div className="mb-4 rounded-md px-3 py-2 text-sm" style={{ backgroundColor: '#E9FBF5', color: '#0F9E78' }}>
+          {notice}
+        </div>
+      )}
+
+      {versionPrompt && (
+        <div className="mb-4 rounded-md px-4 py-3 text-sm" style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}
+             data-testid="version-prompt">
+          <p className="font-medium mb-1">
+            {versionPrompt.signed
+              ? 'This proposal has been signed.'
+              : 'This proposal has already been sent.'}
+          </p>
+          <p className="mb-3">
+            Version {versionPrompt.version} stays exactly as the client saw it. Your change will
+            start version {versionPrompt.version + 1}, which you can send when it is ready.
+          </p>
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => { const p = versionPrompt.patch; setVersionPrompt(null); void persist(p, { createVersion: true }); }}
+              className="px-3 py-1.5 rounded-md text-sm font-semibold"
+              style={{ backgroundColor: 'var(--brand-accent)', color: 'var(--brand-primary)' }}
+              data-testid="confirm-new-version"
+            >
+              Create version {versionPrompt.version + 1}
+            </button>
+            <button
+              onClick={() => { setVersionPrompt(null); void load(); }}
+              className="px-3 py-1.5 rounded-md text-sm font-medium border border-amber-300"
+            >
+              Discard my change
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Readiness — everything standing between this and a sendable proposal. */}
       <div className="mb-6">
-        {readiness.length === 0 ? (
+        {readiness.blockers.length === 0 ? (
           <div className="rounded-md px-3 py-2 text-sm flex items-center gap-2"
                style={{ backgroundColor: '#E9FBF5', color: '#0F9E78' }} data-testid="readiness-ok">
             <CheckCircle2 className="w-4 h-4" /> This proposal is ready to send.
@@ -223,10 +278,10 @@ export default function ProposalBuilderPage() {
                data-testid="readiness-problems">
             <p className="flex items-center gap-2 font-medium mb-1">
               <AlertTriangle className="w-4 h-4" />
-              {readiness.length} thing{readiness.length === 1 ? '' : 's'} to resolve before sending
+              {readiness.blockers.length} thing{readiness.blockers.length === 1 ? '' : 's'} to resolve before sending
             </p>
             <ul className="list-disc list-inside space-y-0.5 ml-1">
-              {readiness.map((r, i) => <li key={i}>{r}</li>)}
+              {readiness.blockers.map((r, i) => <li key={i}>{r}</li>)}
             </ul>
           </div>
         )}
@@ -255,10 +310,14 @@ export default function ProposalBuilderPage() {
             <SendProposalPanel
               proposalId={proposal.id}
               status={proposal.status}
-              readiness={readiness}
+              readiness={readiness.blockers}
               defaultEmail={proposal.preparedFor.contactEmail ?? null}
               onSent={load}
             />
+          </div>
+
+          <div className="mb-6">
+            <ActivityLog proposalId={proposal.id} />
           </div>
 
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-2">Sections</h2>

@@ -385,22 +385,34 @@ Requirement 15 says AI must never change quote terms, limits, or premiums. Rathe
 
 **Not yet verified:** the PDFs have been read as text, not seen as pages — no visual check of spacing, alignment, or colour.
 
-### Phase 9 — Tracking & Notifications (10.5 h)
+### Phase 9 — Tracking & Notifications (9.5 h) — ✅ COMPLETE
 
 | # | Module | Hours | Notes |
 |---|---|---:|---|
-| 30 | Record `ProposalActivityEvent` across the full lifecycle | 2.5 | |
-| 31 | E-Sign Activity log UI for Agent and Agency Admin | 2.5 | Requirement 10 |
-| 32 | Agent notifications on open / select / sign (email + in-app) | 3.0 | In-app needs a new model |
-| 33 | Proposal status set + Lead status sync (no auto-binding) | 2.5 | Requirement 13 |
+| 30 | Full lifecycle event recording | 2.5 | ✅ Done |
+| 31 | E-Sign Activity log UI | 2.5 | ✅ Done |
+| 32 | Agent notifications (email only) | 2.0 | ✅ Done |
+| 33 | Proposal statuses + lead sync | 2.5 | ✅ Done |
 
-### Phase 10 — Hardening & Acceptance (8.5 h)
+**Delivered:** all 12 event types now recorded · `GET /api/proposals/[id]/activity` + `ActivityLog` timeline with the signature audit record · `proposalActivityEmail` to the creating agent and the assigned agent on first open, selection, and signature · `lib/proposals/status.ts` holding the transition and lead-sync rules.
+
+**Decisions:** a proposal **never moves backwards** — re-opening after selecting or signing cannot undo it, enforced by ranked transitions. **Only the first open emails the agent**; re-reads are not news. A signature advances the lead to the new **`READY_TO_BIND`** status and never to `BOUND` — binding stays a human action after the carrier confirms (requirement 13). A lapsed proposal is **marked expired lazily on read**, so it stops showing as "Sent" in the agent's list. The signed-notification email states in bold that **coverage is not bound**.
+
+### Phase 10 — Hardening & Acceptance (8.5 h) — ✅ COMPLETE
 
 | # | Module | Hours | Notes |
 |---|---|---:|---|
-| 34 | Version control — new version on post-send edit, history retained, signed versions locked | 2.5 | Requirement 14 |
-| 35 | Security pass — agency isolation, public payload filtering (no internal notes/scoring leaks) | 3.0 | Requirement 17 |
-| 36 | V1 acceptance criteria walkthrough + fixes | 3.0 | |
+| 34 | Version control | 2.5 | ✅ Done |
+| 35 | Security pass | 3.0 | ✅ Done |
+| 36 | V1 acceptance walkthrough | 3.0 | ✅ Done |
+
+**Module 34 — versioning.** A DRAFT is edited in place; a proposal the insured already holds a link to is **forked** into the next version rather than overwritten. The old version keeps its status, snapshot, signature, events — and its token, so the link the insured already has continues to serve exactly what they were sent. Forking is opt-in (`createVersion: true`) so the builder's autosave cannot spawn versions while someone types; the UI asks first.
+
+**Module 35 — security pass.** 21 checks, kept as `script/verify-security.ts`: every agent route authorises and scopes by agency (14/14), no route scopes by an environment variable, all public routes go through the token gate, nothing queries `publicToken` directly, the insured page is outside the authenticated layout, and the client payload withholds agent notes, storage keys, coverage join keys, AI provenance, and market classification.
+
+**Module 36 — acceptance.** `script/verify-acceptance.ts` runs the client's own 15 criteria as one journey — empty lead through to a downloaded 3-page signed PDF — and restores the database afterwards. **15 of 15 met.**
+
+**Bug the acceptance run found:** empty *optional* sections were counted as send-blockers, and `/send` refuses while blockers exist. An agent who did not want an Executive Summary would have been **unable to send at all** until they wrote one or hunted down three toggles — despite those sections already rendering nothing when empty. Readiness now separates **blockers** (no options, no recommendation, unreviewed AI text) from **hints** (an empty optional section simply will not appear), and only blockers refuse a send.
 
 ---
 
@@ -417,7 +429,7 @@ Requirement 15 says AI must never change quote terms, limits, or premiums. Rathe
 | 6 — Insured Experience | 21–23 | 8.5 |
 | 7 — Electronic Signature | 24–26 | 8.5 |
 | 8 — PDF Generation | 27–29 | 8.5 |
-| 9 — Tracking & Notifications | 30–33 | 10.5 |
+| 9 — Tracking & Notifications | 30–33 | 9.5 |
 | 10 — Hardening & Acceptance | 34–36 | 8.5 |
 | **Total** | **36 modules** | **95.5 h** |
 
@@ -532,7 +544,7 @@ These change the estimate materially and should be answered before the affected 
 | 1 | Where do uploaded carrier quote documents and generated PDFs get stored? No blob storage exists today (S3 / Cloudinary / Vercel Blob / other). | M6, M29 | Adds 2–4 h for storage setup |
 | 2 | Is a typed/drawn signature acceptable for V1, or does the client require a certified e-sign provider (DocuSign, Dropbox Sign)? | M24–M26 | A third-party provider changes Phase 7 substantially |
 | 3 | PDF approach — `pdf-lib` (installed, low-level) or HTML→PDF via headless Chrome (better output, heavier dependency)? | M27–M28 | Affects hosting requirements |
-| 4 | Do agent notifications need in-app, or is email sufficient for V1? | M32 | In-app requires a new `Notification` model (+2 h) |
+| 4 | ~~Do agent notifications need in-app?~~ **ANSWERED: email only for MVP.** In-app deferred to a later update. Module 32 drops from 3.0 h to 2.0 h. | — | Resolved |
 | 5 | Should existing market-classification `Proposal` records be migrated, or coexist with the new quote proposals? | M2 | Migration path affects Phase 0 |
 | 6 | Is there an ESIGN/UETA legal review requirement, or is the consent language in requirement 9 sufficient? | M25 | Compliance review sits outside development scope |
 

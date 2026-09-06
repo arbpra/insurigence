@@ -3,7 +3,8 @@ import prisma from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { getAuthContext } from '@/lib/super-admin-auth';
 import { parseSectionInput, SectionValidationError } from '@/lib/proposals/sections';
-import { assembleProposal, readinessProblems } from '@/lib/proposals/assemble';
+import { assembleProposal, proposalReadiness } from '@/lib/proposals/assemble';
+import { needsNewVersion, createNextVersion } from '@/lib/proposals/versioning';
 
 /**
  * Save the proposal being built.
@@ -11,9 +12,10 @@ import { assembleProposal, readinessProblems } from '@/lib/proposals/assemble';
  * PATCH → title, client message, and the section layout (order, titles,
  *         enabled state, and the prose of content sections).
  *
- * A locked proposal is rejected: once signed, the document an insured agreed to
- * is immutable. Editing a sent proposal is allowed here and creates a new
- * version in Phase 10 — for now it simply saves.
+ * A DRAFT is edited in place. A proposal the insured already has a link to is
+ * never overwritten silently (requirement 14): the caller must pass
+ * `createVersion: true`, which forks it into the next version and edits that.
+ * A signed proposal is never mutated at all.
  */
 
 const MAX_TITLE = 200;
@@ -39,22 +41,38 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const { proposal, error } = await authorizeProposal(request, id);
+    const { proposal, user, error } = await authorizeProposal(request, id);
     if (error) return error;
-
-    // A signed proposal is evidence, not a draft.
-    if (proposal!.lockedAt) {
-      return NextResponse.json(
-        { error: 'This proposal has been signed and can no longer be edited.' },
-        { status: 409 }
-      );
-    }
 
     let body: Record<string, unknown>;
     try {
       body = await request.json();
     } catch {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
+
+    // Requirement 14: a proposal the insured already has a link to is never
+    // overwritten silently. Forking is opt-in so the builder's autosave cannot
+    // spawn versions while someone is simply typing — the UI asks first.
+    let target = proposal!;
+    let createdVersion = false;
+
+    if (needsNewVersion(target)) {
+      if (body.createVersion !== true) {
+        return NextResponse.json(
+          {
+            error: target.lockedAt
+              ? 'This proposal has been signed and cannot be edited. Create a new version to make changes.'
+              : 'This proposal has already been sent. Editing it will create a new version.',
+            canCreateVersion: true,
+            currentVersion: target.version,
+            signed: Boolean(target.lockedAt),
+          },
+          { status: 409 }
+        );
+      }
+      target = await createNextVersion(target, user?.id ?? null);
+      createdVersion = true;
     }
 
     const data: Prisma.ProposalUncheckedUpdateInput = {};
@@ -78,11 +96,11 @@ export async function PATCH(
       data.sections = parseSectionInput(body.sections) as unknown as Prisma.InputJsonValue;
     }
 
-    if (Object.keys(data).length === 0) {
+    if (Object.keys(data).length === 0 && !createdVersion) {
       return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
     }
 
-    const updated = await prisma.proposal.update({ where: { id: proposal!.id }, data });
+    const updated = await prisma.proposal.update({ where: { id: target.id }, data });
 
     const [lead, agency, options, createdBy] = await Promise.all([
       prisma.lead.findUnique({ where: { id: updated.leadId } }),
@@ -110,7 +128,10 @@ export async function PATCH(
 
     return NextResponse.json({
       proposal: assembled,
-      readiness: readinessProblems(assembled),
+      readiness: proposalReadiness(assembled),
+      // The builder must switch to the new proposal id when a fork happened.
+      createdVersion,
+      ...(createdVersion ? { newProposalId: target.id, version: target.version } : {}),
     });
   } catch (err) {
     if (err instanceof SectionValidationError) {

@@ -7,7 +7,7 @@ import { APP_URL } from '@/lib/email/client';
 import { generateProposalToken, defaultExpiry, proposalUrl } from '@/lib/proposals/token';
 import { recordProposalEvent, requestContext } from '@/lib/proposals/events';
 import { resolveDisclaimer } from '@/lib/proposals/branding';
-import { assembleProposal, readinessProblems } from '@/lib/proposals/assemble';
+import { assembleProposal, proposalReadiness } from '@/lib/proposals/assemble';
 
 /**
  * Send a proposal to the insured.
@@ -80,8 +80,9 @@ export async function POST(
       { proposal: proposal!, lead, agency, options },
       { audience: 'agent' }
     );
-    const blockers = readinessProblems(preflight);
-    if (blockers.length > 0 && body.sendEmail !== 'force') {
+    // Hints are not blockers — an empty optional section simply does not render.
+    const { blockers } = proposalReadiness(preflight);
+    if (blockers.length > 0) {
       return NextResponse.json(
         { error: 'This proposal is not ready to send.', problems: blockers },
         { status: 400 }

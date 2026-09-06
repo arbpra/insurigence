@@ -3,7 +3,9 @@ import prisma from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
 import { getAuthContext } from '@/lib/super-admin-auth';
 import { defaultSections } from '@/lib/proposals/sections';
-import { assembleProposal, readinessProblems } from '@/lib/proposals/assemble';
+import { assembleProposal, proposalReadiness } from '@/lib/proposals/assemble';
+import { recordProposalEvent, requestContext } from '@/lib/proposals/events';
+import { markExpiredIfLapsed } from '@/lib/proposals/status';
 
 /**
  * The quote proposal being built for a lead.
@@ -65,6 +67,13 @@ export async function GET(
           sections: defaultSections() as unknown as Prisma.InputJsonValue,
         },
       });
+      await recordProposalEvent(
+        proposal.id, proposal.agencyId, 'CREATED', requestContext(request)
+      );
+    } else {
+      // Keep the agent's view honest about a lapsed link.
+      await markExpiredIfLapsed(proposal);
+      proposal = await prisma.proposal.findUniqueOrThrow({ where: { id: proposal.id } });
     }
 
     const createdBy = proposal.createdByUserId
@@ -81,7 +90,7 @@ export async function GET(
 
     return NextResponse.json({
       proposal: assembled,
-      readiness: readinessProblems(assembled),
+      readiness: proposalReadiness(assembled),
     });
   } catch (err) {
     console.error('[proposal-builder] GET failed:', err);

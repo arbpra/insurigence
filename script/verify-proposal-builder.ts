@@ -11,7 +11,7 @@ import {
   resolveBranding, resolveDisclaimer, safeHexColor,
   DEFAULT_PROPOSAL_DISCLAIMER, DEFAULT_BRAND_PRIMARY,
 } from '../lib/proposals/branding';
-import { assembleProposal, readinessProblems } from '../lib/proposals/assemble';
+import { assembleProposal, proposalReadiness } from '../lib/proposals/assemble';
 import type { Agency, Lead, Proposal, QuoteOption } from '@prisma/client';
 
 let pass = 0, fail = 0;
@@ -141,10 +141,13 @@ console.log('\n━━ Audience boundary (requirement 17) ━━');
   ok('client sees only enabled sections', client.sections.every(s => s.enabled));
 
   console.log('\n━━ Readiness ━━');
-  const problems = readinessProblems(agent);
-  ok('single option flagged', problems.some(p => p.includes('Only one option')));
-  ok('unreviewed AI flagged', problems.some(p => p.includes('not been reviewed')));
-  ok('empty enabled sections flagged', problems.some(p => p.includes('switched on but empty')));
+  const { blockers, hints } = proposalReadiness(agent);
+  ok('single option is a blocker', blockers.some(p => p.includes('Only one option')));
+  ok('unreviewed AI is a blocker', blockers.some(p => p.includes('not been reviewed')));
+  // Regression: empty optional sections used to block sending entirely, even
+  // though they render nothing. They are a hint now.
+  ok('empty optional section is a hint, not a blocker',
+    hints.some(p => p.includes('is empty')) && !blockers.some(p => p.includes('empty')));
 }
 
 console.log(`\n━━ ${pass} passed, ${fail} failed ━━\n`);

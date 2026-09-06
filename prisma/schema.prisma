@@ -13,6 +13,10 @@ enum LeadStatus {
   READY_TO_MARKET
   QUOTED
   PRESENTED
+  /// The insured has signed and approved an option. Insurigence never sets
+  /// BOUND on its own — binding is a carrier action a person must confirm
+  /// (requirement 13), so this is as far as a signature can move a lead.
+  READY_TO_BIND
   BOUND
   LOST
 }
@@ -487,6 +491,11 @@ model Proposal {
   /// Increments each time a sent proposal is edited. A signed version is never
   /// mutated — editing one creates the next version instead.
   version   Int            @default(1)
+  /// The proposal this one superseded, forming a chain back through the history.
+  /// Superseded versions are retained read-only for the audit trail.
+  supersedesProposalId String? @db.ObjectId
+  /// Set on a version that has been replaced by a newer one.
+  supersededAt         DateTime?
 
   // ── Market-classification proposal (original feature, retained) ──
   marketClassification MarketClassification?
