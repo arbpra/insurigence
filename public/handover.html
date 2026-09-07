@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<style>:root{color-scheme:light dark}*{box-sizing:border-box}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Proposal System Handover</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>
+  :root {
+    --ground:      #F5F7FA;
+    --surface:     #FFFFFF;
+    --surface-2:   #EDF1F6;
+    --ink:         #0D2137;
+    --ink-2:       #3E5468;
+    --ink-3:       #6B7F92;
+    --rule:        #D8E0E9;
+    --rule-strong: #B9C6D4;
+    --accent:      #00A87A;
+    --accent-mark: #00E6A7;
+    --check:       #FFFFFF;
+    --warn:        #9A5B00;
+    --warn-wash:   #FDF3E2;
+    --shadow:      0 1px 2px rgba(13, 33, 55, .06), 0 8px 24px -12px rgba(13, 33, 55, .18);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #0A1724;
+      --surface:     #0F2333;
+      --surface-2:   #163043;
+      --ink:         #E8EFF6;
+      --ink-2:       #A8BCCD;
+      --ink-3:       #7C93A7;
+      --rule:        #1F3A50;
+      --rule-strong: #2C4C66;
+      --accent:      #00E6A7;
+      --accent-mark: #00E6A7;
+      --check:       #06231A;
+      --warn:        #E8A33D;
+      --warn-wash:   #33260F;
+      --shadow:      0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px -12px rgba(0, 0, 0, .6);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #0A1724;
+    --surface:     #0F2333;
+    --surface-2:   #163043;
+    --ink:         #E8EFF6;
+    --ink-2:       #A8BCCD;
+    --ink-3:       #7C93A7;
+    --rule:        #1F3A50;
+    --rule-strong: #2C4C66;
+    --accent:      #00E6A7;
+    --accent-mark: #00E6A7;
+    --check:       #06231A;
+    --warn:        #E8A33D;
+    --warn-wash:   #33260F;
+    --shadow:      0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px -12px rgba(0, 0, 0, .6);
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "Public Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page { max-width: 880px; margin: 0 auto; padding: 56px 28px 96px; }
+
+  .eyebrow {
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px; font-weight: 500; letter-spacing: .13em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 18px;
+  }
+
+  h1 {
+    font-family: Newsreader, Georgia, "Times New Roman", serif;
+    font-size: clamp(34px, 5.5vw, 52px); font-weight: 500; line-height: 1.1;
+    letter-spacing: -.015em; text-wrap: balance; margin: 0 0 18px;
+  }
+
+  .standfirst {
+    font-size: 18px; line-height: 1.55; color: var(--ink-2);
+    max-width: 62ch; margin: 0 0 32px;
+  }
+
+  .meta {
+    display: flex; flex-wrap: wrap; gap: 8px 28px;
+    padding: 22px 0; border-block: 1px solid var(--rule);
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 12px; color: var(--ink-3);
+  }
+  .meta b { color: var(--ink-2); font-weight: 500; }
+
+  h2 {
+    font-family: Newsreader, Georgia, serif; font-size: 27px; font-weight: 500;
+    letter-spacing: -.01em; margin: 64px 0 6px;
+  }
+  .section-note { color: var(--ink-3); font-size: 14.5px; margin: 0 0 8px; max-width: 64ch; }
+
+  /* ---------- capability blocks ---------- */
+
+  .block { padding: 26px 0; border-bottom: 1px solid var(--rule); }
+  .block:first-of-type { border-top: 1px solid var(--rule-strong); }
+
+  .block h3 {
+    font-family: Newsreader, Georgia, serif; font-size: 21px; font-weight: 600;
+    margin: 0; letter-spacing: -.005em;
+  }
+
+  .block ul {
+    margin: 13px 0 0; padding: 0; list-style: none;
+    display: flex; flex-direction: column; gap: 9px; max-width: 70ch;
+  }
+  .block li {
+    position: relative; padding-left: 20px; color: var(--ink-2); font-size: 15px;
+  }
+  .block li::before {
+    content: ""; position: absolute; left: 2px; top: 10px;
+    width: 6px; height: 6px; background: var(--accent-mark); border-radius: 50%;
+  }
+  .block li b { color: var(--ink); font-weight: 600; }
+
+  .aside {
+    margin-top: 15px; padding: 12px 16px; background: var(--surface-2);
+    border-left: 2px solid var(--rule-strong); font-size: 14px;
+    color: var(--ink-2); max-width: 68ch;
+  }
+
+  /* ---------- checklist ---------- */
+
+  .check-card {
+    background: var(--surface); border: 1px solid var(--rule);
+    box-shadow: var(--shadow); margin-top: 26px; overflow: hidden;
+  }
+  .act { border-bottom: 1px solid var(--rule); }
+  .act:last-child { border-bottom: 0; }
+  .act-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; padding: 15px 22px; background: var(--surface-2);
+    border-bottom: 1px solid var(--rule);
+  }
+  .act-head h3 {
+    margin: 0; font-size: 13px; font-weight: 700; letter-spacing: .07em;
+    text-transform: uppercase; color: var(--ink);
+  }
+  .act-head span {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11.5px; color: var(--ink-3);
+  }
+
+  .step {
+    display: flex; gap: 14px; align-items: flex-start; padding: 13px 22px;
+    border-bottom: 1px solid var(--rule); cursor: pointer;
+  }
+  .step:last-child { border-bottom: 0; }
+  .step:hover { background: var(--surface-2); }
+
+  .step input {
+    appearance: none; flex: 0 0 auto; width: 17px; height: 17px;
+    margin: 3px 0 0; border: 1.5px solid var(--rule-strong); border-radius: 3px;
+    background: var(--surface); cursor: pointer; position: relative;
+  }
+  .step input:checked { background: var(--accent); border-color: var(--accent); }
+  .step input:checked::after {
+    content: ""; position: absolute; left: 5px; top: 1px; width: 4px; height: 9px;
+    border: solid var(--check); border-width: 0 2px 2px 0; transform: rotate(43deg);
+  }
+  .step input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .step .num {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums; font-size: 12px; font-weight: 700;
+    color: var(--ink-3); flex: 0 0 auto; width: 20px; padding-top: 3px;
+  }
+  .step .body { flex: 1 1 auto; min-width: 0; }
+  .step .what { display: block; font-size: 15px; color: var(--ink); font-weight: 500; }
+  .step .expect { display: block; font-size: 13.5px; color: var(--ink-3); margin-top: 2px; }
+  .step input:checked ~ .body .what { color: var(--ink-3); text-decoration: line-through; }
+
+  /* ---------- pending ---------- */
+
+  .pending {
+    margin-top: 26px; background: var(--warn-wash); border: 1px solid var(--rule);
+    border-left: 3px solid var(--warn); padding: 22px 24px;
+  }
+  .pending h3 {
+    margin: 0 0 12px; font-size: 13px; font-weight: 700; letter-spacing: .07em;
+    text-transform: uppercase; color: var(--warn);
+  }
+  .pending dl { margin: 0; display: flex; flex-direction: column; gap: 14px; }
+  .pending dt { font-weight: 600; font-size: 15px; color: var(--ink); }
+  .pending dd { margin: 2px 0 0; font-size: 14.5px; color: var(--ink-2); max-width: 68ch; }
+
+  footer {
+    margin-top: 60px; padding-top: 22px; border-top: 1px solid var(--rule);
+    font-size: 13px; color: var(--ink-3); max-width: 68ch;
+  }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+  @media (max-width: 560px) {
+    .page { padding: 40px 18px 72px; }
+    .step, .act-head { padding-inline: 16px; }
+  }
+</style>
+
+</head>
+<body>
+<div class="page">
+
+  <p class="eyebrow">Insurigence · Proposal Builder, Presentation &amp; E-Sign</p>
+  <h1>What's Been Built</h1>
+  <p class="standfirst">
+    The proposal system is complete &mdash; from entering what the carriers sent back, through the
+    proposal you assemble, the screen your client sees, their signature, and the documents that
+    come out the other end.
+  </p>
+
+  <div class="meta">
+    <span><b>Prepared</b> 7 September 2026</span>
+    <span><b>Acceptance criteria</b> 15 of 15 met</span>
+    <span><b>Status</b> Ready for your review</span>
+  </div>
+
+  <h2>What's been built</h2>
+  <p class="section-note">In the order you'd move through it.</p>
+
+  <div class="block">
+    <h3>Quote entry</h3>
+    <ul>
+      <li><b>The screen where you record what the carriers sent back</b> &mdash; add, edit, delete, reorder, and mark one option as recommended.</li>
+      <li><b>Every field from your requirement list</b> &mdash; carrier, program, policy type, all three date types, premium, taxes, fees, payment plan, limits, deductibles, endorsements, exclusions, and notes. Validated as you type, with money handled in exact cents so nothing drifts by a penny.</li>
+      <li><b>The total adds itself up, but a total you type in always wins.</b> Carriers sometimes quote a figure that doesn't equal its parts, and theirs is the number that belongs in front of the insured.</li>
+      <li><b>Carrier quote documents attach to the option.</b> Nothing is publicly reachable &mdash; a download link is minted on demand and dies after five minutes.</li>
+      <li><b>An expired quote is badged as expired</b>, so a stale option can't quietly make it into a proposal.</li>
+    </ul>
+  </div>
+
+  <div class="block">
+    <h3>Plain-language coverage explanations</h3>
+    <ul>
+      <li><b>Each coverage explained in plain language</b>, drafted for you and fully editable before it goes anywhere.</li>
+      <li><b>The AI can never touch a number.</b> Limits and deductibles are yours alone; it writes wording only. Its output has no field for a limit or a premium, so a wrong figure has no route to reach your client &mdash; this is built into the structure, not merely asked of the model.</li>
+      <li><b>Anything drafted for you stays flagged until an agent reviews it</b>, and re-drafting never overwrites wording you've edited yourself.</li>
+      <li><b>Editing text you'd already approved returns it to pending</b>, so a late change can't slip out unreviewed.</li>
+    </ul>
+  </div>
+
+  <div class="block">
+    <h3>Comparison and recommendation</h3>
+    <ul>
+      <li><b>Side-by-side comparison with the differences highlighted</b>, and a filter to show only what actually differs.</li>
+      <li><b>Coverages match across carriers despite naming differences</b>, and limits are read however they're written &mdash; $250,000, 250K, $1M/$2M.</li>
+      <li><b>A coverage missing from an option reads "Not quoted"</b>, which is deliberately distinct from "Not included". The system never guesses which one you meant.</li>
+      <li><b>"Why we recommend this option"</b> is drafted from the same engine that draws the table, so the wording can never contradict the figures beside it.</li>
+    </ul>
+  </div>
+
+  <div class="block">
+    <h3>The proposal builder</h3>
+    <ul>
+      <li><b>All nine proposal sections</b>, reorderable and retitleable, with a live preview beside the editor that autosaves as you work.</li>
+      <li><b>Required sections can't be removed</b>, so a proposal can never go out with no options in it.</li>
+      <li><b>Your branding throughout</b> &mdash; logo, colours, footer, and contact details.</li>
+      <li><b>The disclaimer follows a clear order:</b> platform default, your agency's own version, then frozen onto the proposal the moment it's sent &mdash; so revising it later never changes what someone has already signed.</li>
+      <li><b>Anything sent to a client is built from an approved list of fields</b>, so a field added in future stays private until someone deliberately publishes it.</li>
+    </ul>
+  </div>
+
+  <div class="block">
+    <h3>Sending it</h3>
+    <ul>
+      <li><b>Send, copy link, resend, and withdraw</b> &mdash; withdrawal takes effect immediately.</li>
+      <li><b>Links are random and unguessable</b>, unrelated to anything else in the system, and expire after 60 days.</li>
+      <li><b>Resending reuses the same link</b>, so one already sitting in your client's inbox keeps working.</li>
+      <li><b>The email carries no premiums, carriers, or limits.</b> A forwarded email shouldn't disclose someone's pricing, so everything sensitive stays behind the link.</li>
+      <li><b>If the email fails, the link is still yours.</b> You're told the link is ready but the message didn't send, rather than losing both.</li>
+    </ul>
+  </div>
+
+  <div class="block">
+    <h3>What your client sees</h3>
+    <ul>
+      <li><b>They open their proposal with no account and no password.</b></li>
+      <li><b>Built for the phone first</b> &mdash; options stack as cards rather than a wide table, because these links are almost always opened from email on a phone.</li>
+      <li><b>Coverage detail sits inside each option</b>, next to the price it belongs to, rather than in a separate section further down the page.</li>
+      <li><b>They select an option, confirm, and can change their mind</b> any time before signing. Selecting is explicitly not signing, and the screen says so.</li>
+      <li><b>Fixed along the way:</b> the client page had been sitting behind the login wall, so every insured opening their link was bounced to a sign-in screen. It had been broken since the feature was first built.</li>
+    </ul>
+  </div>
+
+  <div class="block">
+    <h3>Electronic signature</h3>
+    <ul>
+      <li><b>Typed or drawn.</b> The drawing pad takes finger, stylus, or mouse, and scales to the screen so a phone signature isn't exported blurred.</li>
+      <li><b>Consent is required, and stored word-for-word</b> with each signature. If the wording is revised later, existing signatures still show exactly what was agreed.</li>
+      <li><b>Full audit record:</b> IP address, device, timestamp, proposal version, and the consent text.</li>
+      <li><b>The signed document is frozen.</b> A complete snapshot is taken at the moment of signing, so editing the underlying quote afterwards cannot change what your client agreed to.</li>
+      <li><b>An option must be chosen before signing</b>, so every signature attaches to a specific quote, and a typed signature has to match the legal name entered above it.</li>
+    </ul>
+    <p class="aside">
+      This is the signature described in your specification &mdash; typed or drawn, with a complete audit
+      record. It is <b>not</b> a certified third-party e-signature service. If DocuSign-grade
+      certification is required, please flag it: that is a different build.
+    </p>
+  </div>
+
+  <div class="block">
+    <h3>PDF documents</h3>
+    <ul>
+      <li><b>The full proposal as a branded PDF</b>, paginated properly with repeating table headers and page numbers.</li>
+      <li><b>The signed version adds a signature block and a certification page</b> carrying the audit record, with every time stated in UTC.</li>
+      <li><b>Download from both sides</b> &mdash; you from the dashboard, your client from their own link.</li>
+      <li><b>Which version you get is decided by the proposal's state</b>, never by a setting, so an unsigned copy of a signed document can't be handed out by mistake.</li>
+      <li><b>Internal notes can never reach a client's PDF.</b> The document is built from the client-facing view only.</li>
+    </ul>
+  </div>
+
+  <div class="block">
+    <h3>Tracking and notifications</h3>
+    <ul>
+      <li><b>Twelve kinds of event recorded</b> across the whole lifecycle &mdash; created, sent, resent, opened, viewed, option selected, option changed, signed, PDF generated, link withdrawn, new version, and expired.</li>
+      <li><b>An E-Sign activity log</b> showing that timeline, including the signature audit record.</li>
+      <li><b>You're emailed on first open, on selection, and on signature.</b> Only the first open &mdash; repeat reads aren't news.</li>
+      <li><b>Lead status keeps itself current and never moves backwards</b>; reopening a proposal after signing cannot undo it.</li>
+      <li><b>A signature takes a lead to "Ready to Bind" &mdash; never to "Bound".</b> Insurigence does not bind coverage; that stays your decision once the carrier confirms.</li>
+      <li><b>A lapsed proposal stops reading as "Sent"</b>, so your list stays honest.</li>
+    </ul>
+  </div>
+
+  <div class="block">
+    <h3>Versioning and security</h3>
+    <ul>
+      <li><b>A draft is edited in place.</b> A proposal your client already holds a link to is forked into a new version instead of being overwritten &mdash; and the old link keeps serving exactly what they were sent.</li>
+      <li><b>Signed versions are never editable</b>, and every earlier version stays in the history.</li>
+      <li><b>Every screen is scoped to its own agency.</b> No agency can reach another's leads, proposals, quotes, or documents &mdash; and a request for something outside your agency is answered as though it doesn't exist, rather than confirming it's there.</li>
+      <li><b>Every client link passes through one security gate</b>, so withdrawal and expiry can't be skipped by any route.</li>
+      <li><b>The page sent to a client withholds internal notes, scoring, and file locations</b> &mdash; enforced by test, not by convention.</li>
+    </ul>
+  </div>
+
+  <h2>How to check it</h2>
+  <p class="section-note">
+    One journey through the whole system, in order &mdash; each step feeds the next, so please run them
+    top to bottom. Tick as you go; your progress is saved in this browser.
+  </p>
+
+  <div class="check-card">
+
+    <section class="act">
+      <div class="act-head">
+        <h3>As the agent &mdash; building it</h3>
+        <span>Signed in to Insurigence</span>
+      </div>
+      <label class="step"><input type="checkbox" data-id="a1"><span class="num">01</span><span class="body"><span class="what">Open a lead and click <b>Quotes</b></span><span class="expect">The quote entry screen opens.</span></span></label>
+      <label class="step"><input type="checkbox" data-id="a2"><span class="num">02</span><span class="body"><span class="what">Add two carrier quote options in full</span><span class="expect">Carrier, dates, premium, taxes, fees, limits, deductibles, exclusions.</span></span></label>
+      <label class="step"><input type="checkbox" data-id="a3"><span class="num">03</span><span class="body"><span class="what">Type a total that doesn't match the parts</span><span class="expect">Your figure should win over the calculated one &mdash; carriers do this.</span></span></label>
+      <label class="step"><input type="checkbox" data-id="a4"><span class="num">04</span><span class="body"><span class="what">Attach a carrier quote document, then download it back</span><span class="expect">Uploads and returns intact. Needs storage credentials &mdash; see open items.</span></span></label>
+      <label class="step"><input type="checkbox" data-id="a5"><span class="num">05</span><span class="body"><span class="what">Generate the plain-language coverage breakdown</span><span class="expect">Check every limit and premium it mentions against what you entered.</span></span></label>
+      <label class="step"><input type="checkbox" data-id="a6"><span class="num">06</span><span class="body"><span class="what">Edit some of that wording, then re-generate</span><span class="expect">Your edits survive; anything unreviewed stays flagged until approved.</span></span></label>
+      <label class="step"><input type="checkbox" data-id="a7"><span class="num">07</span><span class="body"><span class="what">Compare the options and use the differences-only filter</span><span class="expect">Only genuine differences remain on screen.</span></span></label>
+      <label class="step"><input type="checkbox" data-id="a8"><span class="num">08</span><span class="body"><span class="what">Mark one recommended and draft the reason</span><span class="expect">The wording must agree with the table beside it &mdash; especially on which is cheaper.</span></span></label>
+      <label class="step"><input type="checkbox" data-id="a9"><span class="num">09</span><span class="body"><span class="what">Open the proposal builder; reorder and retitle a section</span><span class="expect">Required sections can't be removed. The preview updates live.</span></span></label>
+      <label class="step"><input type="checkbox" data-id="a10"><span class="num">10</span><span class="body"><span class="what">Check your branding and the disclaimer</span><span class="expect">Logo, colours, footer, and your agency's disclaimer wording.</span></span></label>
+      <label class="step"><input type="checkbox" data-id="a11"><span class="num">11</span><span class="body"><span class="what">Download the PDF before sending</span><span class="expect">Branded, properly paginated, and free of any internal notes.</span></span></label>
+      <label class="step"><input type="checkbox" data-id="a12"><span class="num">12</span><span class="body"><span class="what">Send your client their secure link</span><span class="expect">Confirm the email itself shows no premiums, carriers, or limits.</span></span></label>
+    </section>
+
+    <section class="act">
+      <div class="act-head">
+        <h3>As the client &mdash; receiving it</h3>
+        <span>Private window, ideally on a phone</span>
+      </div>
+      <label class="step"><input type="checkbox" data-id="b1"><span class="num">13</span><span class="body"><span class="what">Open the emailed link without logging in</span><span class="expect">The proposal loads with no sign-in prompt at all.</span></span></label>
+      <label class="step"><input type="checkbox" data-id="b2"><span class="num">14</span><span class="body"><span class="what">Read it as your client sees it</span><span class="expect">Your recommendation is visible; internal notes and scoring are not.</span></span></label>
+      <label class="step"><input type="checkbox" data-id="b3"><span class="num">15</span><span class="body"><span class="what">Select an option, then change to the other</span><span class="expect">Both are recorded &mdash; changing your mind is allowed until you sign.</span></span></label>
+      <label class="step"><input type="checkbox" data-id="b4"><span class="num">16</span><span class="body"><span class="what">Try to sign without ticking consent</span><span class="expect">It must refuse. This is the one step worth deliberately failing.</span></span></label>
+      <label class="step"><input type="checkbox" data-id="b5"><span class="num">17</span><span class="body"><span class="what">Sign &mdash; typed on desktop, drawn on a phone</span><span class="expect">A typed signature must match the legal name entered above it.</span></span></label>
+      <label class="step"><input type="checkbox" data-id="b6"><span class="num">18</span><span class="body"><span class="what">Download your copy, then revisit the link</span><span class="expect">It stays live afterwards &mdash; it's your client's own record.</span></span></label>
+    </section>
+
+    <section class="act">
+      <div class="act-head">
+        <h3>As the agent &mdash; verifying the record</h3>
+        <span>Back in Insurigence</span>
+      </div>
+      <label class="step"><input type="checkbox" data-id="c1"><span class="num">19</span><span class="body"><span class="what">Check your inbox</span><span class="expect">Emails on first open, on selection, and on signature. The last states in bold that coverage is not bound.</span></span></label>
+      <label class="step"><input type="checkbox" data-id="c2"><span class="num">20</span><span class="body"><span class="what">Open the E-Sign activity log</span><span class="expect">Full timeline, plus IP address, device, timestamp, version, and consent wording.</span></span></label>
+      <label class="step"><input type="checkbox" data-id="c3"><span class="num">21</span><span class="body"><span class="what">Download the signed PDF</span><span class="expect">Signature block and certification page present; all times shown in UTC.</span></span></label>
+      <label class="step"><input type="checkbox" data-id="c4"><span class="num">22</span><span class="body"><span class="what">Edit a quote figure on the signed proposal</span><span class="expect">The signed document must not change. That's the immutability guarantee.</span></span></label>
+      <label class="step"><input type="checkbox" data-id="c5"><span class="num">23</span><span class="body"><span class="what">Confirm the lead reads <b>Ready to Bind</b></span><span class="expect">It must not say Bound. Binding stays your call once the carrier confirms.</span></span></label>
+      <label class="step"><input type="checkbox" data-id="c6"><span class="num">24</span><span class="body"><span class="what">Edit the proposal now it's been signed</span><span class="expect">A new version is created; the link your client holds still shows what they signed.</span></span></label>
+      <label class="step"><input type="checkbox" data-id="c7"><span class="num">25</span><span class="body"><span class="what">Withdraw a link, then try opening it</span><span class="expect">It must be dead immediately.</span></span></label>
+      <label class="step"><input type="checkbox" data-id="c8"><span class="num">26</span><span class="body"><span class="what">Sign in as a different agency and look for this lead</span><span class="expect">Invisible &mdash; no other agency can reach the proposal or its link.</span></span></label>
+    </section>
+
+  </div>
+
+  <div class="pending">
+    <h3>Open items &mdash; please read before testing</h3>
+    <dl>
+      <div>
+        <dt>No browser testing has been done yet</dt>
+        <dd>
+          Everything above is verified by automated tests and code review. Spacing, alignment, and the
+          drawn-signature pad on real devices have not been confirmed visually &mdash; that is what your
+          walkthrough will surface first, and cosmetic issues are expected.
+        </dd>
+      </div>
+      <div>
+        <dt>Document storage needs credentials before step 04 will work</dt>
+        <dd>
+          The upload and download code is written and tested, but has never run against a real bucket.
+          The Cloudflare R2 credentials are needed to switch it on &mdash; this also covers filing a copy
+          of each signed PDF into your agency's storage. Generating and downloading PDFs works today
+          regardless.
+        </dd>
+      </div>
+      <div>
+        <dt>In-app notifications were deferred to a later update</dt>
+        <dd>Email only for now, per your direction. Agents are notified by email at each milestone.</dd>
+      </div>
+      <div>
+        <dt>Signature certification</dt>
+        <dd>
+          Built to your specification &mdash; typed or drawn with a complete audit record. If a certified
+          provider is needed for compliance, please tell us now rather than after launch.
+        </dd>
+      </div>
+      <div>
+        <dt>Out of scope for this release, as agreed</dt>
+        <dd>
+          SMS delivery, multiple signers, agent countersignature, payment collection, automatic binding,
+          carrier API integration, AMS export, and the full client portal.
+        </dd>
+      </div>
+    </dl>
+  </div>
+
+  <footer>
+    Anything that doesn't behave as described above &mdash; or reads oddly, even where it technically
+    works &mdash; is worth sending back. Noting the step number from the checklist is enough for us to
+    reproduce it.
+  </footer>
+
+</div>
+
+<script>
+  (function () {
+    var KEY = 'insurigence-handover-v3';
+    var boxes = document.querySelectorAll('.step input[type="checkbox"]');
+    var saved = {};
+
+    try {
+      saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {};
+    } catch (e) {
+      saved = {};
+    }
+
+    boxes.forEach(function (box) {
+      if (saved[box.dataset.id]) box.checked = true;
+    });
+
+    function persist() {
+      var state = {};
+      boxes.forEach(function (box) {
+        if (box.checked) state[box.dataset.id] = 1;
+      });
+      try {
+        localStorage.setItem(KEY, JSON.stringify(state));
+      } catch (e) {
+        /* private browsing or blocked storage - ticking still works for this visit */
+      }
+    }
+
+    boxes.forEach(function (box) {
+      box.addEventListener('change', persist);
+    });
+  })();
+</script>
+</body>
+</html>
