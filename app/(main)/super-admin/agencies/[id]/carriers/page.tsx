@@ -206,7 +206,7 @@ export default function CarriersPage() {
               <button
                 onClick={createCarrier}
                 disabled={isCreating || !newCarrier.name.trim()}
-                className="px-4 py-2 text-sm font-medium text-white bg-[#00E6A7] rounded-md hover:bg-[#14a09c] disabled:opacity-50"
+                className="px-4 py-2 text-sm font-medium text-[#0D2137] bg-[#00E6A7] rounded-md hover:bg-[#14a09c] disabled:opacity-50"
                 data-testid="button-save"
               >
                 {isCreating ? 'Adding...' : 'Add Carrier'}
@@ -333,7 +333,7 @@ export default function CarriersPage() {
                         <td className="px-4 py-3 text-right">
                           <Link
                             href={`/super-admin/agencies/${agencyId}/appetite-rules?carrierId=${carrier.id}`}
-                            className="text-xs font-medium text-[#00E6A7] hover:text-[#14a09c] mr-3"
+                            className="text-xs font-medium text-[#00805F] hover:text-[#14a09c] mr-3"
                             data-testid={`link-rules-${carrier.id}`}
                           >
                             Rules

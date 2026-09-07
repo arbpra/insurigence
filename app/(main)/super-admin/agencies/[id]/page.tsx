@@ -215,7 +215,7 @@ export default function AgencyDetailPage() {
         <div className="bg-white rounded-xl border border-gray-200 p-8 max-w-md text-center">
           <AlertTriangle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
           <h1 className="text-xl font-semibold text-gray-900 mb-2">Agency Not Found</h1>
-          <Link href="/super-admin/agencies" className="text-sm" style={{ color: '#00E6A7' }}>
+          <Link href="/super-admin/agencies" className="text-sm" style={{ color: '#00805F' }}>
             Back to Agencies
           </Link>
         </div>
@@ -304,7 +304,7 @@ export default function AgencyDetailPage() {
                   </div>
                   <div className="bg-gray-50 rounded-lg p-4" data-testid="stat-evaluated">
                     <p className="text-sm text-gray-500">Evaluated</p>
-                    <p className="text-2xl font-bold" style={{ color: '#00E6A7' }}>{metrics?.evaluatedLeads || 0}</p>
+                    <p className="text-2xl font-bold" style={{ color: '#00805F' }}>{metrics?.evaluatedLeads || 0}</p>
                   </div>
                   <div className="bg-gray-50 rounded-lg p-4" data-testid="stat-this-month">
                     <p className="text-sm text-gray-500">This Month</p>
@@ -334,7 +334,7 @@ export default function AgencyDetailPage() {
                       </div>
                       <div>
                         <p className="text-xs text-gray-500">Evaluations</p>
-                        <p className="text-lg font-semibold" style={{ color: '#00E6A7' }}>{health.evaluationsLast30Days}</p>
+                        <p className="text-lg font-semibold" style={{ color: '#00805F' }}>{health.evaluationsLast30Days}</p>
                       </div>
                       <div>
                         <p className="text-xs text-gray-500">Last Activity</p>
@@ -375,11 +375,11 @@ export default function AgencyDetailPage() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#00E6A715' }}>
-                          <Settings className="w-5 h-5" style={{ color: '#00E6A7' }} />
+                          <Settings className="w-5 h-5" style={{ color: '#00805F' }} />
                         </div>
                         <div>
                           <p className="font-medium text-gray-900">Appetite Rules</p>
-                          <p className="text-2xl font-bold" style={{ color: '#00E6A7' }}>{agency._count.appetiteRules}</p>
+                          <p className="text-2xl font-bold" style={{ color: '#00805F' }}>{agency._count.appetiteRules}</p>
                         </div>
                       </div>
                       <ArrowLeft className="w-5 h-5 text-gray-300 rotate-180 group-hover:translate-x-1 transition-transform" />
@@ -616,7 +616,7 @@ export default function AgencyDetailPage() {
                   <h3 className="text-sm font-medium text-gray-700">Agency Users ({users.length})</h3>
                   <Link
                     href={`/super-admin/users?agencyId=${agencyId}&create=true`}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg text-white"
+                    className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg text-[#0D2137]"
                     style={{ backgroundColor: '#00E6A7' }}
                     data-testid="button-add-user"
                   >

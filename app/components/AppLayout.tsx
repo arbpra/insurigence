@@ -223,7 +223,7 @@ export function AppLayout({ children, userRole: propUserRole }: AppLayoutProps) 
               </button>
 
               <div 
-                className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-semibold"
+                className="w-9 h-9 rounded-full flex items-center justify-center text-[#0D2137] text-sm font-semibold"
                 style={{ backgroundColor: 'var(--brand-accent)' }}
                 data-testid="user-avatar"
               >

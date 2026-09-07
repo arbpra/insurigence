@@ -96,7 +96,7 @@ const WhatToExpect = () => {
               text-white shadow-lg hover:scale-[1.02] transition"
               >
                 {/* Icon */}
-                <div className="text-white rounded-md p-1 mt-1" style={{ background: "#00e6a7" }}>
+                <div className="text-[#0D2137] rounded-md p-1 mt-1" style={{ background: "#00e6a7" }}>
                   <Check size={18} />
                 </div>
 
@@ -127,7 +127,7 @@ const WhatToExpect = () => {
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
-            className="hover:bg-green-500 text-white px-6 py-2 rounded-md shadow-md transition"
+            className="hover:bg-green-500 text-[#0D2137] px-6 py-2 rounded-md shadow-md transition"
             style={{ background: "#00e6a7" }}
           >
             Request Access

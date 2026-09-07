@@ -75,7 +75,7 @@ const CallToActionFooter = () => {
           className="text-base sm:text-lg md:text-xl max-w-2xl mx-auto leading-relaxed mb-10 text-center font-normal"
           style={{ fontFamily: "Helvetica" }}
         >
-          Reach us at <Link href="mailto:contact@insurigence.ai" className="text-blue-600 hover:!text-white transition-colors duration-200">contact@insurigence.ai</Link>
+          Reach us at <Link href="mailto:contact@insurigence.ai" className="text-blue-600 hover:!text-[#0D2137] transition-colors duration-200">contact@insurigence.ai</Link>
         </motion.p>
 
         

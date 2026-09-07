@@ -86,10 +86,10 @@ export default function Compare() {
           </div>
           
           <div className="flex items-center gap-3 p-4 rounded-xl" style={{ backgroundColor: '#00E6A7' }}>
-            <svg className="w-6 h-6 flex-shrink-0 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-6 h-6 flex-shrink-0 text-[#0D2137]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
-            <span className="text-base font-medium text-white">Why agencies use both: AMS platforms manage records. Insurigence helps agencies decide what to submit and where.</span>
+            <span className="text-base font-medium text-[#0D2137]">Why agencies use both: AMS platforms manage records. Insurigence helps agencies decide what to submit and where.</span>
           </div>
         </div>
       </section>
@@ -117,10 +117,10 @@ export default function Compare() {
           </div>
           
           <div className="flex items-center gap-3 p-4 rounded-xl" style={{ backgroundColor: '#00E6A7' }}>
-            <svg className="w-6 h-6 flex-shrink-0 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-6 h-6 flex-shrink-0 text-[#0D2137]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
-            <span className="text-base font-medium text-white">Why agencies use both: CRMs manage sales activity. Insurigence manages placement insight.</span>
+            <span className="text-base font-medium text-[#0D2137]">Why agencies use both: CRMs manage sales activity. Insurigence manages placement insight.</span>
           </div>
         </div>
       </section>
@@ -148,10 +148,10 @@ export default function Compare() {
           </div>
           
           <div className="flex items-center gap-3 p-4 rounded-xl" style={{ backgroundColor: '#00E6A7' }}>
-            <svg className="w-6 h-6 flex-shrink-0 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-6 h-6 flex-shrink-0 text-[#0D2137]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
-            <span className="text-base font-medium text-white">Why agencies use both: Carrier portals are necessary for submissions. Insurigence helps agencies decide which submissions are worth making.</span>
+            <span className="text-base font-medium text-[#0D2137]">Why agencies use both: Carrier portals are necessary for submissions. Insurigence helps agencies decide which submissions are worth making.</span>
           </div>
         </div>
       </section>
@@ -226,7 +226,7 @@ export default function Compare() {
           <div className="grid md:grid-cols-3 gap-6 max-w-3xl mx-auto">
             <div className="bg-white rounded-xl p-6 border border-slate-200/60">
               <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: '#00E6A7' }}>
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6 text-[#0D2137]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
@@ -234,7 +234,7 @@ export default function Compare() {
             </div>
             <div className="bg-white rounded-xl p-6 border border-slate-200/60">
               <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: '#00E6A7' }}>
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6 text-[#0D2137]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
@@ -242,7 +242,7 @@ export default function Compare() {
             </div>
             <div className="bg-white rounded-xl p-6 border border-slate-200/60">
               <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: '#00E6A7' }}>
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6 text-[#0D2137]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
               </div>
@@ -265,7 +265,7 @@ export default function Compare() {
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-8 py-4 text-base font-semibold rounded-xl transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5"
-              style={{ backgroundColor: '#00E6A7', color: 'white' }}
+              style={{ backgroundColor: '#00E6A7', color: '#0D2137' }}
               data-testid="cta-request-demo"
             >
               Request a Demo

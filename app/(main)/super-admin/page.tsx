@@ -361,7 +361,7 @@ export default function SuperAdminHome() {
                               {(lead.coverageTags?.length ? lead.coverageTags : ['GL']).map((tag) => (
                                 <span
                                   key={tag}
-                                  className="px-1.5 py-0.5 bg-gray-100 text-white text-[11px] rounded font-medium"
+                                  className="px-1.5 py-0.5 bg-gray-100 text-[#0D2137] text-[11px] rounded font-medium"
                                 >
                                   {tag}
                                 </span>

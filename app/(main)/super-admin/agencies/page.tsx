@@ -43,9 +43,12 @@ const tierLabels: Record<string, string> = {
   MULTI_LOCATION: 'Multi-Location',
 };
 
+// These are badge fills carrying white text, so each must be dark enough to
+// read against. The brand mint (#00E6A7) is not — white on it is ~1.6:1 — so
+// GROWTH uses the darkened accent instead.
 const tierColors: Record<string, string> = {
   SOLO: '#6B7280',
-  GROWTH: '#00E6A7',
+  GROWTH: '#00805F',
   MULTI_LOCATION: '#0D2137',
 };
 
@@ -205,7 +208,7 @@ export default function AgenciesPage() {
             </div>
             <button
               onClick={() => setShowCreate(!showCreate)}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#0D2137] rounded-lg transition-colors"
               style={{ backgroundColor: '#00E6A7' }}
               data-testid="button-create-agency"
             >
@@ -441,7 +444,7 @@ export default function AgenciesPage() {
                           <Link
                             href={`/super-admin/agencies/${agency.id}`}
                             className="text-sm font-medium hover:underline"
-                            style={{ color: '#00E6A7' }}
+                            style={{ color: '#00805F' }}
                             data-testid={`link-edit-${agency.id}`}
                           >
                             Manage

@@ -93,7 +93,7 @@ export default function PricingTable() {
             Annual
             <span
               className="px-2 py-0.5 text-xs font-semibold rounded-full"
-              style={{ backgroundColor: '#00E6A7', color: 'white' }}
+              style={{ backgroundColor: '#00E6A7', color: '#0D2137' }}
             >
               16% Savings
             </span>
@@ -117,7 +117,7 @@ export default function PricingTable() {
           >
             {plan.isPopular && (
               <div
-                className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 text-xs font-semibold rounded-full text-white"
+                className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 text-xs font-semibold rounded-full text-[#0D2137]"
                 style={{ backgroundColor: '#00E6A7' }}
               >
                 Most popular
@@ -152,7 +152,7 @@ export default function PricingTable() {
                     style={{ backgroundColor: '#00E6A7' }}
                   >
                     <svg
-                      className="w-3 h-3 text-white"
+                      className="w-3 h-3 text-[#0D2137]"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"

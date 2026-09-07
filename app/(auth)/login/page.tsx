@@ -248,7 +248,7 @@ function LoginContent() {
 
             {/* <a
               href="/api/login"
-              className="w-full py-3 px-4 rounded-lg font-semibold text-white transition-all duration-200 hover:opacity-90 flex items-center justify-center gap-2 mb-6"
+              className="w-full py-3 px-4 rounded-lg font-semibold text-[#0D2137] transition-all duration-200 hover:opacity-90 flex items-center justify-center gap-2 mb-6"
               style={{ backgroundColor: '#00E6A7' }}
               data-testid="button-replit-login"
             >

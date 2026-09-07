@@ -475,7 +475,7 @@ export default function AppetiteRulesPage() {
               <button
                 onClick={createRule}
                 disabled={isCreating || !formData.carrierId}
-                className="px-4 py-2 text-sm font-medium text-white bg-[#00E6A7] rounded-md hover:bg-[#14a09c] disabled:opacity-50"
+                className="px-4 py-2 text-sm font-medium text-[#0D2137] bg-[#00E6A7] rounded-md hover:bg-[#14a09c] disabled:opacity-50"
                 data-testid="button-save"
               >
                 {isCreating ? 'Saving...' : editingRule ? 'Save New Version' : 'Create Rule'}

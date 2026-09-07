@@ -195,11 +195,11 @@ export default function UsersPage() {
 
             <div className="bg-white rounded-xl px-4 py-3" style={{ borderTop: '4px solid #00E9B0', borderBottom: '1px solid #dee2e6', borderLeft: '1px solid #dee2e6', borderRight: '1px solid #dee2e6'}} data-testid="stat-agency-admins">                                    
               <p className="text-xs uppercase text-gray-500">Agency Admins</p>
-              <p className="text-2xl font-bold" style={{ color: '#00E9B0' }}>{stats.admins}</p>
+              <p className="text-2xl font-bold" style={{ color: '#00805F' }}>{stats.admins}</p>
             </div>
             <div className="bg-white rounded-xl px-4 py-3" style={{ borderTop: '4px solid #FF6B6B', borderBottom: '1px solid #dee2e6', borderLeft: '1px solid #dee2e6', borderRight: '1px solid #dee2e6'}} data-testid="stat-agents">                                                
               <p className="text-xs uppercase text-gray-500">Agents</p>
-              <p className="text-2xl font-bold" style={{ color: '#FF6B6B' }}>{stats.agents}</p>
+              <p className="text-2xl font-bold" style={{ color: '#DC2626' }}>{stats.agents}</p>
             </div>
           </div>
         )}
@@ -251,7 +251,7 @@ export default function UsersPage() {
             </select>
             <button
               onClick={() => setShowCreateModal(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[#0D2137] text-sm font-medium"
               style={{ backgroundColor: '#00e6a7' }}
               data-testid="button-create-user"
             >
@@ -444,7 +444,7 @@ export default function UsersPage() {
                 <button
                   type="submit"
                   disabled={isCreating}
-                  className="px-4 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-50"
+                  className="px-4 py-2 text-sm font-medium text-[#0D2137] rounded-lg disabled:opacity-50"
                   style={{ backgroundColor: '#00E6A7' }}
                   data-testid="button-submit-user"
                 >
@@ -488,7 +488,7 @@ export default function UsersPage() {
               <div className="flex justify-end pt-2">
                 <button
                   onClick={() => setCreatedUserInfo(null)}
-                  className="px-4 py-2 text-sm font-medium text-white rounded-lg"
+                  className="px-4 py-2 text-sm font-medium text-[#0D2137] rounded-lg"
                   style={{ backgroundColor: '#00E6A7' }}
                   data-testid="button-close-password-modal"
                 >

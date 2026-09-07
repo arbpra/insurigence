@@ -10,6 +10,10 @@
   --brand-primary: #0D2137;
   --brand-accent: #00E6A7;
   --brand-accent-dark: #00C992;
+  /* Readable accent for TEXT and ICONS on light grounds. The mint above is a
+     fill colour: as a foreground it sits at 1.6:1 on white, which is invisible.
+     This is the same hue darkened to clear 4.5:1 on white, gray-50 and #F5F7FA. */
+  --brand-accent-text: #00805F;
   --brand-background: #F5F7FA;
   --brand-text: #0D2137;
   --brand-text-muted: #64748B;
@@ -65,8 +69,11 @@ body {
 
   /* Brand Button - Accent */
   .btn-brand-accent {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold shadow-sm transition-all hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
     background-color: var(--brand-accent);
+    /* Navy, not white: the mint accent is a light colour, so white text on it
+       sits at roughly 1.6:1 contrast and is effectively invisible. Navy is ~10:1. */
+    color: var(--brand-primary);
   }
 
   /* Brand Button - Secondary */
@@ -197,53 +204,42 @@ body {
   }
 }
 
-.bg-red-50, .text-red-700 {
-  background-color: rgb(228, 84, 84);
-   border-radius: 5px;
-}
+/* ──────────────────────────────────────────────────────────────────────────
+   Solid badge pills.
 
-.text-red-600, .bg-red-100 {
+   These rules used to redefine the Tailwind utilities GLOBALLY - e.g.
+   `.text-gray-700 { color: #fff }` - which turned every element using one of
+   those classes white, whether it was a badge or not. That silently broke 62
+   uses of `text-gray-700` (plain labels and headings) and all 21 uses of
+   `text-red-600` (form validation messages), rendering them white on white.
+
+   Each rule is now scoped to the CLASS PAIR it was written for, so the solid
+   pill styling applies to badges only and standalone utilities keep their
+   normal Tailwind colours.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.bg-gray-100.text-gray-700,
+.bg-blue-100.text-blue-700,
+.bg-purple-100.text-purple-700,
+.bg-green-100.text-green-700,
+.bg-red-100.text-red-700,
+.bg-red-50.text-red-700,
+.bg-red-50.text-red-600 {
   color: #fff;
-
+  border-radius: 5px;
 }
 
-.bg-red-50:hover {
+.bg-gray-100.text-gray-700     { background-color: rgb(92, 104, 124); }
+.bg-blue-100.text-blue-700     { background-color: rgb(45, 98, 241); }
+.bg-purple-100.text-purple-700 { background-color: rgb(148, 51, 233); }
+.bg-green-100.text-green-700   { background-color: rgb(21, 128, 61); }
+
+.bg-red-100.text-red-700,
+.bg-red-50.text-red-700,
+.bg-red-50.text-red-600         { background-color: rgb(228, 84, 84); }
+
+/* Outline red buttons - excluded from the solid pills above. */
+.bg-red-50:not(.text-red-700):not(.text-red-600):hover {
   border: 1px solid rgb(228, 84, 84);
   color: rgb(228, 84, 84);
-}
-
-.bg-green-100{
-  background-color: rgb(21 128 61);
-  border-radius: 5px;
-}
-
-.text-green-700 {
-  color: #fff;
-}
-
-.text-blue-700{
-  color: #fff;
-}
-.bg-blue-100{
-  background-color: rgb(45, 98, 241);
-  border-radius: 5px;
-}
-
-.text-purple-700{
-  color: #fff;  
-}
-
-.bg-purple-100{
-  background-color: rgb(148, 51, 233);
-  border-radius: 5px;
-}
-
-.text-gray-700{
-  color: #fff;  
-}
-
-
-.bg-gray-100{
-  background-color: rgb(92, 104, 124);
-  border-radius: 5px;
 }

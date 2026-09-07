@@ -92,13 +92,13 @@ const WhoIsItForCTA = () => {
                     letterSpacing: "-0.03em",
                   }}
                 >
-                  <span className="text-white">
+                  <span className="text-[#0D2137]">
                     See How
                   </span>{" "}
                   <span className="text-[#07496c]">
                     Insurigence
                   </span>{" "}
-                  <span className="text-white">
+                  <span className="text-[#0D2137]">
                     Can
                   </span>{" "}
                   <span className="text-[#07496c]">

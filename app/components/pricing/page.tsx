@@ -92,7 +92,7 @@ export default function Pricing() {
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-8 py-4 text-base font-semibold rounded-xl transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5"
-              style={{ backgroundColor: '#00E6A7', color: 'white' }}
+              style={{ backgroundColor: '#00E6A7', color: '#0D2137' }}
               data-testid="cta-request-demo"
             >
               Request a Demo
