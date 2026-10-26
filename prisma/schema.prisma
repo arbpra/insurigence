@@ -184,6 +184,8 @@ model Agency {
   aiRuns               AiRun[]
   billingAccount       BillingAccount?
   leadCarrierFits      LeadCarrierFit[]
+  deskAssignment       AgencyDeskAssignment?
+  podAccess            AgencyPodAccess[]
 }
 
 model User {
@@ -209,6 +211,10 @@ model User {
   inviteTokens InviteToken[]
   passwordResetTokens PasswordResetToken[]
   createdProposals Proposal[] @relation("CreatedProposals")
+  podMemberships   PodMember[]
+  primaryAmFor     AgencyDeskAssignment[] @relation("PrimaryAccountManager")
+  backupAmFor      AgencyDeskAssignment[] @relation("BackupAccountManager")
+  agencyPodAccess  AgencyPodAccess[]
 
   @@index([role])
 }
@@ -761,4 +767,78 @@ model ActivityEvent {
   @@index([leadId])
   @@index([eventType])
   @@index([createdAt])
+}
+
+// ─── The Desk: organisation ─────────────────────────────────────────────────
+
+/// A specialised team with its own task queue (Service & AMS, Renewals, New
+/// Business, QA). `code` is the stable key used by routing rules and seed data;
+/// `name` is display text an admin may change.
+model Pod {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  code        String   @unique
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members      PodMember[]
+  agencyAccess AgencyPodAccess[]
+}
+
+/// A Desk staff member in a pod. Usually a DESK_VA; an ACCOUNT_MANAGER may also
+/// sit in a pod (e.g. QA, which AMs cover initially). A user may be in several pods.
+model PodMember {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  podId     String   @db.ObjectId
+  userId    String   @db.ObjectId
+  isLead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  pod       Pod      @relation(fields: [podId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([podId, userId])
+  @@index([userId])
+}
+
+/// One per Desk agency: its primary Account Manager and an optional backup.
+/// One AM can be primary for many agencies.
+model AgencyDeskAssignment {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId    String   @unique @db.ObjectId
+  primaryAmId String?  @db.ObjectId
+  backupAmId  String?  @db.ObjectId
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  agency      Agency   @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  primaryAm   User?    @relation("PrimaryAccountManager", fields: [primaryAmId], references: [id])
+  backupAm    User?    @relation("BackupAccountManager", fields: [backupAmId], references: [id])
+
+  @@index([primaryAmId])
+  @@index([backupAmId])
+}
+
+/// Which pods — and optionally which of their members — may work an agency.
+///  userId = null → every member of the pod is authorised for the agency.
+///  userId set    → only that member is (an allow-list for sensitive agencies).
+/// A VA can work an agency's task only through a matching row here AND a
+/// membership of that pod. Rows are only ever created explicitly.
+model AgencyPodAccess {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId  String   @db.ObjectId
+  podId     String   @db.ObjectId
+  userId    String?  @db.ObjectId
+  createdAt DateTime @default(now())
+
+  agency    Agency   @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  pod       Pod      @relation(fields: [podId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([agencyId, podId, userId])
+  @@index([podId])
+  @@index([userId])
 }

@@ -37,6 +37,16 @@ export function isDeskRole(role: string): boolean {
   return (DESK_ROLES as readonly string[]).includes(role);
 }
 
+/** Who may be set as an agency's primary or backup Account Manager. */
+export function canBeAccountManager(role: string): boolean {
+  return role === 'ACCOUNT_MANAGER';
+}
+
+/** Who may sit in a pod: VAs, and AMs (they cover QA initially). */
+export function canBePodMember(role: string): boolean {
+  return role === 'DESK_VA' || role === 'ACCOUNT_MANAGER';
+}
+
 export const ROLE_LABELS: Record<Role, string> = {
   SUPER_ADMIN: 'Super Admin',
   ADMIN: 'Agency Admin',

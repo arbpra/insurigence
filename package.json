@@ -10,6 +10,7 @@
     "check": "tsc",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed:desk": "tsx script/seed-desk-pods.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { randomBytes, scrypt } from 'crypto';
 import { promisify } from 'util';
+import { ensureDefaultPods } from '../lib/desk/pods';
 
 const scryptAsync = promisify(scrypt);
 
@@ -260,6 +261,10 @@ async function main() {
     },
   });
   console.log(`Created agent user: ${agent.email} (password: ${agentPassword})`);
+
+  // 6. The Desk default pods (create-only; never overwrites admin edits)
+  const { created: createdPods } = await ensureDefaultPods(prisma);
+  console.log(`Desk pods created: ${createdPods.length ? createdPods.join(', ') : 'none (already present)'}`);
 
   console.log('\n========================================');
   console.log('Database seeded successfully!');

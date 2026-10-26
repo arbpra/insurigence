@@ -75,7 +75,7 @@ The **Needs answer** column links a module to the open questions in Section 9. *
 | # | Module | Hours | Needs answer | Status |
 |---|---|---:|---|---|
 | 1 | Internal roles: add `ACCOUNT_MANAGER`, `DESK_VA`, `DESK_ADMIN`; `Agency.deskEnabled`; audit every existing role / `agencyId` check so new roles gain no unintended access | 2.5 | — | ✅ Done |
-| 2 | Desk org models: `Pod`, `PodMember`, `AgencyDeskAssignment` (primary + backup AM), `AgencyPodAccess` (authorized pods / VAs per agency); seed the 4 pods | 2.5 | — | ⬜ |
+| 2 | Desk org models: `Pod`, `PodMember`, `AgencyDeskAssignment` (primary + backup AM), `AgencyPodAccess` (authorized pods / VAs per agency); seed the 4 pods | 2.5 | — | ✅ Done |
 | 3 | Book-of-business models: `InsuredAccount`, `Policy`, `ImportBatch` | 2.5 | Q2 (extra fields only) | ⬜ |
 | 4 | Task models: `Task`, `TaskEvent`, `TaskDocument`, `TaskRoutingRule`, `TaskFollowUpRule`, plus type / status / priority / source / visibility enums | 3.0 | — | ⬜ |
 | 5 | Central access layer `lib/desk/access.ts`: per-role scope filters, `canViewTask` / `canEditTask`, cross-tenant returns 404; unit tests | 3.0 | Q3, Q4 (defaults) | ⬜ |
@@ -98,9 +98,27 @@ The **Needs answer** column links a module to the open questions in Section 9. *
 
 **Data:** the 3 existing agencies were backfilled with `deskEnabled: false`. MongoDB treats a missing field differently from `false`, so without this, a future "Desk not enabled" filter would have skipped them. All existing users already satisfy the new agency rule (0 agency users without an agency).
 
-**Verified:** `prisma validate` passed · `tsc --noEmit` exit 0 · **21 tests passed**: 5 unit tests on the role rules, 7 on Super Admin create/update, and 9 calling the real APIs as an Account Manager (leads, lead archive, quotes, proposals, agency settings, team, intake, Super Admin), all denied, with the lead confirmed unchanged. Test users, sessions and audit events were removed afterwards.
+**Verified:** `prisma validate` passed · `tsc --noEmit` exit 0 · **21 tests passed** (`script/verify-desk-roles.ts`): 5 unit tests on the role rules, 7 on Super Admin create/update, and 9 calling the real APIs as an Account Manager (leads, lead archive, quotes, proposals, agency settings, team, intake, Super Admin), all denied, with the lead confirmed unchanged. Test users, sessions and audit events were removed afterwards.
 
 **Not changed yet (by design):** Desk staff who log in currently land on the agency dashboard, which shows "No agency assigned". The Desk landing pages and navigation are Module 7.
+
+**Module 2 — Organisation models (✅ complete, 26 Oct 2026)**
+
+**Delivered:**
+
+- `Pod`: a specialised team with a stable `code` (used by routing rules) and an editable display name, description, active flag and display order.
+- `PodMember`: a staff member in a pod, with an optional "pod lead" flag. One person can be in several pods.
+- `AgencyDeskAssignment`: one per agency, holding its primary Account Manager and an optional backup. One AM can be primary for many agencies.
+- `AgencyPodAccess`: which pods may work an agency. A row without a user authorizes the **whole pod**. A row with a user authorizes **only that person**, which gives an allow-list for sensitive agencies. Nothing is authorized until a row exists.
+- Eligibility rules in `lib/roles.ts`: only Account Managers can be assigned as AM; VAs and AMs can join pods (AMs cover QA initially).
+- **4 default pods seeded** in the live database: Pod 1 Service & AMS (`SERVICE_AMS`), Pod 2 Renewals & Remarketing (`RENEWALS`), Pod 3 New Business & Marketing (`NEW_BUSINESS`), Pod 4 Quality Assurance (`QA`).
+- `npm run db:seed:desk`: a separate, repeatable pod seeder. It only creates missing pods and never overwrites a pod an admin has renamed. It is kept separate from `npm run db:seed` because that script also resets the demo users' passwords. The main seed now creates the pods too, for fresh databases.
+
+**Delete behaviour:** deleting an agency removes its assignment and pod access. Deleting a staff member removes their pod memberships and named access. Deleting a backup AM clears the backup slot but keeps the agency's assignment.
+
+**Issue caught during testing:** a "whole pod" access row is stored with the user field **missing**, and MongoDB does not match a missing field when searching for "no user". Every whole-pod authorization would have been invisible to the access checks in Module 5. Fixed with one shared filter (`WHOLE_POD_ACCESS`) that matches both forms, with tests proving the plain search misses it and the shared filter finds it. Duplicate protection was unaffected, because the unique index treats the two forms the same.
+
+**Verified:** `prisma validate` passed · `prisma db push` created 4 collections and 9 indexes · `tsc --noEmit` exit 0 · **22 tests passed** (`script/verify-desk-org.ts`) covering eligibility, default pods, seeding idempotency, every uniqueness rule and delete behaviour, on temporary agencies and users that were removed afterwards · Module 1 suite re-run: 21 passed.
 
 ### Phase 1 — Admin Setup (10 h)
 
