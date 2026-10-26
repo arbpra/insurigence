@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { validateSuperAdmin } from '@/lib/super-admin-auth';
 import { hashPassword, generateTempPassword } from '@/lib/auth';
+import { isRole, isDeskRole, agencyIdForRole } from '@/lib/roles';
 
 export async function GET(request: NextRequest) {
   const auth = await validateSuperAdmin(request);
@@ -62,6 +63,7 @@ export async function GET(request: NextRequest) {
       superAdmins: users.filter((u) => String(u.role) === 'SUPER_ADMIN').length,
       admins: users.filter((u) => String(u.role) === 'ADMIN').length,
       agents: users.filter((u) => String(u.role) === 'AGENT').length,
+      deskStaff: users.filter((u) => isDeskRole(u.role)).length,
     };
 
     return NextResponse.json({ users, stats });
@@ -89,11 +91,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (role !== 'SUPER_ADMIN' && !agencyId) {
-      return NextResponse.json(
-        { error: 'Agency is required for non-super-admin users' },
-        { status: 400 }
-      );
+    const newRole = role ?? 'AGENT';
+    if (!isRole(newRole)) {
+      return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
+    }
+    const scoped = agencyIdForRole(newRole, agencyId);
+    if (!scoped.ok) {
+      return NextResponse.json({ error: scoped.error }, { status: 400 });
     }
 
     const existingUser = await prisma.user.findFirst({
@@ -116,8 +120,8 @@ export async function POST(request: NextRequest) {
         passwordHash,
         firstName,
         lastName,
-        role: role || 'AGENT',
-        agencyId: role === 'SUPER_ADMIN' ? null : agencyId,
+        role: newRole,
+        agencyId: scoped.agencyId,
         isActive: true,
         mustChangePassword: true,
       },

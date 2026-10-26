@@ -82,10 +82,16 @@ enum ProposalEventType {
   EXPIRED
 }
 
+/// SUPER_ADMIN / ADMIN / AGENT are platform and agency roles. The DESK roles
+/// are internal Insurigence staff for The Desk; they never carry an agencyId —
+/// their access comes only from Desk assignments (see lib/roles.ts).
 enum UserRole {
   SUPER_ADMIN
   ADMIN
   AGENT
+  DESK_ADMIN
+  ACCOUNT_MANAGER
+  DESK_VA
 }
 
 enum LeadSource {
@@ -159,6 +165,10 @@ model Agency {
   /// Agency's own proposal disclaimer. Null falls back to the platform default
   /// in lib/proposals/branding.ts, which Super Admin maintains.
   proposalDisclaimerText String?
+
+  /// The Desk (outsourced operations) is an add-on, off until an admin enables it.
+  deskEnabled          Boolean   @default(false)
+  deskEnabledAt        DateTime?
 
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt

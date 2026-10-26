@@ -2,13 +2,14 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import type { Role } from '@/lib/roles';
 
 interface User {
   id: string;
   email: string;
   firstName: string | null;
   lastName: string | null;
-  role: 'SUPER_ADMIN' | 'ADMIN' | 'AGENT';
+  role: Role;
   agencyId: string | null;
 }
 

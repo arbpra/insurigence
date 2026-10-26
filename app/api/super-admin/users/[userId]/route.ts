@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { validateSuperAdmin } from '@/lib/super-admin-auth';
 import { hashPassword, generateTempPassword } from '@/lib/auth';
+import { isRole, agencyIdForRole } from '@/lib/roles';
 
 export async function GET(
   request: NextRequest,
@@ -78,9 +79,22 @@ export async function PATCH(
 
     if (firstName !== undefined) updateData.firstName = firstName;
     if (lastName !== undefined) updateData.lastName = lastName;
-    if (role !== undefined) updateData.role = role;
-    if (agencyId !== undefined) {
-      updateData.agencyId = role === 'SUPER_ADMIN' ? null : agencyId;
+    // Role and agency are resolved together so a role change can never leave a
+    // stale agencyId behind (e.g. an agent promoted to Account Manager).
+    if (role !== undefined || agencyId !== undefined) {
+      const finalRole = role ?? existingUser.role;
+      if (!isRole(finalRole)) {
+        return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
+      }
+      const scoped = agencyIdForRole(
+        finalRole,
+        agencyId !== undefined ? agencyId : existingUser.agencyId
+      );
+      if (!scoped.ok) {
+        return NextResponse.json({ error: scoped.error }, { status: 400 });
+      }
+      updateData.role = finalRole;
+      updateData.agencyId = scoped.agencyId;
     }
     if (isActive !== undefined) updateData.isActive = isActive;
 

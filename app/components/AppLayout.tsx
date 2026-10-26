@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import type { Role } from '@/lib/roles';
 
 interface NavItem {
   name: string;
@@ -80,13 +81,13 @@ const navigation: NavItem[] = [
 
 interface AppLayoutProps {
   children: React.ReactNode;
-  userRole?: 'SUPER_ADMIN' | 'ADMIN' | 'AGENT';
+  userRole?: Role;
 }
 
 export function AppLayout({ children, userRole: propUserRole }: AppLayoutProps) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [userRole, setUserRole] = useState<'SUPER_ADMIN' | 'ADMIN' | 'AGENT' | undefined>(propUserRole);
+  const [userRole, setUserRole] = useState<Role | undefined>(propUserRole);
 
   useEffect(() => {
     if (!propUserRole) {

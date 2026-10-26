@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader, Badge, Button } from '@/components/ui';
+import type { Role } from '@/lib/roles';
 
 interface TeamUser {
   id: string;
   email: string;
   firstName: string | null;
   lastName: string | null;
-  role: 'SUPER_ADMIN' | 'ADMIN' | 'AGENT';
+  role: Role;
   isActive: boolean;
   mustChangePassword?: boolean;
   lastLoginAt?: string | null;

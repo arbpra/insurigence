@@ -6,13 +6,14 @@ import Link from 'next/link';
 import Logo from '@/app/components/Logo';
 import { Bell, ChevronDown } from 'lucide-react';
 import { LogOut, User, Shield } from 'lucide-react';
+import type { Role } from '@/lib/roles';
 
 interface AuthUser {
   id: string;
   email: string;
   firstName: string | null;
   lastName: string | null;
-  role: 'SUPER_ADMIN' | 'ADMIN' | 'AGENT';
+  role: Role;
   agencyId: string | null;
   isActive: boolean;
   mustChangePassword: boolean;

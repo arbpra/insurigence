@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAdminAuth } from '../layout';
+import { USER_ROLES, ROLE_LABELS, isAgencyRole, type Role } from '@/lib/roles';
 import { 
   Users, ArrowLeft, Plus, Search, X, Check, 
   Building2, Shield, User as UserIcon, MoreVertical
@@ -14,7 +15,7 @@ interface User {
   email: string | null;
   firstName: string | null;
   lastName: string | null;
-  role: 'SUPER_ADMIN' | 'ADMIN' | 'AGENT';
+  role: Role;
   isActive: boolean;
   lastLoginAt: string | null;
   lastActivityAt: string | null;
@@ -36,16 +37,15 @@ interface Stats {
   agents: number;
 }
 
-const roleLabels: Record<string, string> = {
-  SUPER_ADMIN: 'Super Admin',
-  ADMIN: 'Agency Admin',
-  AGENT: 'Agent',
-};
+const roleLabels: Record<string, string> = ROLE_LABELS;
 
 const roleColors: Record<string, { bg: string; text: string }> = {
   SUPER_ADMIN: { bg: 'bg-purple-100', text: 'text-purple-700' },
   ADMIN: { bg: 'bg-blue-100', text: 'text-blue-700' },
   AGENT: { bg: 'bg-gray-100', text: 'text-gray-700' },
+  DESK_ADMIN: { bg: 'bg-teal-100', text: 'text-teal-700' },
+  ACCOUNT_MANAGER: { bg: 'bg-emerald-100', text: 'text-emerald-700' },
+  DESK_VA: { bg: 'bg-amber-100', text: 'text-amber-700' },
 };
 
 export default function UsersPage() {
@@ -70,7 +70,7 @@ export default function UsersPage() {
     email: '',
     firstName: '',
     lastName: '',
-    role: 'AGENT' as 'SUPER_ADMIN' | 'ADMIN' | 'AGENT',
+    role: 'AGENT' as Role,
     agencyId: '',
   });
 
@@ -224,9 +224,9 @@ export default function UsersPage() {
               data-testid="select-role-filter"
             >
               <option value="">All Roles</option>
-              <option value="SUPER_ADMIN">Super Admin</option>
-              <option value="ADMIN">Agency Admin</option>
-              <option value="AGENT">Agent</option>
+              {USER_ROLES.map((r) => (
+                <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+              ))}
             </select>
             <select
               value={statusFilter}
@@ -407,16 +407,25 @@ export default function UsersPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Role *</label>
                 <select
                   value={newUser.role}
-                  onChange={(e) => setNewUser({ ...newUser, role: e.target.value as 'SUPER_ADMIN' | 'ADMIN' | 'AGENT' })}
+                  onChange={(e) => setNewUser({ ...newUser, role: e.target.value as Role })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00E6A7]"
                   data-testid="select-user-role"
                 >
-                  <option value="AGENT">Agent</option>
-                  <option value="ADMIN">Agency Admin</option>
-                  <option value="SUPER_ADMIN">Super Admin</option>
+                  <optgroup label="Agency">
+                    <option value="AGENT">{ROLE_LABELS.AGENT}</option>
+                    <option value="ADMIN">{ROLE_LABELS.ADMIN}</option>
+                  </optgroup>
+                  <optgroup label="The Desk (internal staff)">
+                    <option value="ACCOUNT_MANAGER">{ROLE_LABELS.ACCOUNT_MANAGER}</option>
+                    <option value="DESK_VA">{ROLE_LABELS.DESK_VA}</option>
+                    <option value="DESK_ADMIN">{ROLE_LABELS.DESK_ADMIN}</option>
+                  </optgroup>
+                  <optgroup label="Platform">
+                    <option value="SUPER_ADMIN">{ROLE_LABELS.SUPER_ADMIN}</option>
+                  </optgroup>
                 </select>
               </div>
-              {newUser.role !== 'SUPER_ADMIN' && (
+              {isAgencyRole(newUser.role) && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Agency *</label>
                   <select
