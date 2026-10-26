@@ -186,6 +186,9 @@ model Agency {
   leadCarrierFits      LeadCarrierFit[]
   deskAssignment       AgencyDeskAssignment?
   podAccess            AgencyPodAccess[]
+  insureds             InsuredAccount[]
+  policies             Policy[]
+  importBatches        ImportBatch[]
 }
 
 model User {
@@ -215,6 +218,7 @@ model User {
   primaryAmFor     AgencyDeskAssignment[] @relation("PrimaryAccountManager")
   backupAmFor      AgencyDeskAssignment[] @relation("BackupAccountManager")
   agencyPodAccess  AgencyPodAccess[]
+  importBatches    ImportBatch[]
 
   @@index([role])
 }
@@ -841,4 +845,179 @@ model AgencyPodAccess {
   @@unique([agencyId, podId, userId])
   @@index([podId])
   @@index([userId])
+}
+
+// ─── The Desk: book of business ─────────────────────────────────────────────
+
+enum InsuredStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum InsuredSource {
+  MANUAL
+  IMPORT
+  LEAD_CONVERSION
+}
+
+enum PolicyStatus {
+  ACTIVE
+  PENDING
+  EXPIRED
+  CANCELLED
+}
+
+/// An insured the agency services through The Desk — its book of business.
+/// Distinct from Lead, which is a prospect in the placement pipeline.
+/// Optional identifiers (externalRef, convertedFromLeadId) are indexed, never
+/// @unique: MongoDB's unique index rejects a second missing value.
+model InsuredAccount {
+  id                  String        @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId            String        @db.ObjectId
+
+  name                String
+  /// Normalised name for duplicate detection (lib/desk/insureds.ts). Always
+  /// set through insuredNameKey(), never by hand.
+  nameKey             String
+  dba                 String?
+  status              InsuredStatus @default(ACTIVE)
+
+  contactName         String?
+  contactEmail        String?
+  contactPhone        String?
+  website             String?
+
+  addressLine1        String?
+  addressLine2        String?
+  city                String?
+  state               String?
+  postalCode          String?
+
+  industry            String?
+  description         String?
+  notes               String?
+
+  /// The agency's own id for this client in their AMS.
+  externalRef         String?
+
+  source              InsuredSource @default(MANUAL)
+  /// Set when created by an import; lets a whole batch be undone.
+  importBatchId       String?       @db.ObjectId
+  convertedFromLeadId String?       @db.ObjectId
+  createdById         String?       @db.ObjectId
+
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  agency              Agency        @relation(fields: [agencyId], references: [id])
+  policies            Policy[]
+
+  @@index([agencyId, nameKey])
+  @@index([agencyId, status])
+  @@index([agencyId, externalRef])
+  @@index([importBatchId])
+  @@index([convertedFromLeadId])
+}
+
+/// A policy held by an insured. Expiration dates drive renewal work later, so
+/// they are indexed per agency. Line of business is free text: agency books
+/// span many lines and AMS exports label them inconsistently.
+model Policy {
+  id             String       @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId       String       @db.ObjectId
+  insuredId      String       @db.ObjectId
+
+  policyNumber   String?
+  lineOfBusiness String?
+  /// Free-text carrier name, as on QuoteOption; carrierId links the agency's
+  /// carrier list when it matches.
+  carrierName    String?
+  carrierId      String?      @db.ObjectId
+  effectiveDate  DateTime?
+  expirationDate DateTime?
+  premiumCents   BigInt?
+  status         PolicyStatus @default(ACTIVE)
+  notes          String?
+  externalRef    String?
+
+  importBatchId  String?      @db.ObjectId
+  createdById    String?      @db.ObjectId
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  agency         Agency          @relation(fields: [agencyId], references: [id])
+  insured        InsuredAccount  @relation(fields: [insuredId], references: [id], onDelete: Cascade)
+
+  @@index([insuredId])
+  @@index([agencyId, expirationDate])
+  @@index([agencyId, policyNumber])
+  @@index([importBatchId])
+}
+
+enum ImportBatchStatus {
+  STAGED
+  COMMITTED
+  FAILED
+  UNDONE
+}
+
+enum ImportRowStatus {
+  PENDING
+  VALID
+  ERROR
+  DUPLICATE
+  IMPORTED
+  SKIPPED
+}
+
+/// One spreadsheet upload. Rows live in ImportRow (a large book would exceed
+/// MongoDB's 16 MB document limit if embedded here).
+model ImportBatch {
+  id                  String            @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId            String            @db.ObjectId
+  uploadedById        String            @db.ObjectId
+
+  fileName            String
+  fileSize            Int?
+  status              ImportBatchStatus @default(STAGED)
+  /// { sourceColumn: targetField } chosen in the mapping step.
+  columnMapping       Json?
+
+  rowCount            Int               @default(0)
+  insuredsCreated     Int               @default(0)
+  policiesCreated     Int               @default(0)
+  rowsSkipped         Int               @default(0)
+
+  committedAt         DateTime?
+  undoneAt            DateTime?
+  undoneById          String?           @db.ObjectId
+
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  agency              Agency            @relation(fields: [agencyId], references: [id])
+  uploadedBy          User              @relation(fields: [uploadedById], references: [id])
+  rows                ImportRow[]
+
+  @@index([agencyId, createdAt])
+}
+
+model ImportRow {
+  id         String          @id @default(auto()) @map("_id") @db.ObjectId
+  batchId    String          @db.ObjectId
+  agencyId   String          @db.ObjectId
+  /// 1-based row number as the user sees it in their spreadsheet.
+  rowNumber  Int
+  /// The row as parsed: { sourceColumn: cellValue }.
+  data       Json
+  status     ImportRowStatus @default(PENDING)
+  errors     String[]        @default([])
+  insuredId  String?         @db.ObjectId
+  policyId   String?         @db.ObjectId
+
+  batch      ImportBatch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, rowNumber])
+  @@index([batchId, status])
 }

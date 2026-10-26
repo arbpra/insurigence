@@ -76,7 +76,7 @@ The **Needs answer** column links a module to the open questions in Section 9. *
 |---|---|---:|---|---|
 | 1 | Internal roles: add `ACCOUNT_MANAGER`, `DESK_VA`, `DESK_ADMIN`; `Agency.deskEnabled`; audit every existing role / `agencyId` check so new roles gain no unintended access | 2.5 | — | ✅ Done |
 | 2 | Desk org models: `Pod`, `PodMember`, `AgencyDeskAssignment` (primary + backup AM), `AgencyPodAccess` (authorized pods / VAs per agency); seed the 4 pods | 2.5 | — | ✅ Done |
-| 3 | Book-of-business models: `InsuredAccount`, `Policy`, `ImportBatch` | 2.5 | Q2 (extra fields only) | ⬜ |
+| 3 | Book-of-business models: `InsuredAccount`, `Policy`, `ImportBatch` | 2.5 | Q2 (extra fields only) | ✅ Done |
 | 4 | Task models: `Task`, `TaskEvent`, `TaskDocument`, `TaskRoutingRule`, `TaskFollowUpRule`, plus type / status / priority / source / visibility enums | 3.0 | — | ⬜ |
 | 5 | Central access layer `lib/desk/access.ts`: per-role scope filters, `canViewTask` / `canEditTask`, cross-tenant returns 404; unit tests | 3.0 | Q3, Q4 (defaults) | ⬜ |
 | 6 | Task service layer `lib/desk/tasks.ts`: create (routing + AM attach + due date), status state machine, assign, note; every action writes a `TaskEvent`; internal → agency status mapping | 3.0 | Q5 (due-date defaults) | ⬜ |
@@ -119,6 +119,27 @@ The **Needs answer** column links a module to the open questions in Section 9. *
 **Issue caught during testing:** a "whole pod" access row is stored with the user field **missing**, and MongoDB does not match a missing field when searching for "no user". Every whole-pod authorization would have been invisible to the access checks in Module 5. Fixed with one shared filter (`WHOLE_POD_ACCESS`) that matches both forms, with tests proving the plain search misses it and the shared filter finds it. Duplicate protection was unaffected, because the unique index treats the two forms the same.
 
 **Verified:** `prisma validate` passed · `prisma db push` created 4 collections and 9 indexes · `tsc --noEmit` exit 0 · **22 tests passed** (`script/verify-desk-org.ts`) covering eligibility, default pods, seeding idempotency, every uniqueness rule and delete behaviour, on temporary agencies and users that were removed afterwards · Module 1 suite re-run: 21 passed.
+
+**Module 3 — Book-of-business models (✅ complete, 26 Oct 2026)**
+
+**Delivered:**
+
+- `InsuredAccount`: an agency's serviced client. Name and DBA, active / inactive status, contact (name, email, phone, website), mailing address, industry, description, notes, and the agency's own AMS client code. It also records how the account was created (manual, import, or converted from a lead), which import created it, and who created it. It is kept separate from `Lead`, which stays the prospect pipeline.
+- `Policy`: belongs to an insured. Policy number, line of business, carrier, effective and expiration dates, premium, status (active / pending / expired / cancelled), notes and AMS reference. Premiums are stored in whole cents, as with quotes.
+- `ImportBatch`: one spreadsheet upload. File details, the column mapping chosen, row and result counts, and committed / undone timestamps for the one-click undo in Module 17.
+- `ImportRow`: each uploaded row exactly as parsed, with its row number, validation status and error messages. Rows are stored separately because a large book embedded in the batch could exceed MongoDB's 16 MB document limit.
+- `lib/desk/insureds.ts` → `insuredNameKey()`: a normalized name for duplicate detection. "ABC Plumbing, L.L.C.", "abc plumbing llc" and "ABC Plumbing" all match. It ignores punctuation, accents, "&" vs "and", a leading "The" and legal suffixes (LLC, Inc, Co, Ltd …), while keeping genuinely different names apart.
+
+**Design decisions:**
+
+- **Line of business and carrier are free text.** The existing line-of-business list only contains Commercial GL, and agency AMS exports label lines inconsistently. Carrier follows the quote pattern: a free-text name plus an optional link to the agency's carrier list. Standard lists can be added once the client's AMS answer (Q1) is known.
+- **Optional identifiers are indexed, not unique.** MongoDB's unique index allows only one record with a missing value, which would block the second insured imported without an AMS code. Duplicates are detected by the importer (Module 16), where the user can decide what to do with them.
+- **Indexed for the queries that come next:** duplicate lookup (agency + name key), AMS code lookup, renewals (agency + expiration date), and undo (import batch).
+- **Undo is explicit.** Deleting an import record removes its rows but never the clients it created. Removing those is a deliberate action with its own safety checks (Module 17).
+
+**Pending client input (Q2):** core fields are in place. Extra columns from the client's real exports can be added without affecting existing data.
+
+**Verified:** `prisma validate` passed · `prisma db push` created 4 collections and 12 indexes · `tsc --noEmit` exit 0 · **28 tests passed** (`script/verify-desk-book.ts`): 9 on name matching, and 19 against the database covering agency separation, multiple clients without AMS codes, exact premium storage for very large amounts, the 90-day renewal query, import rows and undo lookup, and delete behaviour, on temporary agencies removed afterwards · Module 1 and 2 suites re-run: 21 and 22 passed.
 
 ### Phase 1 — Admin Setup (10 h)
 
