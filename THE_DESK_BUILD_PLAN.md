@@ -77,7 +77,7 @@ The **Needs answer** column links a module to the open questions in Section 9. *
 | 1 | Internal roles: add `ACCOUNT_MANAGER`, `DESK_VA`, `DESK_ADMIN`; `Agency.deskEnabled`; audit every existing role / `agencyId` check so new roles gain no unintended access | 2.5 | — | ✅ Done |
 | 2 | Desk org models: `Pod`, `PodMember`, `AgencyDeskAssignment` (primary + backup AM), `AgencyPodAccess` (authorized pods / VAs per agency); seed the 4 pods | 2.5 | — | ✅ Done |
 | 3 | Book-of-business models: `InsuredAccount`, `Policy`, `ImportBatch` | 2.5 | Q2 (extra fields only) | ✅ Done |
-| 4 | Task models: `Task`, `TaskEvent`, `TaskDocument`, `TaskRoutingRule`, `TaskFollowUpRule`, plus type / status / priority / source / visibility enums | 3.0 | — | ⬜ |
+| 4 | Task models: `Task`, `TaskEvent`, `TaskDocument`, `TaskRoutingRule`, `TaskFollowUpRule`, plus type / status / priority / source / visibility enums | 3.0 | — | ✅ Done |
 | 5 | Central access layer `lib/desk/access.ts`: per-role scope filters, `canViewTask` / `canEditTask`, cross-tenant returns 404; unit tests | 3.0 | Q3, Q4 (defaults) | ⬜ |
 | 6 | Task service layer `lib/desk/tasks.ts`: create (routing + AM attach + due date), status state machine, assign, note; every action writes a `TaskEvent`; internal → agency status mapping | 3.0 | Q5 (due-date defaults) | ⬜ |
 | 7 | Navigation shell: role-aware sidebar and post-login landing; route areas `/desk` (agency), `/desk-ops` (AM / VA), `/super-admin/desk`; placeholder pages | 2.5 | — | ⬜ |
@@ -140,6 +140,43 @@ The **Needs answer** column links a module to the open questions in Section 9. *
 **Pending client input (Q2):** core fields are in place. Extra columns from the client's real exports can be added without affecting existing data.
 
 **Verified:** `prisma validate` passed · `prisma db push` created 4 collections and 12 indexes · `tsc --noEmit` exit 0 · **28 tests passed** (`script/verify-desk-book.ts`): 9 on name matching, and 19 against the database covering agency separation, multiple clients without AMS codes, exact premium storage for very large amounts, the 90-day renewal query, import rows and undo lookup, and delete behaviour, on temporary agencies removed afterwards · Module 1 and 2 suites re-run: 21 and 22 passed.
+
+**Module 4 — Task models (✅ complete, 26 Oct 2026)**
+
+**Delivered:**
+
+- `Task`: the backbone. Every task carries its agency, and optionally the insured and policy. It also holds type, title, description, priority, status, pod, Account Manager, assigned VA, working due date, the original target date, source (agency / internal / system / AI), escalation details, start / complete / cancel times, last activity, and a parent task for subtasks.
+- **Reference numbers:** every task gets a short number (#1001, #1002 …) that agencies and staff can quote to each other. It is issued by an atomic counter, so two requests submitted at the same moment can never receive the same number.
+- **14 request types:** COI, Endorsement, ACORD, AMS Entry, Policy Update, Document Upload, Renewal, Remarketing, Loss Runs, New Business, Submission, Proposal Prep, QA Review, Other.
+- **8 internal statuses:** New, Assigned, In Progress, Waiting on Agency, Waiting on Carrier, QA Review, Completed, Cancelled. The simplified agency view is built on top of these in Module 6.
+- `TaskEvent`: the task's permanent history (status changes, assignments, routing, priority / due-date changes, notes, documents, escalations, subtasks). Each entry is marked **internal** or **agency-visible**, and is **internal by default**, so a mistake hides information rather than leaking it.
+- `TaskDocument`: files on a task, stored privately in the existing secure storage, also internal by default. Removing a file hides it but keeps the record for the history.
+- `TaskRoutingRule`: which pod each request type goes to, its default priority and its turnaround. **Seeded with 13 rules** (below).
+- `TaskFollowUpRule`: "when a task of type X reaches status Y, create a task of type Z". **Seeded with the client's example:** Renewal completed → AMS update for Pod 1. Also New Business completed → AMS entry.
+- `npm run db:seed:desk` now seeds pods, routing and follow-up rules. It is create-only, so an admin's edits are never overwritten.
+
+**Default routing (turnaround times are placeholders until the client answers Q5):**
+
+| Pod | Request types | Turnaround |
+|---|---|---|
+| Pod 1 – Service & AMS | COI | 24 h |
+| | Endorsement, ACORD, AMS Entry, Policy Update, Document Upload | 48 h |
+| Pod 2 – Renewals & Remarketing | Renewal, Remarketing | 120 h |
+| | Loss Runs | 72 h |
+| Pod 3 – New Business & Marketing | New Business | 120 h |
+| | Submission, Proposal Prep | 72 h |
+| Pod 4 – Quality Assurance | QA Review | 24 h |
+| *(none — Account Manager triages)* | Other | — |
+
+**Design decisions:**
+
+- **Two due dates.** The *working* due date can be moved by the AM. The *target* date is set once at creation and never changes, so turnaround reporting (Module 31) measures against what was originally committed.
+- **Work history is protected.** An insured, policy or parent task that has tasks against it cannot be deleted. This also covers import undo (Module 17), which can never wipe out a client that already has work.
+- **AI-ready:** each task records whether it was created by an agency, staff, an automatic rule or AI, and can link to the existing AI audit trail.
+
+**Issue prevented:** the same MongoDB gap found in Module 2 applies to tasks. A task with no pod or no assignee stores those fields as missing, so the "waiting for AM triage" and "unassigned in the pod queue" lists would have silently shown nothing. Shared filters (`UNROUTED`, `UNASSIGNED`, `TOP_LEVEL` in `lib/desk/task-filters.ts`) are in place before any screen uses them, with a test proving the plain filter misses these tasks.
+
+**Verified:** `prisma validate` passed · `prisma db push` created 6 collections and 14 indexes · `tsc --noEmit` exit 0 · seeding re-run creates nothing · **26 tests passed** (`script/verify-desk-tasks.ts`): seeded rules, 25 simultaneous reference requests all receiving distinct consecutive numbers, task defaults, subtasks, queue filters, internal-vs-agency timeline, document soft delete, and delete protection, on temporary records removed afterwards · Module 1–3 suites re-run: 21, 22, 28 passed.
 
 ### Phase 1 — Admin Setup (10 h)
 

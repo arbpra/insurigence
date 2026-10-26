@@ -189,6 +189,7 @@ model Agency {
   insureds             InsuredAccount[]
   policies             Policy[]
   importBatches        ImportBatch[]
+  tasks                Task[]
 }
 
 model User {
@@ -219,6 +220,8 @@ model User {
   backupAmFor      AgencyDeskAssignment[] @relation("BackupAccountManager")
   agencyPodAccess  AgencyPodAccess[]
   importBatches    ImportBatch[]
+  amTasks          Task[] @relation("TaskAccountManager")
+  assignedTasks    Task[] @relation("TaskAssignee")
 
   @@index([role])
 }
@@ -788,8 +791,11 @@ model Pod {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  members      PodMember[]
-  agencyAccess AgencyPodAccess[]
+  members       PodMember[]
+  agencyAccess  AgencyPodAccess[]
+  tasks         Task[]
+  routingRules  TaskRoutingRule[]
+  followUpRules TaskFollowUpRule[]
 }
 
 /// A Desk staff member in a pod. Usually a DESK_VA; an ACCOUNT_MANAGER may also
@@ -911,6 +917,7 @@ model InsuredAccount {
 
   agency              Agency        @relation(fields: [agencyId], references: [id])
   policies            Policy[]
+  tasks               Task[]
 
   @@index([agencyId, nameKey])
   @@index([agencyId, status])
@@ -948,6 +955,7 @@ model Policy {
 
   agency         Agency          @relation(fields: [agencyId], references: [id])
   insured        InsuredAccount  @relation(fields: [insuredId], references: [id], onDelete: Cascade)
+  tasks          Task[]
 
   @@index([insuredId])
   @@index([agencyId, expirationDate])
@@ -1020,4 +1028,225 @@ model ImportRow {
 
   @@unique([batchId, rowNumber])
   @@index([batchId, status])
+}
+
+// ─── The Desk: tasks ────────────────────────────────────────────────────────
+
+enum TaskType {
+  COI
+  ENDORSEMENT
+  ACORD
+  AMS_ENTRY
+  POLICY_UPDATE
+  DOCUMENT_UPLOAD
+  RENEWAL
+  REMARKETING
+  LOSS_RUNS
+  NEW_BUSINESS
+  SUBMISSION
+  PROPOSAL_PREP
+  QA_REVIEW
+  OTHER
+}
+
+/// Internal workflow status. Agencies see a simplified mapping (Module 6).
+enum TaskStatus {
+  NEW
+  ASSIGNED
+  IN_PROGRESS
+  WAITING_ON_AGENCY
+  WAITING_ON_CARRIER
+  QA_REVIEW
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+/// Who or what created the task. AI-created tasks are suggestions until a
+/// person accepts them (see AI_ROADMAP.md guardrails).
+enum TaskSource {
+  AGENCY
+  INTERNAL
+  SYSTEM
+  AI
+}
+
+enum DeskVisibility {
+  INTERNAL
+  AGENCY
+}
+
+enum TaskEventKind {
+  CREATED
+  STATUS_CHANGED
+  ASSIGNED
+  UNASSIGNED
+  ROUTED
+  PRIORITY_CHANGED
+  DUE_DATE_CHANGED
+  NOTE
+  DOCUMENT_ADDED
+  DOCUMENT_REMOVED
+  ESCALATED
+  DEESCALATED
+  SUBTASK_CREATED
+}
+
+/// A unit of Desk work, always tied to an agency and, when applicable, an
+/// insured and policy. podId null = not routed yet (no rule matched); it waits
+/// for the AM to triage. Writes go through the task service (Module 6) so every
+/// change is recorded as a TaskEvent.
+model Task {
+  id               String        @id @default(auto()) @map("_id") @db.ObjectId
+  /// Human-friendly number shown to agencies and staff, e.g. #1042.
+  reference        Int           @unique
+  agencyId         String        @db.ObjectId
+  insuredId        String?       @db.ObjectId
+  policyId         String?       @db.ObjectId
+  parentTaskId     String?       @db.ObjectId
+
+  type             TaskType
+  title            String
+  description      String?
+  priority         TaskPriority  @default(NORMAL)
+  status           TaskStatus    @default(NEW)
+
+  podId            String?       @db.ObjectId
+  amId             String?       @db.ObjectId
+  assigneeId       String?       @db.ObjectId
+
+  /// Working due date; an AM may move it.
+  dueAt            DateTime?
+  /// Target set at creation from the routing rule's turnaround. Never edited,
+  /// so turnaround reporting measures against the original commitment.
+  slaDueAt         DateTime?
+
+  source           TaskSource    @default(AGENCY)
+  createdById      String?       @db.ObjectId
+  /// Set when Insurigence AI proposed the task; links the AiRun audit trail.
+  aiRunId          String?       @db.ObjectId
+
+  escalated        Boolean       @default(false)
+  escalatedAt      DateTime?
+  escalationReason String?
+
+  startedAt        DateTime?
+  completedAt      DateTime?
+  cancelledAt      DateTime?
+  lastActivityAt   DateTime      @default(now())
+
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  agency           Agency          @relation(fields: [agencyId], references: [id])
+  /// Restrict: an insured or policy with work history cannot be deleted.
+  insured          InsuredAccount? @relation(fields: [insuredId], references: [id], onDelete: Restrict)
+  policy           Policy?         @relation(fields: [policyId], references: [id], onDelete: Restrict)
+  pod              Pod?            @relation(fields: [podId], references: [id])
+  am               User?           @relation("TaskAccountManager", fields: [amId], references: [id])
+  assignee         User?           @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  parent           Task?           @relation("Subtasks", fields: [parentTaskId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subtasks         Task[]          @relation("Subtasks")
+  events           TaskEvent[]
+  documents        TaskDocument[]
+
+  @@index([agencyId, status])
+  @@index([podId, status])
+  @@index([assigneeId, status])
+  @@index([amId, status])
+  @@index([insuredId])
+  @@index([parentTaskId])
+  @@index([status, dueAt])
+}
+
+/// Append-only history of a task: status changes, assignments, notes and
+/// documents. AGENCY entries form the agency's timeline; INTERNAL entries are
+/// never shown to the agency. Defaults to INTERNAL so a mistake hides
+/// information rather than leaking it.
+model TaskEvent {
+  id         String         @id @default(auto()) @map("_id") @db.ObjectId
+  taskId     String         @db.ObjectId
+  agencyId   String         @db.ObjectId
+  actorId    String?        @db.ObjectId
+  kind       TaskEventKind
+  visibility DeskVisibility @default(INTERNAL)
+  body       String?
+  fromStatus TaskStatus?
+  toStatus   TaskStatus?
+  metadata   Json?
+  createdAt  DateTime       @default(now())
+
+  task       Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
+  @@index([agencyId, createdAt])
+}
+
+/// A file on a task, stored privately in R2 (lib/storage/r2.ts). Removal is a
+/// soft delete so the history keeps what was there.
+model TaskDocument {
+  id           String         @id @default(auto()) @map("_id") @db.ObjectId
+  taskId       String         @db.ObjectId
+  agencyId     String         @db.ObjectId
+  storageKey   String
+  fileName     String
+  fileSize     Int
+  contentType  String
+  visibility   DeskVisibility @default(INTERNAL)
+  uploadedById String?        @db.ObjectId
+  deletedAt    DateTime?
+  deletedById  String?        @db.ObjectId
+  createdAt    DateTime       @default(now())
+
+  task         Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([agencyId])
+}
+
+/// Where a new task of each type goes. One rule per type; a type with no
+/// active rule stays unrouted for AM triage. Edited by admins (Module 11).
+model TaskRoutingRule {
+  id              String       @id @default(auto()) @map("_id") @db.ObjectId
+  taskType        TaskType     @unique
+  podId           String       @db.ObjectId
+  defaultPriority TaskPriority @default(NORMAL)
+  /// Hours from creation to slaDueAt. Null = no default due date.
+  turnaroundHours Int?
+  isActive        Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  pod             Pod          @relation(fields: [podId], references: [id])
+}
+
+/// When a task of triggerType reaches triggerStatus, create a createType
+/// subtask. podId null = route the new task by its routing rule.
+model TaskFollowUpRule {
+  id            String     @id @default(auto()) @map("_id") @db.ObjectId
+  triggerType   TaskType
+  triggerStatus TaskStatus @default(COMPLETED)
+  createType    TaskType
+  podId         String?    @db.ObjectId
+  titleTemplate String
+  isActive      Boolean    @default(true)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  pod           Pod?       @relation(fields: [podId], references: [id])
+
+  @@unique([triggerType, triggerStatus, createType])
+}
+
+/// Named counters for human-friendly sequence numbers (e.g. task references).
+/// Incremented atomically in lib/desk/sequence.ts.
+model DeskCounter {
+  id    String @id @map("_id")
+  value Int
 }
