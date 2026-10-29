@@ -85,7 +85,7 @@ Modules are sized for **one 2–3 hour working session each**, ordered so each b
 | 5 | Agency-side roles and account assignment: add the `CSR` agency role, label the existing `AGENT` role "Producer", per-user book access (all accounts / assigned only) set by the agency admin, `InsuredAssignment` (several producers / service staff per account) | 2.5 | 🆕 Q3 | ✅ Done |
 | 6 | Agency Desk profile and billing data: agency AMS system + agency-specific instructions + password-vault reference (never passwords); `DeskPlan` (Core / Growth / Complete) with monthly allowances, agency plan + overrides; task billing fields (service category, units, complexity, included / overage / non-billable, billing status) | 3.0 | 🆕 Q1, Q6 | ✅ Done |
 | 7 | Service levels and business calendar: task complexity (standard / complex), `WAITING_ON_INSURED` status, `ServiceLevelTarget` (by type × complexity × priority, with per-agency agreement overrides; business-time or days-before-expiration), business hours + holidays; seed the client's targets; replaces the placeholder turnaround on routing rules | 3.0 | 🆕 Q5 | ✅ Done |
-| 8 | Need-to-know and audit models: document sensitivity category, VA sensitive-data permissions, task restriction to named staff, `DeskAuditLog` for every action including document views and downloads | 2.5 | 🆕 Q4 | ⬜ |
+| 8 | Need-to-know and audit models: document sensitivity category, VA sensitive-data permissions, task restriction to named staff, `DeskAuditLog` for every action including document views and downloads | 2.5 | 🆕 Q4 | ✅ Done |
 | 9 | Access layer, part 1 — `lib/desk/access.ts` for agency users (admin / producer / CSR, book access, account assignment) and Account Managers; cross-tenant returns 404 | 2.5 | ✏️ Q3 | ⬜ |
 | 10 | Access layer, part 2 — VAs on a need-to-know basis: agency authorization × pod × named restrictions × task; VAs reach insureds and policies only through tasks they can work; sensitive documents only with explicit permission | 2.5 | ✏️ Q4 | ⬜ |
 | 11 | Business-hours SLA engine (pure, unit-tested): add business time across nights, weekends and holidays; elapsed time excluding waiting periods; expiration-anchored targets | 3.0 | 🆕 Q5 | ⬜ |
@@ -269,6 +269,25 @@ Modules are sized for **one 2–3 hour working session each**, ordered so each b
 **For the client:** five request types have **no target yet** because none was given: **ACORD, Loss Runs, Proposal Prep, QA Review and Other**. Those tasks will have no target date until one is set (detail D5).
 
 **Verified:** `prisma validate` passed · `prisma db push` created 3 collections and 3 indexes · `tsc --noEmit` exit 0 · **31 tests passed** (`script/verify-desk-service-levels.ts`): target selection across agency / priority / complexity / type, inactive and missing targets; wording and validation; all 11 client targets stored correctly; duplicate defaults refused whether empty fields were written or left out; agency agreements beside defaults; calendar values and a valid time zone; every observed holiday on a weekday; re-seeding creating nothing; the new status and target snapshot on a task; temporary records removed · Module 1–6 suites re-run: 21, 22, 28, 26, 31, 33 passed.
+
+**Module 8 — Need-to-know and audit models (✅ complete, 29 Oct 2026)**
+
+**Delivered:**
+
+- **Document sensitivity:** every task document is classified as **General, Policy documents, Financial or Personal information** (placeholder categories, D3). There is **no default**: the uploader must choose, so an unclassified bank statement can never land in the open category.
+- **Who sees which category** (`lib/desk/need-to-know.ts`):
+  - **Desk VAs:** General and Policy, plus Financial and / or Personal only if individually granted.
+  - **Account Managers, Operations Managers and Super Admin:** everything for the agencies they oversee.
+  - **Agency users:** all of their own agency's documents.
+- `DeskStaffPermission`: one record per Desk staff member, holding the extra categories they've been granted. No record means defaults only. (Granting screen: Module 17.)
+- **Restricting a task to named staff:** a task can be limited to specific people, with a reason (for example "VIP client"). Only those people, the agency's Account Manager and Operations Managers can see it. Agency users are unaffected. This works alongside the agency-level restriction from Module 2 (authorizing only named VAs for an agency).
+- `DeskAuditLog`: the security trail. Every create, change, view, download and **refused attempt**, with who, their role, what, which agency, IP address and browser, plus context. It is separate from the task history agencies see, and is never shown to agencies.
+  - **It fails closed:** if an entry can't be written, the action doesn't happen, so "all actions are logged" holds.
+  - **Values under secret-looking names** (password, token, API key, PIN) are redacted before saving, at any depth.
+
+**Issue found and solved:** a task stored without its restriction list (possible after a raw database write or migration) **cannot be matched by any Prisma filter**. Tests showed "is empty", "equals empty" and even "NOT non-empty" all skip it, so such a task would silently vanish from every queue. Normal code always stores the list. As a safeguard, an integrity check and repair (`lib/desk/integrity.ts`) now runs with `npm run db:seed:desk`, and it found nothing to repair in the live data.
+
+**Verified:** `prisma validate` passed · `prisma db push` created 2 collections and 5 indexes · `tsc --noEmit` exit 0 · **37 tests passed** (`script/verify-desk-need-to-know.ts`): the full sensitivity matrix by role and grant; restriction rules; restriction as a database filter, including the missing-list trap, detection, repair and idempotency; documents refused without a category; one permission record per person, applied to a real financial document; audit redaction, request context, a recorded download and a recorded refusal; and a simulated database failure proving the audit log fails closed · Module 1–7 suites re-run: 21, 22, 28, 26, 31, 33, 31 passed.
 
 ### Phase 1 — Admin Setup (13 h)
 

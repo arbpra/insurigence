@@ -106,7 +106,7 @@ async function wipe() {
   ok('agency timeline (AGENCY only) excludes the internal note',
     (await prisma.taskEvent.findMany({ where: { taskId: parent.id, visibility: 'AGENCY' } })).every((e) => e.kind !== 'NOTE'));
   const doc = await prisma.taskDocument.create({ data: {
-    taskId: parent.id, agencyId, storageKey: `agencies/${agencyId}/tasks/x/a.pdf`, fileName: 'a.pdf', fileSize: 10, contentType: 'application/pdf' } });
+    taskId: parent.id, agencyId, storageKey: `agencies/${agencyId}/tasks/x/a.pdf`, fileName: 'a.pdf', fileSize: 10, contentType: 'application/pdf', sensitivity: 'POLICY' } });
   ok('documents default to INTERNAL', doc.visibility === 'INTERNAL');
   await prisma.taskDocument.update({ where: { id: doc.id }, data: { deletedAt: new Date() } });
   ok('soft-deleted document kept for history but excluded from the live list',

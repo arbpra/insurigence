@@ -10,6 +10,7 @@ import 'dotenv/config';
 import { prisma } from '../lib/prisma';
 import { ensureDeskDefaults } from '../lib/desk/defaults';
 import { describeTarget } from '../lib/desk/service-levels';
+import { backfillTaskLists } from '../lib/desk/integrity';
 
 const list = (xs: string[]) => (xs.length ? xs.join(', ') : 'none (already present)');
 
@@ -22,6 +23,7 @@ const list = (xs: string[]) => (xs.length ? xs.join(', ') : 'none (already prese
   console.log(`Service levels created:  ${list(serviceLevels)}`);
   console.log(`Calendar created:        ${calendar ? 'yes' : 'no (already present)'}`);
   console.log(`Holidays created:        ${holidays}`);
+  console.log(`Tasks repaired:          ${await backfillTaskLists(prisma)}`);
 
   const rules = await prisma.taskRoutingRule.findMany({ include: { pod: { select: { code: true } } } });
   console.log('\nRouting:');

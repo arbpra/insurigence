@@ -245,6 +245,7 @@ model User {
   amTasks          Task[] @relation("TaskAccountManager")
   assignedTasks    Task[] @relation("TaskAssignee")
   insuredAssignments InsuredAssignment[]
+  deskPermission   DeskStaffPermission?
 
   @@index([role])
 }
@@ -1188,6 +1189,12 @@ model Task {
   escalatedAt      DateTime?
   escalationReason String?
 
+  /// Need-to-know: when non-empty, only these Desk staff (plus the agency's
+  /// Account Managers and Operations Managers) may see the task. Agency users
+  /// are unaffected. Empty = normal pod access.
+  restrictedToUserIds String[]   @default([]) @db.ObjectId
+  restrictionReason   String?
+
   /// Standard or complex; drives the service-level target and is recorded for
   /// billing. Chosen by the agency, may be reclassified by staff (logged).
   complexity       TaskComplexity @default(STANDARD)
@@ -1270,6 +1277,9 @@ model TaskDocument {
   fileSize     Int
   contentType  String
   visibility   DeskVisibility @default(INTERNAL)
+  /// Required, no default: the uploader classifies every file, so an
+  /// unclassified financial document can never fall into the open category.
+  sensitivity  DocumentSensitivity
   uploadedById String?        @db.ObjectId
   deletedAt    DateTime?
   deletedById  String?        @db.ObjectId
@@ -1492,4 +1502,54 @@ model DeskHoliday {
   date      String   @unique
   name      String
   createdAt DateTime @default(now())
+}
+
+// ─── The Desk: need-to-know & audit ─────────────────────────────────────────
+
+/// How sensitive a document is. Desk VAs see GENERAL and POLICY by default;
+/// FINANCIAL and PERSONAL need an individual grant (DeskStaffPermission).
+enum DocumentSensitivity {
+  GENERAL
+  POLICY
+  FINANCIAL
+  PERSONAL
+}
+
+/// Individual data permissions for a Desk staff member, on top of pod
+/// membership and agency authorisation. No row = defaults only.
+model DeskStaffPermission {
+  id                    String                @id @default(auto()) @map("_id") @db.ObjectId
+  userId                String                @unique @db.ObjectId
+  /// Extra document categories this person may open, beyond the defaults.
+  allowedSensitivities  DocumentSensitivity[] @default([])
+  grantedById           String?               @db.ObjectId
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// Append-only record of every Desk action: creates, changes, views and
+/// downloads, and refused attempts. Separate from TaskEvent (the task's story,
+/// partly shown to agencies); this is the security trail and is never shown to
+/// agencies. Written through lib/desk/audit.ts, which fails closed.
+model DeskAuditLog {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  actorId    String?  @db.ObjectId
+  actorRole  String?
+  /// Dotted verb, e.g. "task.status_changed", "document.downloaded".
+  action     String
+  entityType String
+  entityId   String?
+  agencyId   String?  @db.ObjectId
+  /// Context; values under secret-looking keys are redacted before saving.
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([agencyId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId])
+  @@index([action, createdAt])
 }
