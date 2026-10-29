@@ -86,7 +86,7 @@ Modules are sized for **one 2–3 hour working session each**, ordered so each b
 | 6 | Agency Desk profile and billing data: agency AMS system + agency-specific instructions + password-vault reference (never passwords); `DeskPlan` (Core / Growth / Complete) with monthly allowances, agency plan + overrides; task billing fields (service category, units, complexity, included / overage / non-billable, billing status) | 3.0 | 🆕 Q1, Q6 | ✅ Done |
 | 7 | Service levels and business calendar: task complexity (standard / complex), `WAITING_ON_INSURED` status, `ServiceLevelTarget` (by type × complexity × priority, with per-agency agreement overrides; business-time or days-before-expiration), business hours + holidays; seed the client's targets; replaces the placeholder turnaround on routing rules | 3.0 | 🆕 Q5 | ✅ Done |
 | 8 | Need-to-know and audit models: document sensitivity category, VA sensitive-data permissions, task restriction to named staff, `DeskAuditLog` for every action including document views and downloads | 2.5 | 🆕 Q4 | ✅ Done |
-| 9 | Access layer, part 1 — `lib/desk/access.ts` for agency users (admin / producer / CSR, book access, account assignment) and Account Managers; cross-tenant returns 404 | 2.5 | ✏️ Q3 | ⬜ |
+| 9 | Access layer, part 1 — `lib/desk/access.ts` for agency users (admin / producer / CSR, book access, account assignment) and Account Managers; cross-tenant returns 404 | 2.5 | ✏️ Q3 | ✅ |
 | 10 | Access layer, part 2 — VAs on a need-to-know basis: agency authorization × pod × named restrictions × task; VAs reach insureds and policies only through tasks they can work; sensitive documents only with explicit permission | 2.5 | ✏️ Q4 | ⬜ |
 | 11 | Business-hours SLA engine (pure, unit-tested): add business time across nights, weekends and holidays; elapsed time excluding waiting periods; expiration-anchored targets | 3.0 | 🆕 Q5 | ⬜ |
 | 12 | Task service layer `lib/desk/tasks.ts`: create (routing + AM attach + SLA target), status state machine, assign, note; every action writes a `TaskEvent` and an audit entry; internal → agency status mapping | 3.0 | ✏️ | ⬜ |
@@ -289,6 +289,35 @@ Modules are sized for **one 2–3 hour working session each**, ordered so each b
 
 **Verified:** `prisma validate` passed · `prisma db push` created 2 collections and 5 indexes · `tsc --noEmit` exit 0 · **37 tests passed** (`script/verify-desk-need-to-know.ts`): the full sensitivity matrix by role and grant; restriction rules; restriction as a database filter, including the missing-list trap, detection, repair and idempotency; documents refused without a category; one permission record per person, applied to a real financial document; audit redaction, request context, a recorded download and a recorded refusal; and a simulated database failure proving the audit log fails closed · Module 1–7 suites re-run: 21, 22, 28, 26, 31, 33, 31 passed.
 
+**Module 9 — Access layer, part 1 (✅ complete, 29 Oct 2026)**
+
+**Delivered:**
+
+- `lib/desk/access.ts`: the single place that decides what a user may see in The Desk. Every Desk screen and API from here on asks it, so no page writes its own permission check.
+- **What each role sees:**
+  - **Owner / Admin:** the agency's whole book.
+  - **Producer and CSR:** the accounts they're assigned to, unless the agency admin granted them the whole book. They also see requests they submitted themselves, including general requests not tied to an account.
+  - **Account Manager:** every agency where they are primary or backup AM, including tasks restricted to named staff (Module 8).
+  - **Operations Manager and Super Admin:** every agency.
+  - **Desk VA:** nothing yet. VA need-to-know scoping is Module 10, and until then VAs are refused everywhere, so nothing is exposed early.
+  - **Agencies without The Desk switched on:** no access for their users or their AM.
+- **One rule applied three ways:** the same scope filters account lists, policy lists and task lists, and guards opening a single account, policy or task.
+- **Out of scope is "not found":** another agency's record, an unassigned account, a nonexistent id and a malformed id all return the same 404. A user can't tell whether a record exists. Responses carry no detail.
+- **Every refusal is audited** with who, their role, the record, the record's real agency, IP address and browser. A logging failure still refuses the request.
+- **Submitting requests (D4 default):** a user may submit only for accounts they can see. The agency is always taken from the account or the user's own agency, never from what the browser sends, so a request can't be filed into another agency. A policy must belong to the chosen account. AMs can file on behalf of agencies they cover.
+- **Managing access:** only the agency's Owner / Admin (for their own agency), Operations Managers and Super Admin may change book access and account assignments. Producers, CSRs and AMs can't (client answer Q3).
+- **Changes apply on the next request:** permissions are read from the database each time, not from the login session. Granting the whole book, removing a backup AM or switching The Desk off takes effect immediately, without signing out.
+
+**Design decisions:**
+
+- **404, not 403,** for anything outside a user's scope, so record ids can't be probed across agencies.
+- **Producers see requests they submitted,** even on accounts later reassigned, so they can follow their own work. They don't see colleagues' general requests.
+- **VAs are denied by default** until Module 10 defines their scope, rather than given temporary broad access.
+
+**Issues:** none. All tests passed on the first run.
+
+**Verified:** `tsc --noEmit` exit 0 · **61 tests passed** (`script/verify-desk-access.ts`) on three temporary agencies (two with The Desk, one without) with 12 users across every role: scope resolution; account, policy and task lists by role; single-record 404s for cross-agency, unassigned, nonexistent and malformed ids; refusals audited with the real agency; submission rules; who may manage access; changes taking effect immediately; generic error responses; temporary records removed · Module 1–8 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37 passed (**290 in total**).
+
 ### Phase 1 — Admin Setup (13 h)
 
 | # | Module | Hours | Change | Status |
@@ -366,7 +395,7 @@ Modules are sized for **one 2–3 hour working session each**, ordered so each b
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–4 complete (10.5 h). **115 h remaining.**
+**Progress:** Modules 1–9 complete (24.5 h). **101 h remaining.**
 
 The client's answers added **33 hours** (see Section 9), approximately:
 
