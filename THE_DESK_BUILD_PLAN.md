@@ -86,7 +86,7 @@ Modules are sized for **one 2–3 hour working session each**, ordered so each b
 | 6 | Agency Desk profile and billing data: agency AMS system + agency-specific instructions + password-vault reference (never passwords); `DeskPlan` (Core / Growth / Complete) with monthly allowances, agency plan + overrides; task billing fields (service category, units, complexity, included / overage / non-billable, billing status) | 3.0 | 🆕 Q1, Q6 | ✅ Done |
 | 7 | Service levels and business calendar: task complexity (standard / complex), `WAITING_ON_INSURED` status, `ServiceLevelTarget` (by type × complexity × priority, with per-agency agreement overrides; business-time or days-before-expiration), business hours + holidays; seed the client's targets; replaces the placeholder turnaround on routing rules | 3.0 | 🆕 Q5 | ✅ Done |
 | 8 | Need-to-know and audit models: document sensitivity category, VA sensitive-data permissions, task restriction to named staff, `DeskAuditLog` for every action including document views and downloads | 2.5 | 🆕 Q4 | ✅ Done |
-| 9 | Access layer, part 1 — `lib/desk/access.ts` for agency users (admin / producer / CSR, book access, account assignment) and Account Managers; cross-tenant returns 404 | 2.5 | ✏️ Q3 | ✅ |
+| 9 | Access layer, part 1 — `lib/desk/access.ts` for agency users (admin / producer / CSR, book access, account assignment) and Account Managers; cross-tenant returns 404 | 2.5 | ✏️ Q3 | ✅ Done |
 | 10 | Access layer, part 2 — VAs on a need-to-know basis: agency authorization × pod × named restrictions × task; VAs reach insureds and policies only through tasks they can work; sensitive documents only with explicit permission | 2.5 | ✏️ Q4 | ⬜ |
 | 11 | Business-hours SLA engine (pure, unit-tested): add business time across nights, weekends and holidays; elapsed time excluding waiting periods; expiration-anchored targets | 3.0 | 🆕 Q5 | ⬜ |
 | 12 | Task service layer `lib/desk/tasks.ts`: create (routing + AM attach + SLA target), status state machine, assign, note; every action writes a `TaskEvent` and an audit entry; internal → agency status mapping | 3.0 | ✏️ | ⬜ |
@@ -395,7 +395,7 @@ Modules are sized for **one 2–3 hour working session each**, ordered so each b
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–9 complete (24.5 h). **101 h remaining.**
+**Progress:** Modules 1–9 complete (24.0 h). **101.5 h remaining.**
 
 The client's answers added **33 hours** (see Section 9), approximately:
 
