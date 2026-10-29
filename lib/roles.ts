@@ -3,7 +3,8 @@
  *
  * Three kinds of user:
  *  - Platform:  SUPER_ADMIN — everything, no agency.
- *  - Agency:    ADMIN, AGENT — belong to exactly one agency (agencyId required).
+ *  - Agency:    ADMIN (Owner / Admin), AGENT (shown as "Producer"), CSR — belong
+ *               to exactly one agency (agencyId required).
  *  - Desk:      DESK_ADMIN, ACCOUNT_MANAGER, DESK_VA — internal Insurigence staff
  *               for The Desk. They never carry an agencyId; which agencies they
  *               can see comes only from Desk assignments, never from User.agencyId.
@@ -15,6 +16,7 @@ export const USER_ROLES = [
   'SUPER_ADMIN',
   'ADMIN',
   'AGENT',
+  'CSR',
   'DESK_ADMIN',
   'ACCOUNT_MANAGER',
   'DESK_VA',
@@ -22,7 +24,7 @@ export const USER_ROLES = [
 
 export type Role = (typeof USER_ROLES)[number];
 
-export const AGENCY_ROLES = ['ADMIN', 'AGENT'] as const satisfies readonly Role[];
+export const AGENCY_ROLES = ['ADMIN', 'AGENT', 'CSR'] as const satisfies readonly Role[];
 export const DESK_ROLES = ['DESK_ADMIN', 'ACCOUNT_MANAGER', 'DESK_VA'] as const satisfies readonly Role[];
 
 export function isRole(value: unknown): value is Role {
@@ -47,11 +49,38 @@ export function canBePodMember(role: string): boolean {
   return role === 'DESK_VA' || role === 'ACCOUNT_MANAGER';
 }
 
+export type BookAccessLevel = 'ALL' | 'ASSIGNED';
+
+/**
+ * How much of its agency's book an agency user sees in The Desk.
+ *  - ADMIN always sees all; a stored value is ignored.
+ *  - AGENT (Producer) and CSR default to their assigned accounts; the agency
+ *    admin can grant ALL. Defaulting to ASSIGNED is need-to-know: a wider view
+ *    is something an admin chooses, never something a user gets by accident.
+ *  - Non-agency roles: null — their access is not about one agency's book.
+ */
+export function effectiveBookAccess(role: string, stored: BookAccessLevel | null | undefined): BookAccessLevel | null {
+  if (role === 'ADMIN') return 'ALL';
+  if (role === 'AGENT' || role === 'CSR') return stored ?? 'ASSIGNED';
+  return null;
+}
+
+/** Who may be assigned to an insured (as its producer or service contact). */
+export function canBeAssignedToInsured(role: string): boolean {
+  return isAgencyRole(role);
+}
+
+/** The assignment role a user gets on an insured unless chosen otherwise. */
+export function defaultAssignmentRole(role: string): 'PRODUCER' | 'SERVICE' {
+  return role === 'CSR' ? 'SERVICE' : 'PRODUCER';
+}
+
 export const ROLE_LABELS: Record<Role, string> = {
   SUPER_ADMIN: 'Super Admin',
-  ADMIN: 'Agency Admin',
-  AGENT: 'Agent',
-  DESK_ADMIN: 'Desk Admin',
+  ADMIN: 'Owner / Admin',
+  AGENT: 'Producer',
+  CSR: 'CSR',
+  DESK_ADMIN: 'Operations Manager',
   ACCOUNT_MANAGER: 'Account Manager',
   DESK_VA: 'Desk VA',
 };

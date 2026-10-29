@@ -86,7 +86,8 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    if (user.role === 'AGENT') {
+    // Allow-list, not deny-list: any other agency role (e.g. CSR) is refused too.
+    if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
       return NextResponse.json({ error: 'Only admins can update settings' }, { status: 403 });
     }
 

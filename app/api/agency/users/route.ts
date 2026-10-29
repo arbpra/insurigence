@@ -5,6 +5,7 @@ import { getAuthContext } from '@/lib/super-admin-auth';
 import { sendEmail } from '@/lib/email/send';
 import { inviteEmail } from '@/lib/email/templates';
 import { APP_URL } from '@/lib/email/client';
+import { AGENCY_ROLES } from '@/lib/roles';
 
 /**
  * Agency team management (agency admins only).
@@ -17,7 +18,7 @@ import { APP_URL } from '@/lib/email/client';
  */
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const INVITABLE_ROLES = ['AGENT', 'ADMIN'] as const;
+const INVITABLE_ROLES = AGENCY_ROLES;
 const INVITE_TTL_HOURS = 72;
 
 /** Only an ADMIN of an agency may manage that agency's team. */
@@ -82,7 +83,7 @@ export async function POST(request: NextRequest) {
   }
   // Never allow escalating to SUPER_ADMIN or inviting into another agency.
   if (!(INVITABLE_ROLES as readonly string[]).includes(role)) {
-    return NextResponse.json({ error: 'Role must be AGENT or ADMIN.' }, { status: 400 });
+    return NextResponse.json({ error: 'Role must be Owner / Admin, Producer or CSR.' }, { status: 400 });
   }
 
   const existing = await prisma.user.findUnique({ where: { email } });
@@ -99,7 +100,7 @@ export async function POST(request: NextRequest) {
       email,
       firstName,
       lastName,
-      role: role as 'AGENT' | 'ADMIN',
+      role: role as (typeof AGENCY_ROLES)[number],
       isActive: true,
       mustChangePassword: false,
     },

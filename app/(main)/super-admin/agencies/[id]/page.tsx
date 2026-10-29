@@ -1,5 +1,6 @@
 'use client';
 
+import { roleLabel } from '@/lib/roles';
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
@@ -660,7 +661,7 @@ export default function AgencyDetailPage() {
                               <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
                                 user.role === 'ADMIN' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
                               }`}>
-                                {user.role === 'ADMIN' ? 'Admin' : 'Agent'}
+                                {roleLabel(user.role)}
                               </span>
                             </td>
                             <td className="py-3">

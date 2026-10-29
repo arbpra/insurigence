@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader, Badge, Button } from '@/components/ui';
-import type { Role } from '@/lib/roles';
+import { ROLE_LABELS, roleLabel, type Role } from '@/lib/roles';
 
 interface TeamUser {
   id: string;
@@ -185,8 +185,9 @@ export default function TeamPage() {
               className="form-input w-full"
               data-testid="select-invite-role"
             >
-              <option value="AGENT">Agent</option>
-              <option value="ADMIN">Admin</option>
+              <option value="AGENT">{ROLE_LABELS.AGENT}</option>
+              <option value="CSR">{ROLE_LABELS.CSR}</option>
+              <option value="ADMIN">{ROLE_LABELS.ADMIN}</option>
             </select>
           </div>
           <Button variant="primary" type="submit" loading={busy} testId="button-send-invite">
@@ -225,7 +226,7 @@ export default function TeamPage() {
                   <td className="px-6 py-3 text-slate-600">{u.email}</td>
                   <td className="px-6 py-3">
                     <Badge variant={u.role === 'ADMIN' ? 'reviewed' : 'new'}>
-                      {u.role === 'ADMIN' ? 'Admin' : 'Agent'}
+                      {roleLabel(u.role)}
                     </Badge>
                   </td>
                   <td className="px-6 py-3">

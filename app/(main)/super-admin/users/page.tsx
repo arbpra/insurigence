@@ -43,6 +43,7 @@ const roleColors: Record<string, { bg: string; text: string }> = {
   SUPER_ADMIN: { bg: 'bg-purple-100', text: 'text-purple-700' },
   ADMIN: { bg: 'bg-blue-100', text: 'text-blue-700' },
   AGENT: { bg: 'bg-gray-100', text: 'text-gray-700' },
+  CSR: { bg: 'bg-sky-100', text: 'text-sky-700' },
   DESK_ADMIN: { bg: 'bg-teal-100', text: 'text-teal-700' },
   ACCOUNT_MANAGER: { bg: 'bg-emerald-100', text: 'text-emerald-700' },
   DESK_VA: { bg: 'bg-amber-100', text: 'text-amber-700' },
@@ -413,6 +414,7 @@ export default function UsersPage() {
                 >
                   <optgroup label="Agency">
                     <option value="AGENT">{ROLE_LABELS.AGENT}</option>
+                    <option value="CSR">{ROLE_LABELS.CSR}</option>
                     <option value="ADMIN">{ROLE_LABELS.ADMIN}</option>
                   </optgroup>
                   <optgroup label="The Desk (internal staff)">

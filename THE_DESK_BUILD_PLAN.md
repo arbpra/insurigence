@@ -82,7 +82,7 @@ Modules are sized for **one 2–3 hour working session each**, ordered so each b
 | 2 | Desk org models: `Pod`, `PodMember`, `AgencyDeskAssignment` (primary + backup AM), `AgencyPodAccess` (authorized pods / VAs per agency); seed the 4 pods | 2.5 | | ✅ Done |
 | 3 | Book-of-business models: `InsuredAccount`, `Policy`, `ImportBatch` | 2.5 | | ✅ Done |
 | 4 | Task models: `Task`, `TaskEvent`, `TaskDocument`, `TaskRoutingRule`, `TaskFollowUpRule`, plus type / status / priority / source / visibility enums | 3.0 | | ✅ Done |
-| 5 | Agency-side roles and account assignment: add the `CSR` agency role, label the existing `AGENT` role "Producer", per-user book access (all accounts / assigned only) set by the agency admin, `InsuredAssignment` (several producers / service staff per account) | 2.5 | 🆕 Q3 | ⬜ |
+| 5 | Agency-side roles and account assignment: add the `CSR` agency role, label the existing `AGENT` role "Producer", per-user book access (all accounts / assigned only) set by the agency admin, `InsuredAssignment` (several producers / service staff per account) | 2.5 | 🆕 Q3 | ✅ Done |
 | 6 | Agency Desk profile and billing data: agency AMS system + agency-specific instructions + password-vault reference (never passwords); `DeskPlan` (Core / Growth / Complete) with monthly allowances, agency plan + overrides; task billing fields (service category, units, complexity, included / overage / non-billable, billing status) | 3.0 | 🆕 Q1, Q6 | ⬜ |
 | 7 | Service levels and business calendar: task complexity (standard / complex), `WAITING_ON_INSURED` status, `ServiceLevelTarget` (by type × complexity × priority, with per-agency agreement overrides; business-time or days-before-expiration), business hours + holidays; seed the client's targets; replaces the placeholder turnaround on routing rules | 3.0 | 🆕 Q5 | ⬜ |
 | 8 | Need-to-know and audit models: document sensitivity category, VA sensitive-data permissions, task restriction to named staff, `DeskAuditLog` for every action including document views and downloads | 2.5 | 🆕 Q4 | ⬜ |
@@ -188,6 +188,25 @@ Modules are sized for **one 2–3 hour working session each**, ordered so each b
 **Issue prevented:** the same MongoDB gap found in Module 2 applies to tasks. A task with no pod or no assignee stores those fields as missing, so the "waiting for AM triage" and "unassigned in the pod queue" lists would have silently shown nothing. Shared filters (`UNROUTED`, `UNASSIGNED`, `TOP_LEVEL` in `lib/desk/task-filters.ts`) are in place before any screen uses them, with a test proving the plain filter misses these tasks.
 
 **Verified:** `prisma validate` passed · `prisma db push` created 6 collections and 14 indexes · `tsc --noEmit` exit 0 · seeding re-run creates nothing · **26 tests passed** (`script/verify-desk-tasks.ts`): seeded rules, 25 simultaneous reference requests all receiving distinct consecutive numbers, task defaults, subtasks, queue filters, internal-vs-agency timeline, document soft delete, and delete protection, on temporary records removed afterwards · Module 1–3 suites re-run: 21, 22, 28 passed.
+
+**Module 5 — Agency-side roles and account assignment (✅ complete, 29 Oct 2026)**
+
+**Delivered:**
+
+- **Three agency roles, as the client described:**
+  - **Owner / Admin** (the existing agency admin role) always sees the whole book.
+  - **Producer** (the existing agent role, renamed on screen; producers keep using leads and proposals exactly as before).
+  - **CSR** (new).
+- **Book access per user:** each Producer or CSR either sees **only their assigned accounts** (the default) or **the whole book**, as granted by the agency admin. The default is the narrower view, so wider access is always a deliberate choice by the admin. The screen to manage it is Module 23.
+- `InsuredAssignment`: links agency users to the accounts they're responsible for, as **producer** or **service** (CSR). An account can have several producers and service staff, as requested. This is also where an imported "assigned producer" column will land (Module 26).
+- Agency admins can now **invite CSRs** from the Team page. They still cannot create Desk staff or platform roles. Role names display as Owner / Admin, Producer, CSR and Operations Manager (Desk Admin) across the Team, Super Admin Users and Agency screens.
+- The rules live in `lib/roles.ts`: `effectiveBookAccess`, `canBeAssignedToInsured`, `defaultAssignmentRole`. The access layer (Module 9) builds on them.
+
+**Issue fixed:** changing agency settings was blocked only for the `AGENT` role, a block-list. Any new agency role, such as CSR, would have been allowed to change the agency's settings, branding and disclaimer. It is now an allow-list (Owner / Admin and Super Admin only), and a test confirms a CSR is refused.
+
+**Data:** existing users have no stored book-access value, which correctly means "use the role default", so no backfill was needed. All existing agents now show as Producers, with no change to what they can do in the existing tools.
+
+**Verified:** `prisma validate` passed · `prisma db push` created 1 collection and 2 indexes · `tsc --noEmit` exit 0 · **31 tests passed** (`script/verify-desk-agency-roles.ts`): role and book-access rules; CSR invitation through the real invite endpoint with emails switched off; agency admins unable to create Desk or platform roles; settings admin-only; CSR and Producer read access unchanged; several producers per account; "my accounts" lookup; delete behaviour; temporary records removed · Module 1–4 suites re-run: 21, 22, 28, 26 passed (the Module 1 role count updated from six to seven).
 
 ### Phase 1 — Admin Setup (13 h)
 

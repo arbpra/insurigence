@@ -43,8 +43,8 @@ const p = <T>(v: T) => ({ params: Promise.resolve(v) });
 
 async function main() {
   console.log('Unit — lib/roles');
-  await t('six roles, all recognised', () => {
-    assert.equal(USER_ROLES.length, 6);
+  await t('seven roles, all recognised', () => {
+    assert.equal(USER_ROLES.length, 7);
     for (const r of USER_ROLES) assert.ok(isRole(r));
     assert.ok(!isRole('OWNER')); assert.ok(!isRole(undefined)); assert.ok(!isRole(''));
   });

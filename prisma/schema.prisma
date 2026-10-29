@@ -82,16 +82,24 @@ enum ProposalEventType {
   EXPIRED
 }
 
-/// SUPER_ADMIN / ADMIN / AGENT are platform and agency roles. The DESK roles
-/// are internal Insurigence staff for The Desk; they never carry an agencyId —
-/// their access comes only from Desk assignments (see lib/roles.ts).
+/// SUPER_ADMIN is the platform. ADMIN (agency Owner/Admin), AGENT (shown as
+/// "Producer") and CSR are agency roles. The DESK roles are internal Insurigence
+/// staff; they never carry an agencyId — their access comes only from Desk
+/// assignments (see lib/roles.ts).
 enum UserRole {
   SUPER_ADMIN
   ADMIN
   AGENT
+  CSR
   DESK_ADMIN
   ACCOUNT_MANAGER
   DESK_VA
+}
+
+/// How much of the agency's book an agency user sees in The Desk.
+enum BookAccess {
+  ALL
+  ASSIGNED
 }
 
 enum LeadSource {
@@ -202,6 +210,9 @@ model User {
   role         UserRole @default(AGENT)
   isActive     Boolean  @default(true)
   mustChangePassword Boolean @default(true)
+  /// Desk book access, set by the agency admin. Null = the role's default
+  /// (lib/roles.ts effectiveBookAccess). Ignored for ADMIN, who always sees all.
+  bookAccess   BookAccess?
   lastLoginAt  DateTime?
   lastActivityAt DateTime?
 
@@ -222,6 +233,7 @@ model User {
   importBatches    ImportBatch[]
   amTasks          Task[] @relation("TaskAccountManager")
   assignedTasks    Task[] @relation("TaskAssignee")
+  insuredAssignments InsuredAssignment[]
 
   @@index([role])
 }
@@ -918,6 +930,7 @@ model InsuredAccount {
   agency              Agency        @relation(fields: [agencyId], references: [id])
   policies            Policy[]
   tasks               Task[]
+  assignments         InsuredAssignment[]
 
   @@index([agencyId, nameKey])
   @@index([agencyId, status])
@@ -1028,6 +1041,30 @@ model ImportRow {
 
   @@unique([batchId, rowNumber])
   @@index([batchId, status])
+}
+
+enum InsuredAssignmentRole {
+  PRODUCER
+  SERVICE
+}
+
+/// An agency user responsible for an insured: its producer(s) and service
+/// staff (CSRs). Users with ASSIGNED book access see only insureds they are
+/// assigned to here. One row per user per insured.
+model InsuredAssignment {
+  id          String                @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId    String                @db.ObjectId
+  insuredId   String                @db.ObjectId
+  userId      String                @db.ObjectId
+  role        InsuredAssignmentRole
+  createdById String?               @db.ObjectId
+  createdAt   DateTime              @default(now())
+
+  insured     InsuredAccount        @relation(fields: [insuredId], references: [id], onDelete: Cascade)
+  user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([insuredId, userId])
+  @@index([agencyId, userId])
 }
 
 // ─── The Desk: tasks ────────────────────────────────────────────────────────
