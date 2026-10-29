@@ -262,9 +262,9 @@ async function main() {
   });
   console.log(`Created agent user: ${agent.email} (password: ${agentPassword})`);
 
-  // 6. The Desk defaults: pods, routing and follow-up rules (create-only; never overwrites admin edits)
+  // 6. The Desk defaults: pods, routing and follow-up rules, plans (create-only; never overwrites admin edits)
   const desk = await ensureDeskDefaults(prisma);
-  console.log(`Desk defaults created: ${desk.pods.length} pods, ${desk.routing.length} routing rules, ${desk.followUps.length} follow-up rules`);
+  console.log(`Desk defaults created: ${desk.pods.length} pods, ${desk.routing.length} routing rules, ${desk.followUps.length} follow-up rules, ${desk.plans.length} plans`);
 
   console.log('\n========================================');
   console.log('Database seeded successfully!');

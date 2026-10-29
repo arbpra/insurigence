@@ -40,8 +40,20 @@ export const DEFAULT_FOLLOW_UPS: ReadonlyArray<{
 ];
 
 /**
- * Creates any missing default pod, routing rule or follow-up rule. Create-only:
- * an existing rule is never changed, so admin edits survive re-seeding.
+ * The client's tiers (27 Oct 2026). Allowances are deliberately not seeded:
+ * the per-tier numbers are still to come from the client (plan detail D1), and
+ * a guessed allowance would misclassify real work as included or overage.
+ */
+export const DEFAULT_PLANS = [
+  { code: 'CORE', name: 'Desk Core', monthlyPriceCents: BigInt(150_000), priceIsStartingAt: false, sortOrder: 1 },
+  { code: 'GROWTH', name: 'Desk Growth', monthlyPriceCents: BigInt(250_000), priceIsStartingAt: false, sortOrder: 2 },
+  { code: 'COMPLETE', name: 'Desk Complete', monthlyPriceCents: BigInt(400_000), priceIsStartingAt: true, sortOrder: 3 },
+] as const;
+
+/**
+ * Creates any missing default pod, routing rule, follow-up rule or plan.
+ * Create-only: an existing record is never changed, so admin edits survive
+ * re-seeding.
  */
 export async function ensureDeskDefaults(prisma: PrismaClient) {
   const { created: pods } = await ensureDefaultPods(prisma);
@@ -68,5 +80,12 @@ export async function ensureDeskDefaults(prisma: PrismaClient) {
     followUps.push(`${f.triggerType}→${f.createType}`);
   }
 
-  return { pods, routing, followUps };
+  const plans: string[] = [];
+  for (const plan of DEFAULT_PLANS) {
+    if (await prisma.deskPlan.findUnique({ where: { code: plan.code }, select: { id: true } })) continue;
+    await prisma.deskPlan.create({ data: { ...plan } });
+    plans.push(plan.code);
+  }
+
+  return { pods, routing, followUps, plans };
 }

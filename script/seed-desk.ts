@@ -1,6 +1,6 @@
 /**
- * Creates The Desk's defaults if missing: the 4 pods, routing rules and
- * follow-up rules. Idempotent and create-only; never edits existing records.
+ * Creates The Desk's defaults if missing: the 4 pods, routing rules,
+ * follow-up rules and the 3 plans. Idempotent and create-only; never edits existing records.
  * Separate from prisma/seed.ts because that script also resets the demo users'
  * passwords, which must not happen on a shared database.
  * Run with:  npm run db:seed:desk
@@ -12,10 +12,11 @@ import { ensureDeskDefaults } from '../lib/desk/defaults';
 const list = (xs: string[]) => (xs.length ? xs.join(', ') : 'none (already present)');
 
 (async () => {
-  const { pods, routing, followUps } = await ensureDeskDefaults(prisma);
+  const { pods, routing, followUps, plans } = await ensureDeskDefaults(prisma);
   console.log(`Pods created:            ${list(pods)}`);
   console.log(`Routing rules created:   ${list(routing)}`);
   console.log(`Follow-up rules created: ${list(followUps)}`);
+  console.log(`Plans created:           ${list(plans)}`);
 
   const rules = await prisma.taskRoutingRule.findMany({ include: { pod: { select: { code: true } } } });
   console.log('\nRouting:');

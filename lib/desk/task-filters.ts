@@ -22,5 +22,10 @@ export const TOP_LEVEL: Prisma.TaskWhereInput = {
   OR: [{ parentTaskId: null }, { parentTaskId: { isSet: false } }],
 };
 
+/** Not yet classified for billing (included / overage / non-billable). */
+export const BILLING_UNCLASSIFIED: Prisma.TaskWhereInput = {
+  OR: [{ billingClass: null }, { billingClass: { isSet: false } }],
+};
+
 /** Statuses that mean the work is finished, one way or the other. */
 export const CLOSED_STATUSES = ['COMPLETED', 'CANCELLED'] as const;

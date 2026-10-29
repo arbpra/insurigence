@@ -177,6 +177,16 @@ model Agency {
   /// The Desk (outsourced operations) is an add-on, off until an admin enables it.
   deskEnabled          Boolean   @default(false)
   deskEnabledAt        DateTime?
+  /// The agency's management system. AMS work is done manually by Pod 1.
+  amsSystem            AmsSystem?
+  /// Name of the AMS when amsSystem is OTHER.
+  amsSystemOther       String?
+  /// Agency-specific instructions for Desk staff. Must never contain passwords
+  /// (lib/desk/profile.ts looksLikeCredential refuses them).
+  deskInstructions     String?
+  /// Where the agency's AMS / carrier logins live in the password manager,
+  /// e.g. "1Password › Desk › Acme Insurance". A pointer only — never a secret.
+  credentialVaultRef   String?
 
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
@@ -198,6 +208,7 @@ model Agency {
   policies             Policy[]
   importBatches        ImportBatch[]
   tasks                Task[]
+  deskPlan             AgencyDeskPlan?
 }
 
 model User {
@@ -1173,6 +1184,24 @@ model Task {
   escalatedAt      DateTime?
   escalationReason String?
 
+  /// Standard or complex; drives the service-level target and is recorded for
+  /// billing. Chosen by the agency, may be reclassified by staff (logged).
+  complexity       TaskComplexity @default(STANDARD)
+
+  // ── Billing (tracked now; invoicing is a later phase) ──
+  /// Allowance bucket; defaults from the task type (lib/desk/billing.ts).
+  serviceCategory  ServiceCategory?
+  billableUnits    Int            @default(1)
+  /// Internal or follow-up work that never counts or bills (e.g. the AMS
+  /// update after a renewal). Set at creation, editable by staff.
+  nonBillable      Boolean        @default(false)
+  /// Decided once, at completion: included in the month's allowance, overage,
+  /// or non-billable. Null until then.
+  billingClass     BillingClass?
+  billingStatus    BillingStatus?
+  /// Month the task counted toward, "YYYY-MM" in the Desk time zone.
+  billingPeriod    String?
+
   startedAt        DateTime?
   completedAt      DateTime?
   cancelledAt      DateTime?
@@ -1200,6 +1229,7 @@ model Task {
   @@index([insuredId])
   @@index([parentTaskId])
   @@index([status, dueAt])
+  @@index([agencyId, billingPeriod])
 }
 
 /// Append-only history of a task: status changes, assignments, notes and
@@ -1272,6 +1302,8 @@ model TaskFollowUpRule {
   createType    TaskType
   podId         String?    @db.ObjectId
   titleTemplate String
+  /// Follow-ups are part of the parent service, so non-billable by default.
+  billable      Boolean    @default(false)
   isActive      Boolean    @default(true)
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
@@ -1286,4 +1318,112 @@ model TaskFollowUpRule {
 model DeskCounter {
   id    String @id @map("_id")
   value Int
+}
+
+// ─── The Desk: agency profile & billing ─────────────────────────────────────
+
+enum AmsSystem {
+  APPLIED_EPIC
+  AMS360
+  HAWKSOFT
+  EZLYNX
+  QQCATALYST
+  OTHER
+}
+
+enum TaskComplexity {
+  STANDARD
+  COMPLEX
+}
+
+/// Allowance buckets in a Desk plan. Each task type maps to one
+/// (lib/desk/billing.ts). Managed accounts are counted separately (active
+/// insureds), not as tasks.
+enum ServiceCategory {
+  COI
+  ENDORSEMENT
+  RENEWAL
+  REMARKETING
+  NEW_BUSINESS
+  SERVICE
+}
+
+enum BillingClass {
+  INCLUDED
+  OVERAGE
+  NON_BILLABLE
+}
+
+/// Invoicing state. Only overages are ever invoiced; included and
+/// non-billable work is NOT_APPLICABLE.
+enum BillingStatus {
+  UNBILLED
+  BILLED
+  WAIVED
+  NOT_APPLICABLE
+}
+
+/// A Desk subscription tier (Core / Growth / Complete). Prices and allowances
+/// are data so they can change without code.
+model DeskPlan {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  code              String   @unique
+  name              String
+  monthlyPriceCents BigInt
+  /// True for "starting at" pricing (Complete); the agency's price is then
+  /// set on its AgencyDeskPlan.
+  priceIsStartingAt Boolean  @default(false)
+  /// Managed (active) accounts included. Null = not yet configured.
+  managedAccounts   Int?
+  isActive          Boolean  @default(true)
+  sortOrder         Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  allowances        DeskPlanAllowance[]
+  agencies          AgencyDeskPlan[]
+}
+
+/// Units of a service category included per month. A category with no row has
+/// no allowance configured yet; monthlyUnits null = unlimited.
+model DeskPlanAllowance {
+  id           String          @id @default(auto()) @map("_id") @db.ObjectId
+  planId       String          @db.ObjectId
+  category     ServiceCategory
+  monthlyUnits Int?
+
+  plan         DeskPlan        @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, category])
+}
+
+/// The plan an agency is on, with any negotiated price or allowance overrides.
+model AgencyDeskPlan {
+  id                      String   @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId                String   @unique @db.ObjectId
+  planId                  String   @db.ObjectId
+  startsOn                DateTime
+  monthlyPriceCents       BigInt?
+  managedAccountsOverride Int?
+  notes                   String?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  agency                  Agency   @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  plan                    DeskPlan @relation(fields: [planId], references: [id])
+  allowanceOverrides      AgencyAllowanceOverride[]
+
+  @@index([planId])
+}
+
+/// Replaces the plan's allowance for one category for this agency.
+model AgencyAllowanceOverride {
+  id               String          @id @default(auto()) @map("_id") @db.ObjectId
+  agencyDeskPlanId String          @db.ObjectId
+  category         ServiceCategory
+  monthlyUnits     Int?
+
+  agencyDeskPlan   AgencyDeskPlan  @relation(fields: [agencyDeskPlanId], references: [id], onDelete: Cascade)
+
+  @@unique([agencyDeskPlanId, category])
 }

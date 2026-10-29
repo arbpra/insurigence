@@ -83,7 +83,7 @@ Modules are sized for **one 2–3 hour working session each**, ordered so each b
 | 3 | Book-of-business models: `InsuredAccount`, `Policy`, `ImportBatch` | 2.5 | | ✅ Done |
 | 4 | Task models: `Task`, `TaskEvent`, `TaskDocument`, `TaskRoutingRule`, `TaskFollowUpRule`, plus type / status / priority / source / visibility enums | 3.0 | | ✅ Done |
 | 5 | Agency-side roles and account assignment: add the `CSR` agency role, label the existing `AGENT` role "Producer", per-user book access (all accounts / assigned only) set by the agency admin, `InsuredAssignment` (several producers / service staff per account) | 2.5 | 🆕 Q3 | ✅ Done |
-| 6 | Agency Desk profile and billing data: agency AMS system + agency-specific instructions + password-vault reference (never passwords); `DeskPlan` (Core / Growth / Complete) with monthly allowances, agency plan + overrides; task billing fields (service category, units, complexity, included / overage / non-billable, billing status) | 3.0 | 🆕 Q1, Q6 | ⬜ |
+| 6 | Agency Desk profile and billing data: agency AMS system + agency-specific instructions + password-vault reference (never passwords); `DeskPlan` (Core / Growth / Complete) with monthly allowances, agency plan + overrides; task billing fields (service category, units, complexity, included / overage / non-billable, billing status) | 3.0 | 🆕 Q1, Q6 | ✅ Done |
 | 7 | Service levels and business calendar: task complexity (standard / complex), `WAITING_ON_INSURED` status, `ServiceLevelTarget` (by type × complexity × priority, with per-agency agreement overrides; business-time or days-before-expiration), business hours + holidays; seed the client's targets; replaces the placeholder turnaround on routing rules | 3.0 | 🆕 Q5 | ⬜ |
 | 8 | Need-to-know and audit models: document sensitivity category, VA sensitive-data permissions, task restriction to named staff, `DeskAuditLog` for every action including document views and downloads | 2.5 | 🆕 Q4 | ⬜ |
 | 9 | Access layer, part 1 — `lib/desk/access.ts` for agency users (admin / producer / CSR, book access, account assignment) and Account Managers; cross-tenant returns 404 | 2.5 | ✏️ Q3 | ⬜ |
@@ -207,6 +207,37 @@ Modules are sized for **one 2–3 hour working session each**, ordered so each b
 **Data:** existing users have no stored book-access value, which correctly means "use the role default", so no backfill was needed. All existing agents now show as Producers, with no change to what they can do in the existing tools.
 
 **Verified:** `prisma validate` passed · `prisma db push` created 1 collection and 2 indexes · `tsc --noEmit` exit 0 · **31 tests passed** (`script/verify-desk-agency-roles.ts`): role and book-access rules; CSR invitation through the real invite endpoint with emails switched off; agency admins unable to create Desk or platform roles; settings admin-only; CSR and Producer read access unchanged; several producers per account; "my accounts" lookup; delete behaviour; temporary records removed · Module 1–4 suites re-run: 21, 22, 28, 26 passed (the Module 1 role count updated from six to seven).
+
+**Module 6 — Agency Desk profile and billing data (✅ complete, 29 Oct 2026)**
+
+**Delivered — agency profile:**
+
+- **AMS system** on each agency: Applied Epic, AMS360, HawkSoft, EZLynx, QQCatalyst, or Other with the agency's own system name.
+- **Agency-specific instructions** for Desk staff.
+- **Password-vault reference:** where the agency's AMS and carrier logins live in the password manager (for example "1Password › Desk › Acme Insurance"). A pointer only.
+- **Credential guard** (`lib/desk/profile.ts`): text that reads like a password, PIN, API key or security answer ("Epic password: …", "pwd=…") is recognized and will be refused when saved (screen in Module 15). Ordinary mentions such as "logins are in 1Password" or "reset the password via the portal" are allowed. This puts the client's rule into practice: credentials are never stored in The Desk.
+
+**Delivered — billing data (tracked now; invoicing later):**
+
+- `DeskPlan`: **Desk Core $1,500 · Desk Growth $2,500 · Desk Complete from $4,000**, seeded. Each has a managed-accounts allowance and per-service monthly allowances. Prices and allowances are data, editable without code.
+- **Allowances per service category:** COIs, Endorsements, Renewals, Remarketing credits, New business, General service. Each allowance can be a number of units or unlimited.
+- `AgencyDeskPlan`: the plan each agency is on, its start date, and any **negotiated price** (needed for "Complete from $4,000"), managed-accounts override or per-category allowance overrides.
+- **Billing fields on every task:**
+  - complexity (standard / complex)
+  - service category
+  - billable units
+  - a non-billable flag for internal work
+  - billing class (included / overage / non-billable, decided once at completion in Module 13)
+  - invoicing status (unbilled / billed / waived / not applicable)
+  - the month it counted toward
+- **Type → category mapping** (`lib/desk/billing.ts`): Submission and Proposal Prep count as New business, Loss Runs as Renewal, AMS entry / ACORD / policy updates / documents as General service. QA review is internal and never billed. Follow-up tasks (such as the AMS update after a renewal) are non-billable by default, configurable per rule.
+- **Billing month is computed in the Desk's time zone.** A COI completed at 9:59pm New York time on 31 October counts toward October, even though it is already November in UTC.
+
+**Pending client input (D1):** allowances are **deliberately not seeded**. A guessed allowance would mark real work as included or overage incorrectly. The system reports "not configured" until the numbers are entered. **D1 is needed before Module 13**, where completed tasks are classified.
+
+**Data:** the 2 existing follow-up rules were backfilled as non-billable (same MongoDB reason as before). No tasks existed, so nothing else needed backfilling. A new shared filter, `BILLING_UNCLASSIFIED`, finds tasks awaiting classification, with a test proving the plain filter misses them.
+
+**Verified:** `prisma validate` passed · `prisma db push` created 4 collections and 6 indexes · `tsc --noEmit` exit 0 · **33 tests passed** (`script/verify-desk-billing.ts`): AMS names; the credential guard refusing 9 credential-like texts with no false alarms on 7 ordinary instructions; every request type mapped; billing month across time zones; allowance resolution (override over plan, unlimited, not configured) both in memory and from stored records; seeded plans and prices; one plan per agency; plans in use protected from deletion; task billing defaults and filters; temporary records removed · Module 1–5 suites re-run: 21, 22, 28, 26, 31 passed.
 
 ### Phase 1 — Admin Setup (13 h)
 
