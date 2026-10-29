@@ -1,31 +1,29 @@
-import type { PrismaClient, TaskPriority, TaskStatus, TaskType } from '@prisma/client';
+import type { PrismaClient, TaskComplexity, TaskPriority, TaskStatus, TaskType } from '@prisma/client';
 import { ensureDefaultPods, type DefaultPodCode } from './pods';
 
 /**
- * Starting routing: which pod each request type goes to, and its default
- * turnaround. Turnaround values are placeholders until the client confirms
- * targets (open question Q5); admins edit them in Module 11.
- * OTHER has no rule on purpose: it stays unrouted for the AM to triage.
+ * Starting routing: which pod each request type goes to. Turnaround is not
+ * here — it lives in DEFAULT_SERVICE_LEVELS. OTHER has no rule on purpose: it
+ * stays unrouted for the AM to triage. Admins edit routing in Module 18.
  */
 export const DEFAULT_ROUTING: ReadonlyArray<{
   taskType: TaskType;
   pod: DefaultPodCode;
-  turnaroundHours: number;
   defaultPriority?: TaskPriority;
 }> = [
-  { taskType: 'COI', pod: 'SERVICE_AMS', turnaroundHours: 24 },
-  { taskType: 'ENDORSEMENT', pod: 'SERVICE_AMS', turnaroundHours: 48 },
-  { taskType: 'ACORD', pod: 'SERVICE_AMS', turnaroundHours: 48 },
-  { taskType: 'AMS_ENTRY', pod: 'SERVICE_AMS', turnaroundHours: 48 },
-  { taskType: 'POLICY_UPDATE', pod: 'SERVICE_AMS', turnaroundHours: 48 },
-  { taskType: 'DOCUMENT_UPLOAD', pod: 'SERVICE_AMS', turnaroundHours: 48 },
-  { taskType: 'RENEWAL', pod: 'RENEWALS', turnaroundHours: 120 },
-  { taskType: 'REMARKETING', pod: 'RENEWALS', turnaroundHours: 120 },
-  { taskType: 'LOSS_RUNS', pod: 'RENEWALS', turnaroundHours: 72 },
-  { taskType: 'NEW_BUSINESS', pod: 'NEW_BUSINESS', turnaroundHours: 120 },
-  { taskType: 'SUBMISSION', pod: 'NEW_BUSINESS', turnaroundHours: 72 },
-  { taskType: 'PROPOSAL_PREP', pod: 'NEW_BUSINESS', turnaroundHours: 72 },
-  { taskType: 'QA_REVIEW', pod: 'QA', turnaroundHours: 24 },
+  { taskType: 'COI', pod: 'SERVICE_AMS' },
+  { taskType: 'ENDORSEMENT', pod: 'SERVICE_AMS' },
+  { taskType: 'ACORD', pod: 'SERVICE_AMS' },
+  { taskType: 'AMS_ENTRY', pod: 'SERVICE_AMS' },
+  { taskType: 'POLICY_UPDATE', pod: 'SERVICE_AMS' },
+  { taskType: 'DOCUMENT_UPLOAD', pod: 'SERVICE_AMS' },
+  { taskType: 'RENEWAL', pod: 'RENEWALS' },
+  { taskType: 'REMARKETING', pod: 'RENEWALS' },
+  { taskType: 'LOSS_RUNS', pod: 'RENEWALS' },
+  { taskType: 'NEW_BUSINESS', pod: 'NEW_BUSINESS' },
+  { taskType: 'SUBMISSION', pod: 'NEW_BUSINESS' },
+  { taskType: 'PROPOSAL_PREP', pod: 'NEW_BUSINESS' },
+  { taskType: 'QA_REVIEW', pod: 'QA' },
 ];
 
 /** Starting follow-ups. The first is the client's own example. */
@@ -50,10 +48,79 @@ export const DEFAULT_PLANS = [
   { code: 'COMPLETE', name: 'Desk Complete', monthlyPriceCents: BigInt(400_000), priceIsStartingAt: true, sortOrder: 3 },
 ] as const;
 
+type DefaultTarget = {
+  taskType: TaskType;
+  complexity: TaskComplexity | null;
+  note: string;
+} & (
+  | { kind: 'BUSINESS_TIME'; businessHours?: number; businessDays?: number }
+  | { kind: 'BEFORE_EXPIRATION'; opensDaysBeforeExpiration: number; dueDaysBeforeExpiration: number }
+);
+
 /**
- * Creates any missing default pod, routing rule, follow-up rule or plan.
- * Create-only: an existing record is never changed, so admin edits survive
- * re-seeding.
+ * The client's initial internal targets (27 Oct 2026) — internal goals, not
+ * customer guarantees. Types the client gave no target for (ACORD, Loss Runs,
+ * Proposal Prep, QA Review, Other) get none: those tasks carry no target date
+ * until an admin sets one (Module 18).
+ */
+export const DEFAULT_SERVICE_LEVELS: ReadonlyArray<DefaultTarget> = [
+  { taskType: 'COI', complexity: 'STANDARD', kind: 'BUSINESS_TIME', businessHours: 4, note: 'Standard COI' },
+  { taskType: 'COI', complexity: 'COMPLEX', kind: 'BUSINESS_TIME', businessDays: 1, note: 'Complex COI' },
+  { taskType: 'ENDORSEMENT', complexity: 'STANDARD', kind: 'BUSINESS_TIME', businessDays: 2, note: 'Standard endorsement' },
+  { taskType: 'ENDORSEMENT', complexity: 'COMPLEX', kind: 'BUSINESS_TIME', businessDays: 3, note: 'Complex endorsement; time waiting on the carrier is paused' },
+  { taskType: 'AMS_ENTRY', complexity: null, kind: 'BUSINESS_TIME', businessDays: 1, note: 'AMS data entry / update' },
+  { taskType: 'POLICY_UPDATE', complexity: null, kind: 'BUSINESS_TIME', businessDays: 1, note: 'AMS data entry / update' },
+  { taskType: 'SUBMISSION', complexity: null, kind: 'BUSINESS_TIME', businessDays: 2, note: 'New-business submission prep; clock paused while waiting on complete information' },
+  { taskType: 'NEW_BUSINESS', complexity: null, kind: 'BUSINESS_TIME', businessDays: 2, note: 'New-business submission prep; clock paused while waiting on complete information' },
+  { taskType: 'DOCUMENT_UPLOAD', complexity: null, kind: 'BUSINESS_TIME', businessDays: 1, note: 'Routine document request' },
+  { taskType: 'RENEWAL', complexity: null, kind: 'BEFORE_EXPIRATION', opensDaysBeforeExpiration: 120, dueDaysBeforeExpiration: 90, note: 'Renewal outreach begins 90–120 days before expiration' },
+  { taskType: 'REMARKETING', complexity: null, kind: 'BEFORE_EXPIRATION', opensDaysBeforeExpiration: 60, dueDaysBeforeExpiration: 45, note: 'Remarketing preparation 45–60 days before expiration' },
+];
+
+/** Placeholder calendar until the client confirms hours and zone (plan detail D2). */
+export const DEFAULT_CALENDAR = {
+  id: 'default',
+  timeZone: 'America/New_York',
+  workDays: [1, 2, 3, 4, 5],
+  dayStartMinute: 9 * 60,
+  dayEndMinute: 17 * 60,
+};
+
+/**
+ * Placeholder holidays (plan detail D2): US federal holidays on their observed
+ * dates — a Saturday holiday is observed the Friday before, a Sunday one the
+ * Monday after.
+ */
+export const DEFAULT_HOLIDAYS: ReadonlyArray<{ date: string; name: string }> = [
+  { date: '2026-01-01', name: "New Year's Day" },
+  { date: '2026-01-19', name: 'Martin Luther King Jr. Day' },
+  { date: '2026-02-16', name: "Presidents' Day" },
+  { date: '2026-05-25', name: 'Memorial Day' },
+  { date: '2026-06-19', name: 'Juneteenth' },
+  { date: '2026-07-03', name: 'Independence Day (observed)' },
+  { date: '2026-09-07', name: 'Labor Day' },
+  { date: '2026-10-12', name: 'Columbus Day' },
+  { date: '2026-11-11', name: 'Veterans Day' },
+  { date: '2026-11-26', name: 'Thanksgiving Day' },
+  { date: '2026-12-25', name: 'Christmas Day' },
+  { date: '2027-01-01', name: "New Year's Day" },
+  { date: '2027-01-18', name: 'Martin Luther King Jr. Day' },
+  { date: '2027-02-15', name: "Presidents' Day" },
+  { date: '2027-05-31', name: 'Memorial Day' },
+  { date: '2027-06-18', name: 'Juneteenth (observed)' },
+  { date: '2027-07-05', name: 'Independence Day (observed)' },
+  { date: '2027-09-06', name: 'Labor Day' },
+  { date: '2027-10-11', name: 'Columbus Day' },
+  { date: '2027-11-11', name: 'Veterans Day' },
+  { date: '2027-11-25', name: 'Thanksgiving Day' },
+  { date: '2027-12-24', name: 'Christmas Day (observed)' },
+  { date: '2027-12-31', name: "New Year's Day 2028 (observed)" },
+];
+
+/**
+ * Creates any missing default pod, routing rule, follow-up rule, plan,
+ * service-level target, calendar or holiday. Create-only: an existing record
+ * is never changed, so admin edits survive re-seeding.
  */
 export async function ensureDeskDefaults(prisma: PrismaClient) {
   const { created: pods } = await ensureDefaultPods(prisma);
@@ -67,7 +134,7 @@ export async function ensureDeskDefaults(prisma: PrismaClient) {
     const podId = podIds.get(r.pod);
     if (!podId) throw new Error(`Pod ${r.pod} missing`);
     await prisma.taskRoutingRule.create({
-      data: { taskType: r.taskType, podId, turnaroundHours: r.turnaroundHours, defaultPriority: r.defaultPriority ?? 'NORMAL' },
+      data: { taskType: r.taskType, podId, defaultPriority: r.defaultPriority ?? 'NORMAL' },
     });
     routing.push(r.taskType);
   }
@@ -87,5 +154,37 @@ export async function ensureDeskDefaults(prisma: PrismaClient) {
     plans.push(plan.code);
   }
 
-  return { pods, routing, followUps, plans };
+  // Compared in memory: Prisma reads an unset optional field as null, so this
+  // matches existing defaults whether their nulls were written or omitted.
+  const existingTargets = await prisma.serviceLevelTarget.findMany({
+    select: { taskType: true, complexity: true, priority: true, agencyId: true },
+  });
+  const serviceLevels: string[] = [];
+  for (const t of DEFAULT_SERVICE_LEVELS) {
+    const exists = existingTargets.some((e) =>
+      e.taskType === t.taskType && e.complexity === t.complexity && e.priority === null && e.agencyId === null);
+    if (exists) continue;
+    // Nulls written explicitly so every default row is stored the same way.
+    await prisma.serviceLevelTarget.create({
+      data: {
+        taskType: t.taskType, complexity: t.complexity, priority: null, agencyId: null, kind: t.kind, note: t.note,
+        ...(t.kind === 'BUSINESS_TIME'
+          ? { businessHours: t.businessHours ?? null, businessDays: t.businessDays ?? null }
+          : { opensDaysBeforeExpiration: t.opensDaysBeforeExpiration, dueDaysBeforeExpiration: t.dueDaysBeforeExpiration }),
+      },
+    });
+    serviceLevels.push(t.complexity ? `${t.taskType}/${t.complexity}` : t.taskType);
+  }
+
+  let calendar = false;
+  if (!(await prisma.deskCalendar.findUnique({ where: { id: DEFAULT_CALENDAR.id } }))) {
+    await prisma.deskCalendar.create({ data: DEFAULT_CALENDAR });
+    calendar = true;
+  }
+
+  const existingHolidays = new Set((await prisma.deskHoliday.findMany({ select: { date: true } })).map((h) => h.date));
+  const holidays = DEFAULT_HOLIDAYS.filter((h) => !existingHolidays.has(h.date));
+  if (holidays.length) await prisma.deskHoliday.createMany({ data: [...holidays] });
+
+  return { pods, routing, followUps, plans, serviceLevels, calendar, holidays: holidays.length };
 }

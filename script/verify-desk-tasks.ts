@@ -45,7 +45,7 @@ async function wipe() {
   const rules = await prisma.taskRoutingRule.findMany();
   ok('every default routing rule exists, active, pointing at the right pod',
     DEFAULT_ROUTING.every((d) => rules.some((r) =>
-      r.taskType === d.taskType && r.isActive && pods.get(r.podId) === d.pod && r.turnaroundHours === d.turnaroundHours)));
+      r.taskType === d.taskType && r.isActive && pods.get(r.podId) === d.pod)));
   ok('OTHER has no rule (stays unrouted for AM triage)', !rules.some((r) => r.taskType === 'OTHER'));
   ok('one rule per type', await rejects(() => prisma.taskRoutingRule.create({ data: { taskType: 'COI', podId: rules[0].podId } })));
   const fus = await prisma.taskFollowUpRule.findMany();

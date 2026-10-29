@@ -264,7 +264,7 @@ async function main() {
 
   // 6. The Desk defaults: pods, routing and follow-up rules, plans (create-only; never overwrites admin edits)
   const desk = await ensureDeskDefaults(prisma);
-  console.log(`Desk defaults created: ${desk.pods.length} pods, ${desk.routing.length} routing rules, ${desk.followUps.length} follow-up rules, ${desk.plans.length} plans`);
+  console.log(`Desk defaults created: ${desk.pods.length} pods, ${desk.routing.length} routing rules, ${desk.followUps.length} follow-up rules, ${desk.plans.length} plans, ${desk.serviceLevels.length} service levels, ${desk.holidays} holidays`);
 
   console.log('\n========================================');
   console.log('Database seeded successfully!');

@@ -84,7 +84,7 @@ Modules are sized for **one 2–3 hour working session each**, ordered so each b
 | 4 | Task models: `Task`, `TaskEvent`, `TaskDocument`, `TaskRoutingRule`, `TaskFollowUpRule`, plus type / status / priority / source / visibility enums | 3.0 | | ✅ Done |
 | 5 | Agency-side roles and account assignment: add the `CSR` agency role, label the existing `AGENT` role "Producer", per-user book access (all accounts / assigned only) set by the agency admin, `InsuredAssignment` (several producers / service staff per account) | 2.5 | 🆕 Q3 | ✅ Done |
 | 6 | Agency Desk profile and billing data: agency AMS system + agency-specific instructions + password-vault reference (never passwords); `DeskPlan` (Core / Growth / Complete) with monthly allowances, agency plan + overrides; task billing fields (service category, units, complexity, included / overage / non-billable, billing status) | 3.0 | 🆕 Q1, Q6 | ✅ Done |
-| 7 | Service levels and business calendar: task complexity (standard / complex), `WAITING_ON_INSURED` status, `ServiceLevelTarget` (by type × complexity × priority, with per-agency agreement overrides; business-time or days-before-expiration), business hours + holidays; seed the client's targets; replaces the placeholder turnaround on routing rules | 3.0 | 🆕 Q5 | ⬜ |
+| 7 | Service levels and business calendar: task complexity (standard / complex), `WAITING_ON_INSURED` status, `ServiceLevelTarget` (by type × complexity × priority, with per-agency agreement overrides; business-time or days-before-expiration), business hours + holidays; seed the client's targets; replaces the placeholder turnaround on routing rules | 3.0 | 🆕 Q5 | ✅ Done |
 | 8 | Need-to-know and audit models: document sensitivity category, VA sensitive-data permissions, task restriction to named staff, `DeskAuditLog` for every action including document views and downloads | 2.5 | 🆕 Q4 | ⬜ |
 | 9 | Access layer, part 1 — `lib/desk/access.ts` for agency users (admin / producer / CSR, book access, account assignment) and Account Managers; cross-tenant returns 404 | 2.5 | ✏️ Q3 | ⬜ |
 | 10 | Access layer, part 2 — VAs on a need-to-know basis: agency authorization × pod × named restrictions × task; VAs reach insureds and policies only through tasks they can work; sensitive documents only with explicit permission | 2.5 | ✏️ Q4 | ⬜ |
@@ -238,6 +238,37 @@ Modules are sized for **one 2–3 hour working session each**, ordered so each b
 **Data:** the 2 existing follow-up rules were backfilled as non-billable (same MongoDB reason as before). No tasks existed, so nothing else needed backfilling. A new shared filter, `BILLING_UNCLASSIFIED`, finds tasks awaiting classification, with a test proving the plain filter misses them.
 
 **Verified:** `prisma validate` passed · `prisma db push` created 4 collections and 6 indexes · `tsc --noEmit` exit 0 · **33 tests passed** (`script/verify-desk-billing.ts`): AMS names; the credential guard refusing 9 credential-like texts with no false alarms on 7 ordinary instructions; every request type mapped; billing month across time zones; allowance resolution (override over plan, unlimited, not configured) both in memory and from stored records; seeded plans and prices; one plan per agency; plans in use protected from deletion; task billing defaults and filters; temporary records removed · Module 1–5 suites re-run: 21, 22, 28, 26, 31 passed.
+
+**Module 7 — Service levels and business calendar (✅ complete, 29 Oct 2026)**
+
+**Delivered:**
+
+- `ServiceLevelTarget`: an internal turnaround target for a request type. It can be narrowed by complexity and / or priority, and an agency's own service agreement can override the Desk default. A target takes one of three forms:
+  - **N business hours** (e.g. 4 for a standard COI)
+  - **N business days** (e.g. 2 for a standard endorsement). Days stay days, so if the Desk's hours change from 9–5 to 8–6, "1 business day" still means one day.
+  - **Anchored to the policy's expiration date** (renewal work): when the work opens and when it is due.
+- **The client's targets, seeded:**
+
+  | Request | Target |
+  |---|---|
+  | COI — standard / complex | 4 business hours / 1 business day |
+  | Endorsement — standard / complex | 2 / 3 business days (time waiting on the carrier is paused) |
+  | AMS entry, policy update | 1 business day |
+  | New business, submission | 2 business days (paused while waiting on complete information) |
+  | Document request | 1 business day |
+  | Renewal | Opens 120 days before expiration, due by 90 |
+  | Remarketing | Opens 60 days before expiration, due by 45 |
+
+- **Which target applies:** the most specific one wins. An agency's own agreement beats any Desk default. Then priority beats complexity, so a future "Urgent COI" target applies to every urgent COI. A target naming both beats either.
+- **Each task keeps a copy of its target** when created. Editing a target later never changes what an open task was promised.
+- **New status "Waiting on Insured"**, alongside Waiting on Agency and Waiting on Carrier. The clock pauses in all three (Module 13). Agencies see it as "In Progress".
+- `DeskCalendar` (working days, hours, time zone) and `DeskHoliday` (dates stored as plain calendar dates, so they can't shift with time zones). Seeded with the **placeholder Mon–Fri 9:00–17:00 US Eastern and 23 US federal holidays for 2026–2027** on their observed dates.
+- The placeholder turnaround hours from Module 4 were **removed** from routing rules, including from the 13 stored records.
+- Helpers in `lib/desk/service-levels.ts`: target selection, plain-English wording ("4 business hours", "due 90 days before expiration (opens at 120)"), validation for the editor in Module 18, and the task snapshot. `npm run db:seed:desk` now also prints each request type's pod and target.
+
+**For the client:** five request types have **no target yet** because none was given: **ACORD, Loss Runs, Proposal Prep, QA Review and Other**. Those tasks will have no target date until one is set (detail D5).
+
+**Verified:** `prisma validate` passed · `prisma db push` created 3 collections and 3 indexes · `tsc --noEmit` exit 0 · **31 tests passed** (`script/verify-desk-service-levels.ts`): target selection across agency / priority / complexity / type, inactive and missing targets; wording and validation; all 11 client targets stored correctly; duplicate defaults refused whether empty fields were written or left out; agency agreements beside defaults; calendar values and a valid time zone; every observed holiday on a weekday; re-seeding creating nothing; the new status and target snapshot on a task; temporary records removed · Module 1–6 suites re-run: 21, 22, 28, 26, 31, 33 passed.
 
 ### Phase 1 — Admin Setup (13 h)
 
@@ -510,3 +541,4 @@ DeskAuditLog       actorId, action, entity, entityId, agencyId, ip, userAgent, a
 | D2 | Desk business hours, time zone and holiday list | Module 11 | Mon–Fri 9:00–17:00 US Eastern; US federal holidays |
 | D3 | Document sensitivity categories: are General / Policy / Financial / Personal the right four? | Module 8 | Those four |
 | D4 | Can a Producer submit requests for accounts outside their assignment? | Module 9 | No: only accounts they can see |
+| D5 | Targets for ACORD, Loss Runs, Proposal Prep, QA Review and Other (none given) | Module 12 | No target date for these types |

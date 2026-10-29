@@ -1104,6 +1104,7 @@ enum TaskStatus {
   IN_PROGRESS
   WAITING_ON_AGENCY
   WAITING_ON_CARRIER
+  WAITING_ON_INSURED
   QA_REVIEW
   COMPLETED
   CANCELLED
@@ -1171,9 +1172,12 @@ model Task {
 
   /// Working due date; an AM may move it.
   dueAt            DateTime?
-  /// Target set at creation from the routing rule's turnaround. Never edited,
+  /// Target set at creation from the matching ServiceLevelTarget. Never edited,
   /// so turnaround reporting measures against the original commitment.
   slaDueAt         DateTime?
+  /// Copy of the target applied at creation (kind, hours / days, target id), so
+  /// later edits to targets never change what an open task was promised.
+  slaTarget        Json?
 
   source           TaskSource    @default(AGENCY)
   createdById      String?       @db.ObjectId
@@ -1284,8 +1288,6 @@ model TaskRoutingRule {
   taskType        TaskType     @unique
   podId           String       @db.ObjectId
   defaultPriority TaskPriority @default(NORMAL)
-  /// Hours from creation to slaDueAt. Null = no default due date.
-  turnaroundHours Int?
   isActive        Boolean      @default(true)
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
@@ -1426,4 +1428,68 @@ model AgencyAllowanceOverride {
   agencyDeskPlan   AgencyDeskPlan  @relation(fields: [agencyDeskPlanId], references: [id], onDelete: Cascade)
 
   @@unique([agencyDeskPlanId, category])
+}
+
+// ─── The Desk: service levels & business calendar ──────────────────────────
+
+enum SlaTargetKind {
+  /// Due N business hours or N business days after the clock starts.
+  BUSINESS_TIME
+  /// Anchored to the policy's expiration date (renewal work).
+  BEFORE_EXPIRATION
+}
+
+/// An internal turnaround target (not a customer guarantee). The most specific
+/// active target wins (lib/desk/service-levels.ts): an agency's own agreement
+/// over the default, then priority, then complexity, down to type alone.
+/// Exactly one of businessHours / businessDays is set for BUSINESS_TIME; days
+/// stay days, so a change to business hours does not change their meaning.
+model ServiceLevelTarget {
+  id                         String          @id @default(auto()) @map("_id") @db.ObjectId
+  taskType                   TaskType
+  /// Null = applies to both complexities.
+  complexity                 TaskComplexity?
+  /// Null = applies to every priority.
+  priority                   TaskPriority?
+  /// Null = the Desk default; set = this agency's service agreement.
+  agencyId                   String?         @db.ObjectId
+
+  kind                       SlaTargetKind   @default(BUSINESS_TIME)
+  businessHours              Int?
+  businessDays               Int?
+  /// BEFORE_EXPIRATION: work opens this many days before expiration…
+  opensDaysBeforeExpiration  Int?
+  /// …and is due this many days before expiration.
+  dueDaysBeforeExpiration    Int?
+
+  note                       String?
+  isActive                   Boolean         @default(true)
+  createdAt                  DateTime        @default(now())
+  updatedAt                  DateTime        @updatedAt
+
+  @@unique([taskType, complexity, priority, agencyId])
+  @@index([taskType, isActive])
+}
+
+/// The Desk's working hours. A single row (id "default"); per-agency calendars
+/// can be added later without changing targets.
+model DeskCalendar {
+  id             String   @id @map("_id")
+  /// IANA zone, e.g. "America/New_York".
+  timeZone       String
+  /// ISO weekdays that are working days: 1 = Monday … 7 = Sunday.
+  workDays       Int[]
+  /// Minutes after midnight, local time: 540 = 9:00, 1020 = 17:00.
+  dayStartMinute Int
+  dayEndMinute   Int
+  updatedAt      DateTime @updatedAt
+}
+
+/// A non-working date in the Desk calendar. Stored as "YYYY-MM-DD" (a calendar
+/// date, not an instant) so it cannot shift with time zones.
+model DeskHoliday {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  date      String   @unique
+  name      String
+  createdAt DateTime @default(now())
 }

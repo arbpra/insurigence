@@ -1,6 +1,7 @@
 /**
  * Creates The Desk's defaults if missing: the 4 pods, routing rules,
- * follow-up rules and the 3 plans. Idempotent and create-only; never edits existing records.
+ * follow-up rules, the 3 plans, service-level targets, the business calendar
+ * and holidays. Idempotent and create-only; never edits existing records.
  * Separate from prisma/seed.ts because that script also resets the demo users'
  * passwords, which must not happen on a shared database.
  * Run with:  npm run db:seed:desk
@@ -8,18 +9,27 @@
 import 'dotenv/config';
 import { prisma } from '../lib/prisma';
 import { ensureDeskDefaults } from '../lib/desk/defaults';
+import { describeTarget } from '../lib/desk/service-levels';
 
 const list = (xs: string[]) => (xs.length ? xs.join(', ') : 'none (already present)');
 
 (async () => {
-  const { pods, routing, followUps, plans } = await ensureDeskDefaults(prisma);
+  const { pods, routing, followUps, plans, serviceLevels, calendar, holidays } = await ensureDeskDefaults(prisma);
   console.log(`Pods created:            ${list(pods)}`);
   console.log(`Routing rules created:   ${list(routing)}`);
   console.log(`Follow-up rules created: ${list(followUps)}`);
   console.log(`Plans created:           ${list(plans)}`);
+  console.log(`Service levels created:  ${list(serviceLevels)}`);
+  console.log(`Calendar created:        ${calendar ? 'yes' : 'no (already present)'}`);
+  console.log(`Holidays created:        ${holidays}`);
 
   const rules = await prisma.taskRoutingRule.findMany({ include: { pod: { select: { code: true } } } });
   console.log('\nRouting:');
-  for (const r of rules) console.log(`  ${r.taskType.padEnd(16)} → ${r.pod.code.padEnd(13)} ${r.turnaroundHours ?? '-'}h`);
+  const targets = await prisma.serviceLevelTarget.findMany({ where: { isActive: true } });
+  for (const r of rules) {
+    const ts = targets.filter((t) => t.taskType === r.taskType && t.agencyId === null)
+      .map((t) => `${t.complexity ? t.complexity.toLowerCase() + ': ' : ''}${describeTarget(t)}`);
+    console.log(`  ${r.taskType.padEnd(16)} → ${r.pod.code.padEnd(13)} ${ts.join(' · ') || 'no target'}`);
+  }
   await prisma.$disconnect();
 })().catch(async (e) => { console.error(e); await prisma.$disconnect(); process.exit(1); });
