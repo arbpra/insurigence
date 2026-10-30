@@ -89,7 +89,7 @@ Modules are sized for **one 2–3 hour working session each**, ordered so each b
 | 9 | Access layer, part 1 — `lib/desk/access.ts` for agency users (admin / producer / CSR, book access, account assignment) and Account Managers; cross-tenant returns 404 | 2.5 | ✏️ Q3 | ✅ Done |
 | 10 | Access layer, part 2 — VAs on a need-to-know basis: agency authorization × pod × named restrictions × task; VAs reach insureds and policies only through tasks they can work; sensitive documents only with explicit permission | 2.5 | ✏️ Q4 | ✅ Done |
 | 11 | Business-hours SLA engine (pure, unit-tested): add business time across nights, weekends and holidays; elapsed time excluding waiting periods; expiration-anchored targets | 3.0 | 🆕 Q5 | ✅ Done |
-| 12 | Task service layer `lib/desk/tasks.ts`: create (routing + AM attach + SLA target), status state machine, assign, note; every action writes a `TaskEvent` and an audit entry; internal → agency status mapping | 3.0 | ✏️ | ⬜ |
+| 12 | Task service layer `lib/desk/tasks.ts`: create (routing + AM attach + SLA target), status state machine, assign, note; every action writes a `TaskEvent` and an audit entry; internal → agency status mapping | 3.0 | ✏️ | ✅ Done |
 | 13 | Task service, part 2 — SLA clock pause / resume on waiting statuses; billing capture at completion (classified as included or overage against the month's allowance, or non-billable) | 2.5 | 🆕 Q5, Q6 | ⬜ |
 | 14 | Navigation shell: role-aware sidebar and post-login landing; route areas `/desk` (agency), `/desk-ops` (AM / VA), `/super-admin/desk`; placeholder pages | 2.5 | | ⬜ |
 
@@ -397,6 +397,60 @@ Module 1–9 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61 passed (**336 in 
 
 Module 1–10 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46 passed (**394 in total**).
 
+**Module 12 — Task service layer (✅ complete, 30 Oct 2026)**
+
+**Delivered:** `lib/desk/tasks.ts` is the only code that creates or changes tasks. The API routes in Module 28 will be thin wrappers around it. Each change, its timeline entry and its audit entry are saved together in one database transaction, so a change that can't be logged doesn't happen.
+
+- **Filing a request** (`createTask`):
+  - The agency, account and policy come from the access layer, so a user can submit only for accounts they can see (D4). A policy fills in its account.
+  - **Routed automatically** to the pod for the request type. "Other", or a type with no active rule, stays unrouted for the AM to triage.
+  - **The agency's primary AM is attached**, or the backup when there is no primary.
+  - **The matching target is applied and the due date set:** agency agreement first, then priority, then complexity. The target is copied onto the task, so later edits never change what an open task was promised.
+    - Renewals use the policy's expiration date. Without one, the task gets no due date rather than a guessed one.
+    - ACORD, Loss Runs, Proposal Prep, QA Review and Other get no due date (D5).
+  - **Billing category and billable flag** are set from the type (QA Review is non-billable).
+  - The request is checked: valid type, a title (up to 200 characters), complexity and priority.
+- **Status changes** (`changeTaskStatus`) follow a fixed set of allowed moves, for example In Progress → Waiting / QA Review / Completed. Anything else is refused with a clear message.
+  - **VAs** change only tasks assigned to them.
+  - **Agency users** may only cancel, and only before work starts.
+  - **Only AMs and Operations Managers** reopen a completed or cancelled task.
+  - **A reason is required** for waiting, cancelling and reopening. A "waiting on agency" reason is shown to the agency, because it says what's needed.
+  - **Start, completion and cancellation times are recorded.** The first start time is kept when a task is reopened.
+- **Assignment** (`assignTask`):
+  - A VA picks up an unassigned task or releases their own. AMs assign and reassign anyone eligible.
+  - **The new assignee must be authorized for that agency, pod and task under their own need-to-know rules**, so work can't be handed to someone the agency hasn't approved.
+  - New ⇄ Assigned follows automatically.
+- **Notes** (`addTaskNote`): staff notes are internal by default and can be shared with the agency. Agency notes are always shared. **When the agency replies to a task waiting on them, it resumes automatically:** back to In Progress, or back to the queue if nobody has picked it up yet. Notes are audited without their text.
+- **Agency view** (`agencyTaskView`): the simplified status (Received / In Progress / Needs Your Attention / Completed / Cancelled), with no internal fields such as pod, assignee, restriction, billing or target details.
+- **Timeline visibility:** a status change is shown to the agency only when the agency's simplified status changes. Internal moves, such as In Progress → Waiting on Carrier, stay internal.
+
+**Design decisions:**
+
+- **Two people changing the same task at once:** exactly one change wins. The other person is told the task was changed and to refresh, with no silent overwrite and no server error. This holds whether the second request races the first or arrives just after it.
+- **Role refusals are audited too.** Out-of-scope requests were already logged as "not found" by the access layer. Refused actions on a task the user can see, such as a VA changing a task they haven't picked up, are now logged with the reason. Invalid input and conflicts aren't access attempts, so they aren't logged.
+
+**Issues caught and fixed:**
+
+- **The missing-field trap again (found while writing).** The pick-up check matched "no assignee" with a plain null. A new task stores no assignee field at all, so every first pick-up would have failed as "changed by someone else". It now uses the shared filter from Module 4, and a test proves a first pick-up works.
+- **Agency reply on an unassigned task:** it would have moved the task to In Progress with nobody working it. It now returns to the queue.
+- **Two race tests would have been flaky:** two status changes can both succeed if they arrive one after the other. The tests now use moves that conflict either way (complete vs cancel), and three consecutive runs gave the expected result with different winners.
+- **Audit gap:** see "Role refusals are audited too" above.
+
+**Verified:** `tsc --noEmit` exit 0 · **76 tests passed** (`script/verify-desk-task-service.ts`) using the seeded pods and routing rules, with temporary agencies, users and pod memberships:
+- the status rules and agency mapping;
+- creation: routing, AM and backup AM, standard and complex COI targets, an agency agreement overriding the default, a renewal from its policy's expiration, D5 types, unrouted "Other", priority, AM filing on an agency's behalf, billing defaults, every validation error;
+- pick-up, assignment rules and authorization of the assignee;
+- the full lifecycle including waiting, the agency reply, QA, completion and reopening;
+- agency cancelling;
+- notes and their visibility;
+- 404s out of scope;
+- the agency view hiding internal fields;
+- one audit entry per action and audited refusals;
+- simultaneous changes and simultaneous pick-ups;
+- temporary records removed.
+
+Module 1–11 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58 passed (**470 in total**).
+
 ### Phase 1 — Admin Setup (13 h)
 
 | # | Module | Hours | Change | Status |
@@ -474,7 +528,7 @@ Module 1–10 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46 passed (**39
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–11 complete (29.5 h). **96.0 h remaining.**
+**Progress:** Modules 1–12 complete (32.5 h). **93.0 h remaining.**
 
 The client's answers added **33 hours** (see Section 9), approximately:
 

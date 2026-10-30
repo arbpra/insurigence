@@ -46,8 +46,15 @@ export type DeskScope =
   /** No Desk access (agency not enabled, unknown or inactive user). */
   | { kind: 'NONE'; userId: string; role: string; reason: string };
 
+/**
+ * A refused Desk request. 404 for anything out of scope (never more detail);
+ * 403 for an action the user's role may not take on a record they can see;
+ * 400 / 409 for invalid input or a rule such as a status change not allowed
+ * from the task's current status (lib/desk/tasks.ts). Messages for 400 / 403
+ * / 409 are shown to the user, so they never contain other agencies' data.
+ */
 export class DeskAccessError extends Error {
-  constructor(public status: 401 | 403 | 404, message: string) {
+  constructor(public status: 400 | 401 | 403 | 404 | 409, message: string) {
     super(message);
     this.name = 'DeskAccessError';
   }
