@@ -121,7 +121,7 @@ async function wipe() {
       sAmB.kind === 'ACCOUNT_MANAGER' && sAmB.agencyIds.join() === B.id);
     ok('AM of an agency without The Desk covers nothing', sAmNone.kind === 'ACCOUNT_MANAGER' && sAmNone.agencyIds.length === 0);
     ok('Operations Manager: platform scope', sOps.kind === 'PLATFORM' && scopeAgencyIds(sOps) === 'ALL');
-    ok('Desk VA: no access until Module 10', sVa.kind === 'NONE');
+    ok('Desk VA with no pod: a VA scope with no grants', sVa.kind === 'VA' && sVa.grants.length === 0);
     ok('inactive user: no access', sInactive.kind === 'NONE');
     ok('unknown user id: no access', (await resolveDeskScope(prisma, randomBytes(12).toString('hex'))).kind === 'NONE');
 

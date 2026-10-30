@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 
 /**
  * The Desk's starting pods. `code` is the stable key (routing rules and seeds
@@ -40,9 +40,9 @@ export type DefaultPodCode = (typeof DEFAULT_PODS)[number]['code'];
  * match unset — so every query for whole-pod rows must use this, never a bare null.
  * (The unique index treats null and unset alike, so duplicates are still blocked.)
  */
-export const WHOLE_POD_ACCESS = {
+export const WHOLE_POD_ACCESS: Prisma.AgencyPodAccessWhereInput = {
   OR: [{ userId: null }, { userId: { isSet: false } }],
-} as const;
+};
 
 /** Creates any default pod that does not exist yet. Safe to run repeatedly. */
 export async function ensureDefaultPods(prisma: PrismaClient): Promise<{ created: string[] }> {

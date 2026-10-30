@@ -87,7 +87,7 @@ Modules are sized for **one 2–3 hour working session each**, ordered so each b
 | 7 | Service levels and business calendar: task complexity (standard / complex), `WAITING_ON_INSURED` status, `ServiceLevelTarget` (by type × complexity × priority, with per-agency agreement overrides; business-time or days-before-expiration), business hours + holidays; seed the client's targets; replaces the placeholder turnaround on routing rules | 3.0 | 🆕 Q5 | ✅ Done |
 | 8 | Need-to-know and audit models: document sensitivity category, VA sensitive-data permissions, task restriction to named staff, `DeskAuditLog` for every action including document views and downloads | 2.5 | 🆕 Q4 | ✅ Done |
 | 9 | Access layer, part 1 — `lib/desk/access.ts` for agency users (admin / producer / CSR, book access, account assignment) and Account Managers; cross-tenant returns 404 | 2.5 | ✏️ Q3 | ✅ Done |
-| 10 | Access layer, part 2 — VAs on a need-to-know basis: agency authorization × pod × named restrictions × task; VAs reach insureds and policies only through tasks they can work; sensitive documents only with explicit permission | 2.5 | ✏️ Q4 | ⬜ |
+| 10 | Access layer, part 2 — VAs on a need-to-know basis: agency authorization × pod × named restrictions × task; VAs reach insureds and policies only through tasks they can work; sensitive documents only with explicit permission | 2.5 | ✏️ Q4 | ✅ Done |
 | 11 | Business-hours SLA engine (pure, unit-tested): add business time across nights, weekends and holidays; elapsed time excluding waiting periods; expiration-anchored targets | 3.0 | 🆕 Q5 | ⬜ |
 | 12 | Task service layer `lib/desk/tasks.ts`: create (routing + AM attach + SLA target), status state machine, assign, note; every action writes a `TaskEvent` and an audit entry; internal → agency status mapping | 3.0 | ✏️ | ⬜ |
 | 13 | Task service, part 2 — SLA clock pause / resume on waiting statuses; billing capture at completion (classified as included or overage against the month's allowance, or non-billable) | 2.5 | 🆕 Q5, Q6 | ⬜ |
@@ -318,6 +318,44 @@ Modules are sized for **one 2–3 hour working session each**, ordered so each b
 
 **Verified:** `tsc --noEmit` exit 0 · **61 tests passed** (`script/verify-desk-access.ts`) on three temporary agencies (two with The Desk, one without) with 12 users across every role: scope resolution; account, policy and task lists by role; single-record 404s for cross-agency, unassigned, nonexistent and malformed ids; refusals audited with the real agency; submission rules; who may manage access; changes taking effect immediately; generic error responses; temporary records removed · Module 1–8 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37 passed (**290 in total**).
 
+**Module 10 — Access layer, part 2: VA need-to-know (✅ complete, 30 Oct 2026)**
+
+**Delivered:**
+
+- **A VA sees a task only when all four checks pass** (client answer Q4):
+  1. **Pod:** the VA is a member of the task's pod, and the pod is active.
+  2. **Agency authorization:** the agency authorized that pod as a whole, or this VA by name, and has The Desk switched on.
+  3. **Restriction:** the task isn't restricted to other named staff.
+  4. **Task:** the task is open, or the VA is its assignee. A VA keeps their own completed work history but doesn't see colleagues' finished or cancelled tasks.
+- **Unrouted tasks are invisible to every VA** until an AM sends them to a pod.
+- **Accounts and policies only through tasks:** a VA sees an insured account only while they can see a task on it. For policies:
+  - a task about one policy (for example an endorsement) shows that policy only;
+  - a task on the account with no specific policy (for example a COI) shows that account's policies.
+- **Sensitive documents:** VAs see General and Policy documents. Financial and Personal documents need an individual grant, per category. Refusals are audited with the document's category, so attempts on sensitive files stand out.
+- **Agency side:** agency users now see only documents and history entries marked as shared with the agency, never internal notes or internal files. Removed documents are hidden from everyone.
+- **VAs can't file requests;** they work them. (Subtasks come in Module 38.)
+- **Changes apply on the next request.** Removing a VA from a pod, deactivating a pod, withdrawing a named authorization, switching The Desk off or adding a VA to a restricted task all take effect immediately.
+
+**Design decisions:**
+
+- **Authorization beats assignment.** A VA assigned to a task loses sight of it if their pod or agency authorization is removed. The AM reassigns the work.
+- **Named authorization is an allow-list.** When an agency authorizes only named VAs from a pod, other members of that pod see nothing from that agency.
+
+**Issues:** one type-checking issue, caught before testing. The shared whole-pod filter was declared read-only, so it couldn't be combined with other conditions. I fixed it at the source in `lib/desk/pods.ts`, with no change in behaviour, and the Module 2 suite still passes. One Module 9 test was updated: a VA with no pod now resolves to a VA scope with no grants, instead of "no access", and still sees nothing.
+
+**Verified:** `tsc --noEmit` exit 0 · **46 tests passed** (`script/verify-desk-va-access.ts`) on three temporary agencies (one without The Desk), three temporary pods (one inactive) and six VAs:
+- authorization by whole pod, by name, inactive pod and Desk switched off;
+- task visibility across every check;
+- accounts and policies reached only through tasks;
+- documents by category and agency visibility;
+- internal history hidden from agencies;
+- single-record 404s;
+- a refused financial document audited with its category;
+- five live permission changes;
+- temporary records removed.
+
+Module 1–9 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61 passed (**336 in total**).
+
 ### Phase 1 — Admin Setup (13 h)
 
 | # | Module | Hours | Change | Status |
@@ -395,7 +433,7 @@ Modules are sized for **one 2–3 hour working session each**, ordered so each b
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–9 complete (24.0 h). **101.5 h remaining.**
+**Progress:** Modules 1–10 complete (26.5 h). **99.0 h remaining.**
 
 The client's answers added **33 hours** (see Section 9), approximately:
 

@@ -3,23 +3,31 @@
  * Every Desk query and route goes through here; no screen writes its own
  * permission check (build plan, section 6).
  *
- * Part 1 (Module 9): agency users and Account Managers.
  *  - Owner / Admin: the agency's whole book.
  *  - Producer, CSR: accounts they are assigned to, unless the agency admin
  *    granted the whole book (User.bookAccess, via effectiveBookAccess).
  *  - Account Manager: every agency where they are primary or backup AM.
  *  - Operations Manager, Super Admin: every agency.
- *  - Desk VA: nothing yet — need-to-know scoping is Module 10. Until then a
- *    VA is refused everywhere, so nothing is exposed by default.
+ *  - Desk VA, need-to-know (client answer Q4): a task is visible only when
+ *      1. the VA is in the task's pod (an active pod),
+ *      2. the agency authorised that pod as a whole, or this VA by name,
+ *         and has The Desk switched on,
+ *      3. the task is not restricted to other named staff, and
+ *      4. the task is open, or the VA is its assignee (their own history).
+ *    A VA reaches accounts and policies only through such tasks, and opens
+ *    Financial / Personal documents only with an individual grant.
  *
  * Anything outside a user's scope is reported as "not found" (404), never
  * "forbidden", so a user cannot learn that another agency's record exists.
  * Every refusal is written to the audit log.
  */
-import type { Prisma, PrismaClient } from '@prisma/client';
+import type { DocumentSensitivity, Prisma, PrismaClient } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import { effectiveBookAccess, isAgencyRole, type BookAccessLevel } from '../roles';
 import { recordAudit } from './audit';
+import { DEFAULT_STAFF_SENSITIVITIES } from './need-to-know';
+import { WHOLE_POD_ACCESS } from './pods';
+import { CLOSED_STATUSES, passesRestriction } from './task-filters';
 
 type Db = PrismaClient;
 
@@ -30,7 +38,12 @@ export type DeskScope =
   | { kind: 'AGENCY'; userId: string; role: string; agencyId: string; book: BookAccessLevel }
   /** An Account Manager: their assigned agencies (may be empty). */
   | { kind: 'ACCOUNT_MANAGER'; userId: string; role: string; agencyIds: string[] }
-  /** No Desk access (agency not enabled, unknown role, or VA until Module 10). */
+  /**
+   * A Desk VA: the (agency, pod) pairs they may work, and the document
+   * categories they may open. No pairs = no access.
+   */
+  | { kind: 'VA'; userId: string; role: string; grants: { agencyId: string; podId: string }[]; sensitivities: DocumentSensitivity[] }
+  /** No Desk access (agency not enabled, unknown or inactive user). */
   | { kind: 'NONE'; userId: string; role: string; reason: string };
 
 export class DeskAccessError extends Error {
@@ -77,7 +90,34 @@ export async function resolveDeskScope(db: Db, userId: string): Promise<DeskScop
     return { kind: 'ACCOUNT_MANAGER', ...base, agencyIds: rows.map((r) => r.agencyId) };
   }
 
-  if (user.role === 'DESK_VA') return { kind: 'NONE', ...base, reason: 'VA access is defined in Module 10' };
+  if (user.role === 'DESK_VA') {
+    const memberships = await db.podMember.findMany({
+      where: { userId: user.id, pod: { isActive: true } },
+      select: { podId: true },
+    });
+    const podIds = memberships.map((m) => m.podId);
+    const access = podIds.length
+      ? await db.agencyPodAccess.findMany({
+          where: {
+            podId: { in: podIds },
+            agency: { deskEnabled: true },
+            OR: [WHOLE_POD_ACCESS, { userId: user.id }],
+          },
+          select: { agencyId: true, podId: true },
+        })
+      : [];
+    // A whole-pod row and a named row for the same pair grant the same thing.
+    const seen = new Set<string>();
+    const grants = access.filter((g) => {
+      const key = `${g.agencyId}:${g.podId}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    const permission = await db.deskStaffPermission.findUnique({ where: { userId: user.id }, select: { allowedSensitivities: true } });
+    const sensitivities = [...new Set([...DEFAULT_STAFF_SENSITIVITIES, ...(permission?.allowedSensitivities ?? [])])];
+    return { kind: 'VA', ...base, grants, sensitivities };
+  }
   return { kind: 'NONE', ...base, reason: 'role has no Desk access' };
 }
 
@@ -87,6 +127,7 @@ export function scopeAgencyIds(scope: DeskScope): string[] | 'ALL' {
     case 'PLATFORM': return 'ALL';
     case 'AGENCY': return [scope.agencyId];
     case 'ACCOUNT_MANAGER': return scope.agencyIds;
+    case 'VA': return [...new Set(scope.grants.map((g) => g.agencyId))];
     case 'NONE': return [];
   }
 }
@@ -102,11 +143,16 @@ export function insuredWhere(scope: DeskScope): Prisma.InsuredAccountWhereInput 
         ? { agencyId: scope.agencyId }
         : { agencyId: scope.agencyId, assignments: { some: { userId: scope.userId } } };
     case 'ACCOUNT_MANAGER': return { agencyId: { in: scope.agencyIds } };
+    case 'VA': return scope.grants.length ? { tasks: { some: taskWhere(scope) } } : NOTHING;
     case 'NONE': return NOTHING;
   }
 }
 
-/** Policies the scope may see: those on insureds it may see. */
+/**
+ * Policies the scope may see: those on insureds it may see. A VA sees the
+ * policy a visible task is about; a visible task on an account with no
+ * specific policy (a COI, say) shows that account's policies.
+ */
 export function policyWhere(scope: DeskScope): Prisma.PolicyWhereInput {
   switch (scope.kind) {
     case 'PLATFORM': return {};
@@ -115,6 +161,16 @@ export function policyWhere(scope: DeskScope): Prisma.PolicyWhereInput {
         ? { agencyId: scope.agencyId }
         : { agencyId: scope.agencyId, insured: { assignments: { some: { userId: scope.userId } } } };
     case 'ACCOUNT_MANAGER': return { agencyId: { in: scope.agencyIds } };
+    case 'VA': {
+      if (!scope.grants.length) return NOTHING;
+      const visible = taskWhere(scope);
+      return {
+        OR: [
+          { tasks: { some: visible } },
+          { insured: { tasks: { some: { AND: [visible, { OR: [{ policyId: null }, { policyId: { isSet: false } }] }] } } } },
+        ],
+      };
+    }
     case 'NONE': return NOTHING;
   }
 }
@@ -140,8 +196,43 @@ export function taskWhere(scope: DeskScope): Prisma.TaskWhereInput {
             ],
           };
     case 'ACCOUNT_MANAGER': return { agencyId: { in: scope.agencyIds } };
+    case 'VA':
+      if (!scope.grants.length) return NOTHING;
+      return {
+        AND: [
+          // Built from (agency, pod) pairs only, so a task with no pod never matches.
+          { OR: scope.grants.map((g) => ({ agencyId: g.agencyId, podId: g.podId })) },
+          passesRestriction(scope.userId),
+          { OR: [{ status: { notIn: [...CLOSED_STATUSES] } }, { assigneeId: scope.userId }] },
+        ],
+      };
     case 'NONE': return NOTHING;
   }
+}
+
+const NOT_DELETED: Prisma.TaskDocumentWhereInput = { OR: [{ deletedAt: null }, { deletedAt: { isSet: false } }] };
+
+/**
+ * Task documents the scope may see: on a visible task and not removed.
+ * Agency users see only those shared with the agency; VAs only the
+ * categories they hold (lib/desk/need-to-know.ts).
+ */
+export function documentWhere(scope: DeskScope): Prisma.TaskDocumentWhereInput {
+  if (scope.kind === 'NONE') return NOTHING;
+  const parts: Prisma.TaskDocumentWhereInput[] = [NOT_DELETED];
+  if (scope.kind !== 'PLATFORM') parts.push({ task: taskWhere(scope) });
+  if (scope.kind === 'AGENCY') parts.push({ visibility: 'AGENCY' });
+  if (scope.kind === 'VA') parts.push({ sensitivity: { in: scope.sensitivities } });
+  return { AND: parts };
+}
+
+/** Timeline entries the scope may see: agency users never see internal ones. */
+export function taskEventWhere(scope: DeskScope): Prisma.TaskEventWhereInput {
+  if (scope.kind === 'NONE') return NOTHING;
+  const parts: Prisma.TaskEventWhereInput[] = [];
+  if (scope.kind !== 'PLATFORM') parts.push({ task: taskWhere(scope) });
+  if (scope.kind === 'AGENCY') parts.push({ visibility: 'AGENCY' });
+  return { AND: parts };
 }
 
 // ── Single-record guards. Return the record or throw a 404. ──
@@ -210,6 +301,21 @@ export async function getTaskForScope(db: Db, scope: DeskScope, taskId: string, 
   return refuse(db, scope, 'Task', taskId, real?.agencyId ?? null, ctx);
 }
 
+/**
+ * A document the scope may open. A refusal is logged with the file's
+ * category, so attempts on sensitive files stand out in the audit log.
+ */
+export async function getDocumentForScope(db: Db, scope: DeskScope, documentId: string, ctx: GuardContext = {}) {
+  if (isObjectId(documentId)) {
+    const found = await db.taskDocument.findFirst({ where: { AND: [{ id: documentId }, documentWhere(scope)] } });
+    if (found) return found;
+  }
+  const real = isObjectId(documentId)
+    ? await db.taskDocument.findUnique({ where: { id: documentId }, select: { agencyId: true, sensitivity: true } })
+    : null;
+  return refuse(db, scope, 'TaskDocument', documentId, real?.agencyId ?? null, ctx, real ? { sensitivity: real.sensitivity } : {});
+}
+
 // ── Submitting work ──
 
 /**
@@ -227,7 +333,8 @@ export async function resolveSubmission(
   input: { insuredId?: string | null; policyId?: string | null; agencyId?: string | null },
   ctx: GuardContext = {}
 ): Promise<{ agencyId: string; insuredId: string | null; policyId: string | null }> {
-  if (scope.kind === 'NONE') return refuse(db, scope, 'Task', 'submit', null, ctx, { op: 'submit' });
+  // VAs work requests; they do not file them (subtasks come in Module 38).
+  if (scope.kind === 'NONE' || scope.kind === 'VA') return refuse(db, scope, 'Task', 'submit', null, ctx, { op: 'submit' });
 
   let insuredId: string | null = null;
   let agencyId: string | null = null;
