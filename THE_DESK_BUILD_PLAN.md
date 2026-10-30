@@ -90,7 +90,7 @@ Modules are sized for **one 2–3 hour working session each**, ordered so each b
 | 10 | Access layer, part 2 — VAs on a need-to-know basis: agency authorization × pod × named restrictions × task; VAs reach insureds and policies only through tasks they can work; sensitive documents only with explicit permission | 2.5 | ✏️ Q4 | ✅ Done |
 | 11 | Business-hours SLA engine (pure, unit-tested): add business time across nights, weekends and holidays; elapsed time excluding waiting periods; expiration-anchored targets | 3.0 | 🆕 Q5 | ✅ Done |
 | 12 | Task service layer `lib/desk/tasks.ts`: create (routing + AM attach + SLA target), status state machine, assign, note; every action writes a `TaskEvent` and an audit entry; internal → agency status mapping | 3.0 | ✏️ | ✅ Done |
-| 13 | Task service, part 2 — SLA clock pause / resume on waiting statuses; billing capture at completion (classified as included or overage against the month's allowance, or non-billable) | 2.5 | 🆕 Q5, Q6 | ⬜ |
+| 13 | Task service, part 2 — SLA clock pause / resume on waiting statuses; billing capture at completion (classified as included or overage against the month's allowance, or non-billable) | 2.5 | 🆕 Q5, Q6 | ✅ Done |
 | 14 | Navigation shell: role-aware sidebar and post-login landing; route areas `/desk` (agency), `/desk-ops` (AM / VA), `/super-admin/desk`; placeholder pages | 2.5 | | ⬜ |
 
 **Module 1 — Internal roles (✅ complete, 26 Oct 2026)**
@@ -451,6 +451,53 @@ Module 1–10 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46 passed (**39
 
 Module 1–11 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58 passed (**470 in total**).
 
+**Module 13 — Clock pause / resume and billing capture (✅ complete, 30 Oct 2026)**
+
+**Delivered:**
+
+- **The service-level clock stops while waiting** (on the agency, carrier or insured) and restarts when work resumes:
+  - Two new task fields: when the current wait began, and the business minutes waited so far.
+  - **On resuming, the working due date moves out by exactly the business time spent waiting.** A wait from Friday 16:00 to Monday 10:00 counts 2 business hours, not 66.
+  - **Switching from one wait to another** (carrier → insured) keeps the clock stopped from the original moment.
+  - **Several waits add up.**
+  - **The original commitment (`slaDueAt`) never moves,** so turnaround reporting (Module 42) can measure against what was promised, minus recorded waiting.
+  - **Renewal and remarketing due dates stay tied to the policy's expiration;** the wait is recorded but the date doesn't move. A task cancelled while waiting records the wait without moving its date.
+  - **An agency reply** that resumes a task waiting on them restarts the clock the same way.
+  - Each resume records the minutes waited and the old and new due dates on the timeline and in the audit log.
+- **Billing captured at completion** (`lib/desk/billing-capture.ts`), in the month of completion in the Desk time zone:
+  - **Included:** within the agency's monthly allowance for the category. Agency overrides beat the plan, and "unlimited" is supported.
+  - **Overage:** the allowance is used up, so it is marked as unbilled overage.
+  - **Non-billable:** internal work such as QA Review, which never touches the allowance.
+  - **Not yet classified:** the agency has no plan, or its plan has no allowance for that category yet (D1). The month is recorded, the reason is stored, and nothing is guessed.
+  - **A task is included only if all its units fit;** it's never split across included and overage.
+  - **Reopening a completed task clears its billing and returns its allowance units,** so the next completion can use them.
+  - **Invoiced work can't be reopened** (a new request is filed instead).
+  - **Cancelled work is never billed.**
+- **Late classification (`classifyPendingBilling`):** once the client confirms allowances (D1), one run classifies all pending completed work, oldest first, in the month it was completed. Each one is logged as a system action, and re-running changes nothing.
+- **Repair step extended:** `npm run db:seed:desk` also fills the new waiting counter on any task stored without it. Prisma refuses to read a task that's missing a required field.
+
+**Design decisions:**
+
+- **Allowance use is counted atomically** (a counter per agency, month and category, using the same mechanism as task numbers). It isn't recounted on each completion, so two tasks completed at the same moment can never both take the last included unit.
+- **When a completion fails to save,** for example because two people completed the same task at once, the allowance unit it took is returned.
+- **Expiration-anchored targets don't move when paused,** because a policy expires on its date regardless of waiting.
+
+**Issues:** none. All tests passed on the first run. Two deliberate faults confirmed the key tests aren't passing by accident:
+- **Removing the "give the unit back" step** was caught by the double-completion test.
+- **Making the allowance counter non-atomic** was caught by ten tests, including three simultaneous completions all being marked "included".
+
+**Verified:** `prisma validate` passed · `prisma db push` in sync · `tsc --noEmit` exit 0 · **43 tests passed** (`script/verify-desk-clock-billing.ts`):
+- the clock rules on fixed dates (stop, switch, resume, weekend, accumulation, expiration-anchored, cancelled, no due date, old data);
+- real tasks paused for a week of business time and resumed (due date moved by exactly the wait, original commitment unchanged, audit and timeline details);
+- the agency-reply resume;
+- billing on a temporary plan: included, overage, reopening and returned units, agency override, multi-unit tasks, unlimited, non-billable, no plan, not configured, cancelled, late classification and re-run;
+- invoiced work protected;
+- three simultaneous completions with one unit left;
+- the same task completed twice at once;
+- temporary records removed.
+
+Module 1–12 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76 passed (**513 in total**).
+
 ### Phase 1 — Admin Setup (13 h)
 
 | # | Module | Hours | Change | Status |
@@ -528,7 +575,7 @@ Module 1–11 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58 passed (
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–12 complete (32.5 h). **93.0 h remaining.**
+**Progress:** Modules 1–13 complete (35.0 h). **90.5 h remaining.**
 
 The client's answers added **33 hours** (see Section 9), approximately:
 

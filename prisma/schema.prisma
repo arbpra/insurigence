@@ -1179,6 +1179,12 @@ model Task {
   /// Copy of the target applied at creation (kind, hours / days, target id), so
   /// later edits to targets never change what an open task was promised.
   slaTarget        Json?
+  /// Set while the task is in a waiting status: when the current wait began.
+  /// The service-level clock is stopped until it is cleared.
+  slaPausedAt      DateTime?
+  /// Business minutes spent waiting so far (all completed waits). Turnaround
+  /// reporting subtracts this; dueAt has already been pushed out by it.
+  slaPausedMinutes Int           @default(0)
 
   source           TaskSource    @default(AGENCY)
   createdById      String?       @db.ObjectId

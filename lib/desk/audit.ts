@@ -12,7 +12,7 @@ import type { Prisma, PrismaClient } from '@prisma/client';
 /** Known actions. Kept as strings in the database so new ones need no migration. */
 export const AUDIT_ACTIONS = [
   'task.created', 'task.viewed', 'task.updated', 'task.status_changed', 'task.assigned',
-  'task.routed', 'task.restricted', 'task.escalated', 'task.note_added',
+  'task.routed', 'task.restricted', 'task.escalated', 'task.note_added', 'task.billing_classified',
   'document.uploaded', 'document.viewed', 'document.downloaded', 'document.removed',
   'insured.created', 'insured.viewed', 'insured.updated', 'insured.assigned',
   'import.staged', 'import.committed', 'import.undone',

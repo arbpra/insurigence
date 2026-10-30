@@ -7,8 +7,9 @@
  * rules, and writes the change, its TaskEvent and its audit entry in one
  * transaction — so a change that cannot be logged does not happen.
  *
- * Module 13 adds the service-level clock pause / resume on waiting statuses
- * and billing classification at completion.
+ * The service-level clock stops in the waiting statuses and restarts when
+ * work resumes (clockChange); completed work is classified for billing
+ * against the agency's monthly allowance (lib/desk/billing-capture.ts).
  */
 import {
   Prisma, TaskComplexity, TaskPriority, TaskType,
@@ -17,7 +18,10 @@ import {
 import { recordAudit } from './audit';
 import { DeskAccessError, getTaskForScope, resolveDeskScope, resolveSubmission, taskWhere, type DeskScope } from './access';
 import { defaultBilling } from './billing';
-import { computeDueAt, loadBusinessCalendar } from './business-time';
+import { completionPeriod, decideBilling, giveBack, type BillingDecision } from './billing-capture';
+import {
+  businessMinutesBetween, computeDueAt, extendForPause, loadBusinessCalendar, type BusinessCalendar,
+} from './business-time';
 import { nextTaskReference } from './sequence';
 import { pickServiceLevelTarget, targetSnapshot } from './service-levels';
 import { UNASSIGNED } from './task-filters';
@@ -277,9 +281,13 @@ export async function changeTaskStatus(
   if (from === toStatus) throw conflict(`The task is already ${STATUS_LABELS[from].toLowerCase()}.`);
   if (!canTransition(from, toStatus)) throw conflict(`A task cannot go from ${STATUS_LABELS[from]} to ${STATUS_LABELS[toStatus]}.`);
   if (toStatus === 'IN_PROGRESS' && !task.assigneeId) throw conflict('Assign the task before starting it.');
+  if (from === 'COMPLETED' && task.billingStatus === 'BILLED') {
+    throw conflict('This work has been invoiced and cannot be reopened. File a new request instead.');
+  }
   const reason = cleanText(opts.reason, 'Reason', 2_000, NEEDS_REASON.includes(toStatus) || from === 'COMPLETED' || from === 'CANCELLED');
 
   const now = new Date();
+  const calendar = await loadBusinessCalendar(db);
   const data: Prisma.TaskUncheckedUpdateManyInput = { status: toStatus, lastActivityAt: now };
   if (toStatus === 'IN_PROGRESS' && !task.startedAt) data.startedAt = now;
   if (toStatus === 'COMPLETED') data.completedAt = now;
@@ -287,27 +295,92 @@ export async function changeTaskStatus(
   if (from === 'COMPLETED') data.completedAt = null;
   if (from === 'CANCELLED') { data.cancelledAt = null; data.assigneeId = null; }
 
+  // Service-level clock: stops when waiting starts, restarts (pushing the due time out) when it ends.
+  const clock = clockChange(task, toStatus, now, calendar);
+  Object.assign(data, clock.data);
+
+  // Billing: classified once, at completion; undone if the task is reopened.
+  let billing: BillingDecision | null = null;
+  if (toStatus === 'COMPLETED') {
+    billing = await decideBilling(db, task, completionPeriod(now, calendar.timeZone));
+    Object.assign(data, { billingClass: billing.billingClass, billingStatus: billing.billingStatus, billingPeriod: billing.billingPeriod });
+  }
+  const reopened = from === 'COMPLETED' && task.billingPeriod ? task : null;
+  if (reopened) Object.assign(data, { billingClass: null, billingStatus: null, billingPeriod: null });
+
   const agencyFacing = agencyStatus(from) !== agencyStatus(toStatus);
-  return inTransaction(db, async (tx) => {
-    // Only applies if nobody changed the status since it was read.
-    const { count } = await tx.task.updateMany({ where: { id: task.id, status: from }, data });
-    if (count !== 1) throw conflict(CHANGED_ELSEWHERE);
-    await tx.taskEvent.create({
-      data: {
-        taskId: task.id, agencyId: task.agencyId, actorId: scope.userId, kind: 'STATUS_CHANGED',
-        visibility: agencyFacing ? 'AGENCY' : 'INTERNAL',
-        fromStatus: from, toStatus, body: reason,
-      },
+  const metadata = {
+    ...(clock.meta ? { clock: clock.meta } : {}),
+    ...(billing ? { billing: { class: billing.billingClass, reason: billing.reason, period: billing.billingPeriod } } : {}),
+    ...(reopened ? { billingUndone: { class: reopened.billingClass, period: reopened.billingPeriod } } : {}),
+  };
+  let saved: Task;
+  try {
+    saved = await inTransaction(db, async (tx) => {
+      // Only applies if nobody changed the status since it was read.
+      const { count } = await tx.task.updateMany({ where: { id: task.id, status: from }, data });
+      if (count !== 1) throw conflict(CHANGED_ELSEWHERE);
+      await tx.taskEvent.create({
+        data: {
+          taskId: task.id, agencyId: task.agencyId, actorId: scope.userId, kind: 'STATUS_CHANGED',
+          visibility: agencyFacing ? 'AGENCY' : 'INTERNAL',
+          fromStatus: from, toStatus, body: reason,
+          ...(Object.keys(metadata).length ? { metadata } : {}),
+        },
+      });
+      await recordAudit(tx, {
+        actor: actorOf(scope), action: 'task.status_changed', entityType: 'Task', entityId: task.id, agencyId: task.agencyId,
+        metadata: { reference: task.reference, from, to: toStatus, hasReason: !!reason, ...metadata },
+        ...ctx,
+      });
+      return tx.task.findUniqueOrThrow({ where: { id: task.id } });
     });
-    await recordAudit(tx, {
-      actor: actorOf(scope), action: 'task.status_changed', entityType: 'Task', entityId: task.id, agencyId: task.agencyId,
-      metadata: { reference: task.reference, from, to: toStatus, hasReason: !!reason },
-      ...ctx,
-    });
-    return tx.task.findUniqueOrThrow({ where: { id: task.id } });
-  });
+  } catch (err) {
+    // The completion was not saved: return any allowance it took.
+    if (billing?.consumed) await giveBack(db, task.agencyId, billing.billingPeriod, task.serviceCategory ?? 'SERVICE', billing.consumed);
+    throw err;
+  }
+  // Reopened after counting toward the allowance: give the units back.
+  if (reopened?.billingClass === 'INCLUDED') {
+    await giveBack(db, reopened.agencyId, reopened.billingPeriod!, reopened.serviceCategory ?? 'SERVICE', Math.max(0, reopened.billableUnits))
+      .catch((err) => console.error('[desk/tasks] could not return allowance units', err));
+  }
+  return saved;
 }
 
+/**
+ * The service-level clock fields for a status change.
+ *  - Entering a waiting status from active work: stop the clock (slaPausedAt).
+ *  - Moving between waiting statuses: still stopped, nothing changes.
+ *  - Leaving waiting: add the business minutes waited to slaPausedMinutes and
+ *    push dueAt out by the same amount. Expiration-anchored targets (renewal,
+ *    remarketing) keep their date: the policy expires when it expires.
+ * slaDueAt — the original commitment — never moves.
+ */
+export function clockChange(
+  task: Pick<Task, 'status' | 'slaPausedAt' | 'slaPausedMinutes' | 'dueAt' | 'slaTarget'>,
+  toStatus: TaskStatus,
+  now: Date,
+  calendar: BusinessCalendar
+): { data: Prisma.TaskUncheckedUpdateManyInput; meta: Prisma.InputJsonObject | null } {
+  const wasWaiting = WAITING_STATUSES.includes(task.status);
+  const isWaiting = WAITING_STATUSES.includes(toStatus);
+  if (!wasWaiting && isWaiting) return { data: { slaPausedAt: now }, meta: { paused: true } };
+  if (!wasWaiting || isWaiting || !task.slaPausedAt) return { data: {}, meta: null };
+
+  const waited = businessMinutesBetween(task.slaPausedAt, now, calendar);
+  const data: Prisma.TaskUncheckedUpdateManyInput = { slaPausedAt: null, slaPausedMinutes: (task.slaPausedMinutes ?? 0) + waited };
+  const anchored = (task.slaTarget as { kind?: string } | null)?.kind === 'BEFORE_EXPIRATION';
+  let dueAt: Date | null = task.dueAt;
+  if (task.dueAt && !anchored && waited > 0 && toStatus !== 'CANCELLED') {
+    dueAt = extendForPause(task.dueAt, { from: task.slaPausedAt, to: now }, calendar);
+    data.dueAt = dueAt;
+  }
+  return {
+    data,
+    meta: { resumed: true, waitedMinutes: waited, dueAtFrom: task.dueAt?.toISOString() ?? null, dueAtTo: dueAt?.toISOString() ?? null },
+  };
+}
 
 // ── Assignment ──
 
@@ -390,6 +463,9 @@ export async function addTaskNote(
   const resume = scope.kind === 'AGENCY' && task.status === 'WAITING_ON_AGENCY';
   // Back to work if someone has it; otherwise back to the queue.
   const resumeTo: TaskStatus = task.assigneeId ? 'IN_PROGRESS' : 'NEW';
+  const now = new Date();
+  // Restarting the clock needs the calendar; only load it when resuming.
+  const clock = resume ? clockChange(task, resumeTo, now, await loadBusinessCalendar(db)) : null;
   return inTransaction(db, async (tx) => {
     await tx.taskEvent.create({
       data: { taskId: task.id, agencyId: task.agencyId, actorId: scope.userId, kind: 'NOTE', visibility, body },
@@ -398,14 +474,15 @@ export async function addTaskNote(
     if (resume) {
       const { count } = await tx.task.updateMany({
         where: { id: task.id, status: 'WAITING_ON_AGENCY' },
-        data: { status: resumeTo, lastActivityAt: new Date() },
+        data: { status: resumeTo, lastActivityAt: now, ...clock!.data },
       });
       if (count === 1) {
         resumed = true;
         await tx.taskEvent.create({
           data: {
             taskId: task.id, agencyId: task.agencyId, actorId: scope.userId, kind: 'STATUS_CHANGED', visibility: 'AGENCY',
-            fromStatus: 'WAITING_ON_AGENCY', toStatus: resumeTo, metadata: { automatic: 'agency_replied' },
+            fromStatus: 'WAITING_ON_AGENCY', toStatus: resumeTo,
+            metadata: { automatic: 'agency_replied', ...(clock!.meta ? { clock: clock!.meta } : {}) },
           },
         });
       }
