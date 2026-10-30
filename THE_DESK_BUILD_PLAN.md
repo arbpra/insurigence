@@ -88,7 +88,7 @@ Modules are sized for **one 2–3 hour working session each**, ordered so each b
 | 8 | Need-to-know and audit models: document sensitivity category, VA sensitive-data permissions, task restriction to named staff, `DeskAuditLog` for every action including document views and downloads | 2.5 | 🆕 Q4 | ✅ Done |
 | 9 | Access layer, part 1 — `lib/desk/access.ts` for agency users (admin / producer / CSR, book access, account assignment) and Account Managers; cross-tenant returns 404 | 2.5 | ✏️ Q3 | ✅ Done |
 | 10 | Access layer, part 2 — VAs on a need-to-know basis: agency authorization × pod × named restrictions × task; VAs reach insureds and policies only through tasks they can work; sensitive documents only with explicit permission | 2.5 | ✏️ Q4 | ✅ Done |
-| 11 | Business-hours SLA engine (pure, unit-tested): add business time across nights, weekends and holidays; elapsed time excluding waiting periods; expiration-anchored targets | 3.0 | 🆕 Q5 | ⬜ |
+| 11 | Business-hours SLA engine (pure, unit-tested): add business time across nights, weekends and holidays; elapsed time excluding waiting periods; expiration-anchored targets | 3.0 | 🆕 Q5 | ✅ Done |
 | 12 | Task service layer `lib/desk/tasks.ts`: create (routing + AM attach + SLA target), status state machine, assign, note; every action writes a `TaskEvent` and an audit entry; internal → agency status mapping | 3.0 | ✏️ | ⬜ |
 | 13 | Task service, part 2 — SLA clock pause / resume on waiting statuses; billing capture at completion (classified as included or overage against the month's allowance, or non-billable) | 2.5 | 🆕 Q5, Q6 | ⬜ |
 | 14 | Navigation shell: role-aware sidebar and post-login landing; route areas `/desk` (agency), `/desk-ops` (AM / VA), `/super-admin/desk`; placeholder pages | 2.5 | | ⬜ |
@@ -356,6 +356,47 @@ Modules are sized for **one 2–3 hour working session each**, ordered so each b
 
 Module 1–9 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61 passed (**336 in total**).
 
+**Module 11 — Business-hours SLA engine (✅ complete, 30 Oct 2026)**
+
+**Delivered:** `lib/desk/business-time.ts`, the arithmetic behind every target date. It is pure calculation with no database access, so it is fully testable and can run in the browser too.
+
+- **Business hours and days** run on the Desk calendar: working days, opening and closing times, one time zone, and holidays. Nights, weekends and holidays never count.
+  - A request arriving in the evening or at the weekend starts the clock at the next opening time.
+  - Work that ends exactly at closing time is due that day, not the next morning.
+- **"1 business day" means a full working day of time:**
+  - received Monday 10:00, due Tuesday 10:00;
+  - received Friday 16:00, due Monday 16:00;
+  - received on a Saturday, due Monday at closing time.
+- **Waiting periods** (on the agency, carrier or insured) are taken out of elapsed time. Overlapping waits aren't double-counted, and a wait still in progress counts up to now. When a task resumes, its due time moves out by the business time spent waiting. Module 13 uses this.
+- **Renewal and remarketing windows** are counted in calendar days before the policy's expiration. Work opens at the start of business on the opening day and is due at closing time on the due day. A due date on a weekend or holiday moves **earlier**, never later. Expiration dates are treated as dates, so they don't shift a day because of the time zone.
+- **Applying a target** gives the due date for any of the 11 client targets. A renewal without a policy expiration date gets **no** due date rather than a guessed one.
+- **On track, due soon or overdue**, with remaining time counted in business minutes. A task due Monday 10:00 that is checked on Friday evening has one business hour left, not three days. This is the basis for the alerts in Module 41.
+- **Time zones and daylight saving** are handled with the browser and server's built-in time-zone data, with no extra library. Any time zone and any working week can be configured, for example a six-day week in India.
+- **Unusable calendars** (no working days, or closing before opening) are refused with an error instead of searching forever.
+- **Loads the live calendar and holidays** from the database, and falls back to the defaults if none are stored.
+
+**Design decisions:**
+
+- **Business days are counted as working time** (8 hours per day on the current calendar), not as "end of the Nth day". Days and hours then behave the same way, and pauses subtract cleanly.
+- **Renewal due dates round earlier** when they land on a non-working day, so a renewal is never late because of a weekend.
+
+**Issues:** none in the engine. A deliberate fault test (breaking the code on purpose to confirm a test fails) found a gap in the **tests**. The extra time-zone check needed on daylight-saving change days had no test covering it, because it only matters at night and never during business hours. I added a test for 3:30 a.m. on the March clock-change day, and the fault test now fails as expected.
+
+**Verified:** `tsc --noEmit` exit 0 · **58 tests passed** (`script/verify-desk-business-time.ts`):
+- time zones either side of both 2026 clock changes;
+- hours and days across nights, weekends, Thanksgiving and Christmas;
+- business time counted for a normal week, Thanksgiving week and a full year (computed in about 0.14 s);
+- **300 random requests over four months** where adding time and counting it back always matched exactly;
+- waiting periods, including overlapping and open waits;
+- renewal windows with weekend and holiday due dates;
+- the client's COI, endorsement, renewal and remarketing targets applied to real dates;
+- due-soon and overdue;
+- another time zone with a six-day week;
+- refusal of bad calendars;
+- the live calendar and its 23 holidays.
+
+Module 1–10 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46 passed (**394 in total**).
+
 ### Phase 1 — Admin Setup (13 h)
 
 | # | Module | Hours | Change | Status |
@@ -433,7 +474,7 @@ Module 1–9 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61 passed (**336 in 
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–10 complete (26.5 h). **99.0 h remaining.**
+**Progress:** Modules 1–11 complete (29.5 h). **96.0 h remaining.**
 
 The client's answers added **33 hours** (see Section 9), approximately:
 

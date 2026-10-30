@@ -1,6 +1,7 @@
 /**
  * Service-level target selection. Pure — safe for server and browser.
- * The business-time arithmetic (hours, days, holidays, pauses) is Module 11.
+ * The business-time arithmetic (hours, days, holidays, pauses) is in
+ * lib/desk/business-time.ts.
  */
 import type { SlaTargetKind, TaskComplexity, TaskPriority, TaskType } from '@prisma/client';
 
