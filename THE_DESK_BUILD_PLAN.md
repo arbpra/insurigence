@@ -91,7 +91,7 @@ Modules are sized for **one 2–3 hour working session each**, ordered so each b
 | 11 | Business-hours SLA engine (pure, unit-tested): add business time across nights, weekends and holidays; elapsed time excluding waiting periods; expiration-anchored targets | 3.0 | 🆕 Q5 | ✅ Done |
 | 12 | Task service layer `lib/desk/tasks.ts`: create (routing + AM attach + SLA target), status state machine, assign, note; every action writes a `TaskEvent` and an audit entry; internal → agency status mapping | 3.0 | ✏️ | ✅ Done |
 | 13 | Task service, part 2 — SLA clock pause / resume on waiting statuses; billing capture at completion (classified as included or overage against the month's allowance, or non-billable) | 2.5 | 🆕 Q5, Q6 | ✅ Done |
-| 14 | Navigation shell: role-aware sidebar and post-login landing; route areas `/desk` (agency), `/desk-ops` (AM / VA), `/super-admin/desk`; placeholder pages | 2.5 | | ⬜ |
+| 14 | Navigation shell: role-aware sidebar and post-login landing; route areas `/desk` (agency), `/desk-ops` (AM / VA), `/super-admin/desk`; placeholder pages | 2.5 | | ✅ Done |
 
 **Module 1 — Internal roles (✅ complete, 26 Oct 2026)**
 
@@ -498,6 +498,61 @@ Module 1–11 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58 passed (
 
 Module 1–12 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76 passed (**513 in total**).
 
+**Module 14 — Navigation shell (✅ complete, 30 Oct 2026)**
+
+**Delivered:**
+
+- **Three Desk areas, each with its own sidebar**, from one shared shell (`app/components/desk/DeskShell.tsx`):
+  - **`/desk` (Agency Portal):** Overview, Requests, New request, Accounts, Messages. Agency admins also see Import and Team access.
+  - **`/desk-ops` (Account Manager / Pod / VA Portal):**
+    - VAs see Overview, Pod queue and My tasks.
+    - Account Managers also see Agencies, Messages and Turnaround.
+    - Operations Managers and Super Admin also see Workload and Usage & audit.
+  - **`/super-admin/desk` (Insurigence Admin, Desk setup):** Overview, Agencies, Staff, Pods, Routing & targets, Business calendar, Follow-up rules.
+- **24 placeholder pages.** Each one names the module that will build it. The three overview pages already show real facts:
+  - **Agency:** the agency's name, whether the user sees the whole book or only assigned accounts, and their Account Manager.
+  - **Account Manager:** how many agencies they manage.
+  - **VA:** their pods and how many agencies they can work for.
+  - **Setup:** agencies using The Desk, active pods and active Desk staff.
+- **Access is checked on the server for every page,** using the same Desk scope as the access layer, so it's never just a link hidden from the sidebar:
+  - Users who belong in another area are sent there. For example, a VA opening `/desk` lands on `/desk-ops`.
+  - Pages limited to some roles are enforced. A CSR opening Import, or a VA opening Workload, is sent back to their overview.
+  - Agency users whose agency hasn't turned The Desk on see a clear "not set up for your agency yet" page.
+- **Post-login landing by role:** Super Admin goes to Super Admin. Operations Managers, Account Managers and VAs go to `/desk-ops`. Agency users go to the dashboard as before, with a new "The Desk" link in the header and sidebar when their agency uses it.
+- **Desk staff no longer see the agency app** (leads, intake, proposals). If they open it, they're sent to their own area.
+- **Login redirect hardened:** the `?redirect=` after sign-in is followed only if it's a page on this site. Before, any address was followed, so a crafted link could send a user to another site after login.
+
+**Design decisions:**
+
+- **Operations Managers can use Desk setup** (`/super-admin/desk`) but no other Super Admin page. The access layer already treats them as platform-wide, and setup is their job. All other Super Admin pages and APIs remain Super Admin only.
+- **Agency users still land on the dashboard,** because the placement tools remain their main product. The Desk is one click away.
+- **Import and Team access are for agency admins only.** Q3 makes the agency admin responsible for permissions, and loading the book of business is the same kind of decision. This can be widened later.
+- **One list of pages drives everything:** the sidebars, the role limits, the placeholders and the tests. A page can't be added to the sidebar without a role rule, or the other way round.
+
+**Issues:**
+
+- **Redirects inside the existing Super Admin frame are streamed rather than sent as a 307 header.** That frame is drawn in the browser, so when an AM or VA opens a Desk setup page, the redirect arrives in the page body instead. I confirmed the response contains no setup content, only the redirect, and the browser follows it. The `/desk` and `/desk-ops` areas give a normal 307.
+- **An early version shared a constant with the access layer in a way that would have put server code in the browser bundle.** Caught before testing. The constant now lives in a small pure file, and a test guards against it happening again.
+
+**Verified:** `tsc --noEmit` exit 0 · **80 tests passed** (`script/verify-desk-navigation.ts`):
+- the landing page for all 7 roles;
+- the exact sidebar for each role;
+- every sidebar entry has a page, inside its own area, rendering its own entry;
+- every area has a server-side layout;
+- the navigation rules contain no server code;
+- active highlighting;
+- role-limited pages refused;
+- agency-app and Super Admin rules, including a look-alike path;
+- safe login redirects (`//`, `https://` and backslash tricks refused);
+- links between areas;
+- who gets into which area, against real scopes for 9 temporary users, including "not enabled", a deactivated user and the no-redirect-loop guard;
+- overview facts;
+- temporary records removed.
+
+**Live check:** the app was started and 22 requests were made as real signed-in users of every role (anonymous, CSR, agency admin, agency without The Desk, VA, AM, Operations Manager, Super Admin). Pages render or redirect as expected, and the session reports whether the agency uses The Desk. The temporary users, sessions and agencies were removed afterwards.
+
+Module 1–13 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43 passed (**593 in total** with this module).
+
 ### Phase 1 — Admin Setup (13 h)
 
 | # | Module | Hours | Change | Status |
@@ -575,7 +630,7 @@ Module 1–12 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76 pass
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–13 complete (35.0 h). **90.5 h remaining.**
+**Progress:** Modules 1–14 complete (37.5 h). **88.0 h remaining.**
 
 The client's answers added **33 hours** (see Section 9), approximately:
 

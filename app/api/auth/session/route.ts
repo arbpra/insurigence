@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionFromRequest } from '@/lib/auth';
+import prisma from '@/lib/prisma';
+import { isAgencyRole } from '@/lib/roles';
 
 export async function GET(request: NextRequest) {
   try {
@@ -8,6 +10,11 @@ export async function GET(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ user: null }, { status: 200 });
     }
+
+    // Shows or hides "The Desk" links only; the Desk pages check access themselves.
+    const deskEnabled = isAgencyRole(user.role) && user.agencyId
+      ? !!(await prisma.agency.findUnique({ where: { id: user.agencyId }, select: { deskEnabled: true } }))?.deskEnabled
+      : false;
 
     return NextResponse.json({
       user: {
@@ -18,6 +25,7 @@ export async function GET(request: NextRequest) {
         role: user.role,
         agencyId: user.agencyId,
         mustChangePassword: user.mustChangePassword,
+        deskEnabled,
       },
     });
   } catch (error) {

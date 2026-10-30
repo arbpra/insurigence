@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Logo from '@/app/components/Logo';
 import { Bell, ChevronDown } from 'lucide-react';
 import { LogOut, User, Shield } from 'lucide-react';
 import type { Role } from '@/lib/roles';
+import { landingPath, mainAppAllowed } from '@/lib/desk/navigation';
 
 interface AuthUser {
   id: string;
@@ -17,6 +18,7 @@ interface AuthUser {
   agencyId: string | null;
   isActive: boolean;
   mustChangePassword: boolean;
+  deskEnabled?: boolean;
 }
 
 export default function MainLayout({
@@ -25,6 +27,7 @@ export default function MainLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -37,6 +40,11 @@ export default function MainLayout({
         if (data.user) {
           if (data.user.mustChangePassword) {
             router.push('/change-password');
+            return;
+          }
+          // Desk staff have no use for the agency app; send them to their area.
+          if (!mainAppAllowed(data.user.role, pathname)) {
+            router.replace(landingPath(data.user.role));
             return;
           }
           setUser(data.user);
@@ -52,7 +60,7 @@ export default function MainLayout({
     }
     
     checkAuth();
-  }, [router]);
+  }, [router, pathname]);
 
   const handleLogout = async () => {
     try {
@@ -90,6 +98,7 @@ export default function MainLayout({
           <div className="flex items-center justify-between h-16">
             <Logo size="md" />
             <nav className="flex items-center gap-6">
+              {mainAppAllowed(user.role, '/dashboard') && (<>
               <Link 
                 href="/dashboard" 
                 className="text-sm font-medium text-white hover:text-gray-300 transition-colors" 
@@ -104,6 +113,16 @@ export default function MainLayout({
               >
                 New Intake
               </Link>
+              </>)}
+              {user.deskEnabled && (
+                <Link
+                  href="/desk"
+                  className="text-sm font-medium text-white hover:text-gray-300 transition-colors"
+                  data-testid="link-desk"
+                >
+                  The Desk
+                </Link>
+              )}
               {user.role === 'SUPER_ADMIN' && (
                 <Link 
                   href="/super-admin" 

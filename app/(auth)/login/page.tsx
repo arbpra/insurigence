@@ -7,6 +7,7 @@ import signinBanner from '@/attached_assets/bgSignin.webp';
 import { motion } from "framer-motion";
 import Link from 'next/link';
 import { Check } from "lucide-react";
+import { landingPath, safeRedirect } from '@/lib/desk/navigation';
 
 const container = {
   hidden: { opacity: 0 },
@@ -79,16 +80,9 @@ function LoginContent() {
         return;
       }
 
-      if (redirect) {
-        router.replace(redirect);
-        return;
-      }
-
-      if (data.user.role === 'SUPER_ADMIN') {
-        router.replace('/super-admin');
-      } else {
-        router.replace('/dashboard');
-      }
+      // Only paths on this site are followed; anything else goes to the
+      // user's own landing page.
+      router.replace(safeRedirect(redirect) ?? landingPath(data.user.role));
     } catch {
       setError('An error occurred. Please try again.');
       setIsLoading(false);

@@ -88,18 +88,18 @@ export function AppLayout({ children, userRole: propUserRole }: AppLayoutProps) 
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userRole, setUserRole] = useState<Role | undefined>(propUserRole);
+  const [deskEnabled, setDeskEnabled] = useState(false);
 
   useEffect(() => {
-    if (!propUserRole) {
-      fetch('/api/auth/session')
-        .then(res => res.json())
-        .then(data => {
-          if (data.user) {
-            setUserRole(data.user.role);
-          }
-        })
-        .catch(() => {});
-    }
+    fetch('/api/auth/session')
+      .then(res => res.json())
+      .then(data => {
+        if (data.user) {
+          if (!propUserRole) setUserRole(data.user.role);
+          setDeskEnabled(!!data.user.deskEnabled);
+        }
+      })
+      .catch(() => {});
   }, [propUserRole]);
 
   const isActive = (href: string) => {
@@ -179,6 +179,21 @@ export function AppLayout({ children, userRole: propUserRole }: AppLayoutProps) 
               );
             })}
           </nav>
+
+          {deskEnabled && (
+            <div className="p-4 border-t border-slate-100">
+              <Link
+                href="/desk"
+                data-testid="nav-desk"
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                </svg>
+                The Desk
+              </Link>
+            </div>
+          )}
 
           {userRole === 'SUPER_ADMIN' && (
             <div className="p-4 border-t border-slate-100">

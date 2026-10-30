@@ -27,6 +27,7 @@ import { effectiveBookAccess, isAgencyRole, type BookAccessLevel } from '../role
 import { recordAudit } from './audit';
 import { DEFAULT_STAFF_SENSITIVITIES } from './need-to-know';
 import { WHOLE_POD_ACCESS } from './pods';
+import { DESK_NOT_ENABLED } from './scope-reasons';
 import { CLOSED_STATUSES, passesRestriction } from './task-filters';
 
 type Db = PrismaClient;
@@ -85,7 +86,7 @@ export async function resolveDeskScope(db: Db, userId: string): Promise<DeskScop
   if (isAgencyRole(user.role)) {
     if (!user.agencyId) return { kind: 'NONE', ...base, reason: 'agency user without an agency' };
     const agency = await db.agency.findUnique({ where: { id: user.agencyId }, select: { deskEnabled: true } });
-    if (!agency?.deskEnabled) return { kind: 'NONE', ...base, reason: 'The Desk is not enabled for this agency' };
+    if (!agency?.deskEnabled) return { kind: 'NONE', ...base, reason: DESK_NOT_ENABLED };
     return { kind: 'AGENCY', ...base, agencyId: user.agencyId, book: effectiveBookAccess(user.role, user.bookAccess)! };
   }
 

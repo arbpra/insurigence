@@ -1,8 +1,9 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import type { Role } from '@/lib/roles';
+import { landingPath, superAdminAreaAllowed } from '@/lib/desk/navigation';
 
 interface User {
   id: string;
@@ -33,24 +34,29 @@ export function useAdminAuth() {
 
 function AdminAuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Re-checked on every navigation: an Operations Manager is allowed into
+  // Desk setup but not the rest of Super Admin.
   useEffect(() => {
     checkSession();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
   const checkSession = async () => {
     try {
       const res = await fetch('/api/auth/session');
       const data = await res.json();
       
-      if (data.user && data.user.role === 'SUPER_ADMIN') {
+      if (data.user && superAdminAreaAllowed(data.user.role, pathname)) {
         setUser(data.user);
         setIsAuthenticated(true);
       } else if (data.user) {
-        router.push('/dashboard');
+        setIsAuthenticated(false);
+        router.push(landingPath(data.user.role));
       } else {
         router.push('/login');
       }
