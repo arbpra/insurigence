@@ -1,5 +1,5 @@
-import { DeskPage } from '@/components/desk/DeskAreaLayout';
+import { RoutingEditor } from '@/components/desk/admin/RoutingEditor';
 
 export default function Page() {
-  return <DeskPage area="ADMIN" href="/super-admin/desk/routing" />;
+  return <RoutingEditor />;
 }

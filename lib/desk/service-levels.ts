@@ -5,6 +5,26 @@
  */
 import type { SlaTargetKind, TaskComplexity, TaskPriority, TaskType } from '@prisma/client';
 
+export const TASK_TYPE_LABELS: Record<TaskType, string> = {
+  COI: 'COI',
+  ENDORSEMENT: 'Endorsement',
+  ACORD: 'ACORD form',
+  AMS_ENTRY: 'AMS entry',
+  POLICY_UPDATE: 'Policy update',
+  DOCUMENT_UPLOAD: 'Document upload',
+  RENEWAL: 'Renewal',
+  REMARKETING: 'Remarketing',
+  LOSS_RUNS: 'Loss runs',
+  NEW_BUSINESS: 'New business',
+  SUBMISSION: 'Submission',
+  PROPOSAL_PREP: 'Proposal preparation',
+  QA_REVIEW: 'QA review',
+  OTHER: 'Other',
+};
+
+export const PRIORITY_LABELS: Record<TaskPriority, string> = { LOW: 'Low', NORMAL: 'Normal', HIGH: 'High', URGENT: 'Urgent' };
+export const COMPLEXITY_LABELS: Record<TaskComplexity, string> = { STANDARD: 'Standard', COMPLEX: 'Complex' };
+
 export interface TargetLike {
   id: string;
   taskType: TaskType;

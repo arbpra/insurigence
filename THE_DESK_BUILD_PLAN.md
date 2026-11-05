@@ -560,7 +560,7 @@ Module 1–13 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43 
 | 15 | Enable The Desk per agency; assign primary / backup AM; Desk profile (AMS system, instructions, plan and allowance overrides) | 3.0 | ✏️ Q1, Q6 | ✅ Done |
 | 16 | Internal staff management: create / invite / deactivate AMs, VAs, Desk Admins / Operations Managers (reuses invite flow) | 2.5 | | ✅ Done |
 | 17 | Pod management: create / edit pods, add / remove VAs, authorize pods and named VAs per agency, VA sensitive-data permissions | 3.0 | ✏️ Q4 | ✅ Done |
-| 18 | Routing and service-level editor: request type → pod, default priority; targets by type, complexity and priority; per-agency agreement overrides | 2.5 | ✏️ Q5 | ⬜ |
+| 18 | Routing and service-level editor: request type → pod, default priority; targets by type, complexity and priority; per-agency agreement overrides | 2.5 | ✏️ Q5 | ✅ Done |
 | 19 | Business calendar editor: business hours, time zone, holidays | 2.0 | 🆕 Q5 | ⬜ |
 
 **Module 15 — Per-agency Desk setup (✅ complete, 5 Nov 2026)**
@@ -708,6 +708,54 @@ Module 1–15 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 
 Module 1–16 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43, 80, 98, 86 passed (**876 in total** with this module).
 
+**Module 18 — Routing and service-level editor (✅ complete, 5 Nov 2026)**
+
+**Delivered** (`/super-admin/desk/routing`):
+
+- **Routing per request type:** choose the pod, or "Unrouted" so the Account Manager triages it, and the default priority.
+- **Targets per request type (Q5):**
+  - Set by complexity and priority, or left to apply to all.
+  - Measured in business hours, business days, or days before expiration.
+  - Add, edit and remove, with validation such as "hours or days, not both" and "work must open on or before its due date".
+- **Per-agency agreements:** a selector switches from the Desk defaults to one agency. A target added there replaces the default for that agency only.
+- **What applies today:** each request type shows the target a normal-priority request would get, for standard and complex, so an admin can see the effect of an agreement. Types with no target stand out.
+- **D5 can now be entered without code:** ACORD, Loss Runs, Proposal Prep, QA Review and Other can be given targets as soon as the client confirms them.
+- **Every change is in the audit log** with before and after in plain words ("2 business days" to "4 business hours"). Saving with no change writes nothing.
+- **Access:** Super Admin and Operations Managers only.
+
+**Design decisions:**
+
+- **Changes apply to new requests only.** Open requests stay in their pod and keep the target and due date they started with, so a date already set never changes silently.
+- **Routing is the same for every agency.** Only targets vary by agreement, as the plan describes.
+- **Nothing is deleted.** The Desk seeder recreates any missing default, so a deleted rule would come back. "Unrouted" and "removed" switch the record off, and saving the same combination later switches it back on.
+- **The target list by agency shows normal priority only.** Priority-specific targets are listed on the type but aren't reflected in the "what applies" line.
+
+**Issues:**
+
+- **Three bugs found by the tests and fixed before commit:** unrouting a request type crashed; a default priority with no pod was accepted silently instead of refused; editing a target without sending a note wiped the existing note.
+- **Tests write only to safe data** (lesson from Module 17). They touch only request types with nothing seeded, or temporary agencies. A snapshot of all seeded routing and targets is compared at the end of every run.
+- **Fault-check script under-reported.** Two faults first showed as missed because the script counted failure lines only, and those faults stop the suite with an error. Checked again using the exit code: both were caught.
+- **Not yet clicked through in a browser.**
+
+**Verified:** `tsc --noEmit` exit 0 · **91 tests passed** (`script/verify-desk-routing.ts`):
+- who may read and change;
+- what the editor shows, including the client's targets;
+- routing rules, unrouting and re-routing, what new requests actually get;
+- open requests unchanged after routing and target edits;
+- the seeder not undoing an edit;
+- target validation;
+- priority and complexity targets;
+- agency agreements beating defaults for that agency only;
+- removing and re-adding;
+- seeded data unchanged;
+- temporary records removed.
+
+**Deliberate faults:** six were introduced one at a time. All six were caught.
+
+**Live check:** 26 checks over real HTTP with signed-in users: refusals for each role, reading the editor data, saving and clearing routing, an agreement target added, edited and removed, validation and duplicate errors, the page served. Seeded data was confirmed unchanged afterwards.
+
+Module 1–17 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43, 80, 98, 86, 99 passed (**967 in total** with this module).
+
 ### Phase 2 — Insured Accounts (22.5 h)
 
 | # | Module | Hours | Change | Status |
@@ -775,7 +823,7 @@ Module 1–16 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–17 complete (46.0 h). **79.5 h remaining.**
+**Progress:** Modules 1–18 complete (48.5 h). **77.0 h remaining.**
 
 The client's answers added **33 hours** (see Section 9), approximately:
 
@@ -969,4 +1017,4 @@ DeskAuditLog       actorId, action, entity, entityId, agencyId, ip, userAgent, a
 | D2 | Desk business hours, time zone and holiday list | Module 11 | Mon–Fri 9:00–17:00 US Eastern; US federal holidays |
 | D3 | Document sensitivity categories: are General / Policy / Financial / Personal the right four? | Module 8 | Those four |
 | D4 | Can a Producer submit requests for accounts outside their assignment? | Module 9 | No: only accounts they can see |
-| D5 | Targets for ACORD, Loss Runs, Proposal Prep, QA Review and Other (none given) | Module 12 | No target date for these types |
+| D5 | Targets for ACORD, Loss Runs, Proposal Prep, QA Review and Other (none given) | Module 12 | No target date for these types; can be entered in the Module 18 editor once confirmed |
