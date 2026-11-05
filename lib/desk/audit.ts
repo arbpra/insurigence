@@ -17,6 +17,7 @@ export const AUDIT_ACTIONS = [
   'insured.created', 'insured.viewed', 'insured.updated', 'insured.assigned',
   'import.staged', 'import.committed', 'import.undone',
   'agency.desk_updated', 'permission.changed',
+  'staff.invited', 'staff.invite_resent', 'staff.updated', 'staff.deactivated', 'staff.reactivated',
   'access.denied',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

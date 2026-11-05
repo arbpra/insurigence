@@ -1,5 +1,5 @@
-import { DeskPage } from '@/components/desk/DeskAreaLayout';
+import { StaffManager } from '@/components/desk/admin/StaffManager';
 
 export default function Page() {
-  return <DeskPage area="ADMIN" href="/super-admin/desk/staff" />;
+  return <StaffManager />;
 }

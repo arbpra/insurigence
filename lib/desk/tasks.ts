@@ -194,7 +194,10 @@ export async function createTask(db: Db, scope: DeskScope, input: CreateTaskInpu
 
   const [rule, desk, targets, policy, calendar] = await Promise.all([
     db.taskRoutingRule.findFirst({ where: { taskType: type, isActive: true, pod: { isActive: true } }, select: { podId: true, defaultPriority: true } }),
-    db.agencyDeskAssignment.findUnique({ where: { agencyId }, select: { primaryAmId: true, backupAmId: true } }),
+    db.agencyDeskAssignment.findUnique({
+      where: { agencyId },
+      select: { primaryAm: { select: { id: true, isActive: true } }, backupAm: { select: { id: true, isActive: true } } },
+    }),
     db.serviceLevelTarget.findMany({ where: { taskType: type, isActive: true } }),
     policyId ? db.policy.findUnique({ where: { id: policyId }, select: { expirationDate: true } }) : null,
     loadBusinessCalendar(db),
@@ -210,7 +213,8 @@ export async function createTask(db: Db, scope: DeskScope, input: CreateTaskInpu
 
   const reference = await nextTaskReference(db);
   const podId = rule?.podId ?? null;
-  const amId = desk?.primaryAmId ?? desk?.backupAmId ?? null;
+  // New work never goes to someone who has left.
+  const amId = [desk?.primaryAm, desk?.backupAm].find((am) => am?.isActive)?.id ?? null;
 
   return inTransaction(db, async (tx) => {
     const task = await tx.task.create({

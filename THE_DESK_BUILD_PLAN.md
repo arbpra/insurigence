@@ -558,7 +558,7 @@ Module 1–13 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43 
 | # | Module | Hours | Change | Status |
 |---|---|---:|---|---|
 | 15 | Enable The Desk per agency; assign primary / backup AM; Desk profile (AMS system, instructions, plan and allowance overrides) | 3.0 | ✏️ Q1, Q6 | ✅ Done |
-| 16 | Internal staff management: create / invite / deactivate AMs, VAs, Desk Admins / Operations Managers (reuses invite flow) | 2.5 | | ⬜ |
+| 16 | Internal staff management: create / invite / deactivate AMs, VAs, Desk Admins / Operations Managers (reuses invite flow) | 2.5 | | ✅ Done |
 | 17 | Pod management: create / edit pods, add / remove VAs, authorize pods and named VAs per agency, VA sensitive-data permissions | 3.0 | ✏️ Q4 | ⬜ |
 | 18 | Routing and service-level editor: request type → pod, default priority; targets by type, complexity and priority; per-agency agreement overrides | 2.5 | ✏️ Q5 | ⬜ |
 | 19 | Business calendar editor: business hours, time zone, holidays | 2.0 | 🆕 Q5 | ⬜ |
@@ -612,6 +612,59 @@ Module 1–13 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43 
 **Live check:** the app was started and 20 requests were made as real signed-in users (anonymous, agency admin, Account Manager, VA, Operations Manager, Super Admin): refusals, a full save over HTTP, an out-of-date form, a refused credential, and both pages served. No server errors. Temporary records were removed.
 
 Module 1–14 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43, 80 passed (**691 in total** with this module).
+
+**Module 16 — Internal staff management (✅ complete, 5 Nov 2026)**
+
+**Delivered** (`/super-admin/desk/staff`):
+
+- **Staff list:** Account Managers, VAs and Operations Managers, with search and filters by role and status. Each row shows invite status (sent or expired) and how many agencies, pods and open requests the person has.
+- **Invite:** the existing single-use link, valid for 72 hours. The invitee sets their own password, so no password is ever sent or seen. If the email can't be delivered, the invite still exists and the admin is given the link to share.
+- **Resend invite:** a new link, and the old one stops working.
+- **Edit name.**
+- **Deactivate,** which takes effect immediately and never waits for a handover:
+  - The person is signed out and can't log in, and any unused invite link stops working.
+  - Their open requests return to the queue. Work in progress restarts as New. Work waiting on the agency, carrier or insured stays waiting, with the clock still stopped. The task history records this.
+  - Open requests under them as Account Manager move to the agency's backup, or to nobody if there's no active backup.
+  - The admin is told which agencies now have no active Account Manager.
+- **Reactivate:** agency and pod assignments come back, because they're kept on record.
+- **Logging:** every action is in the audit log. Invite links are never logged.
+
+**Bug fixed in Module 12's code:** new requests were attached to an agency's primary Account Manager without checking that person was still active. They now go to the first active one, primary then backup, or to nobody.
+
+**Design decisions:**
+
+- **Only a Super Admin can manage Operations Managers.** They hold platform-wide access, so they can't create or remove their own peers.
+- **No role changes on this screen.** Moving someone from VA to Account Manager has consequences for agencies and pods, and the plan doesn't call for it. The existing Super Admin users page can still change a role.
+
+**Issues:**
+
+- **Simultaneous invites:** two invites for the same email at the same moment caused a server error. Found by a test; now a clear "already exists" message.
+- **Old invite links weren't being revoked** in the first version, because of the known MongoDB rule that a filter on "empty" misses a field that was never set. Found by the tests before commit and now fixed.
+- **Open point: the older Super Admin users page bypasses these rules.** Deactivating Desk staff there sets them inactive and they lose access at once, but their open requests aren't returned to the queue. It should send Desk staff to this screen, or use the same code.
+- **Limits of the live check:**
+  - Successful invites used a stand-in sender, so **no real invite email has been sent or seen in an inbox.**
+  - The `/staff/[id]` route ran directly with real signed-in requests, not through the web server, and the invite page itself wasn't loaded. The test server's worker for such addresses had failed, and its restart wasn't possible.
+  - The screen has not been clicked through in a browser.
+
+**Verified:** `tsc --noEmit` exit 0 · **86 tests passed** (`script/verify-desk-staff.ts`):
+- who may manage whom;
+- invite rules, tidy email, no password, link lifetime, audit without the link;
+- email failure;
+- simultaneous invites;
+- resend replacing the old link;
+- invite states;
+- rename;
+- deactivating a VA (session ended, each status handled, history, audit);
+- deactivating an Account Manager (backup cover, agencies flagged);
+- new work skipping someone who left;
+- reactivation;
+- temporary records removed.
+
+**Deliberate faults:** six were introduced one at a time (peer management, sessions, invite revocation, returning work, Account Manager cover, new-work routing). All six were caught, and the code was restored.
+
+**Journey check:** 27 checks with real signed-in users: refusals, invite, cannot log in before accepting, accept and sign in, link can't be reused, lands in operations, deactivate (session ends, login refused), reactivate (login works). No real email was sent, and temporary records were removed.
+
+Module 1–15 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43, 80, 98 passed (**777 in total** with this module).
 
 ### Phase 2 — Insured Accounts (22.5 h)
 
@@ -680,7 +733,7 @@ Module 1–14 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–15 complete (40.5 h). **85.0 h remaining.**
+**Progress:** Modules 1–16 complete (43.0 h). **82.5 h remaining.**
 
 The client's answers added **33 hours** (see Section 9), approximately:
 
