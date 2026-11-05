@@ -1,5 +1,5 @@
-import { DeskPage } from '@/components/desk/DeskAreaLayout';
+import { PodManager } from '@/components/desk/admin/PodManager';
 
 export default function Page() {
-  return <DeskPage area="ADMIN" href="/super-admin/desk/pods" />;
+  return <PodManager />;
 }

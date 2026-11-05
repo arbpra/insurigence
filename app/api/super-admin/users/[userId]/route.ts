@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { validateSuperAdmin } from '@/lib/super-admin-auth';
 import { hashPassword, generateTempPassword } from '@/lib/auth';
-import { isRole, agencyIdForRole } from '@/lib/roles';
+import { isRole, isDeskRole, agencyIdForRole } from '@/lib/roles';
+import { deskAccessResponse, DeskAccessError, resolveDeskScope } from '@/lib/desk/access';
+import { deactivateStaff, reactivateStaff } from '@/lib/desk/staff';
 
 export async function GET(
   request: NextRequest,
@@ -98,6 +100,15 @@ export async function PATCH(
     }
     if (isActive !== undefined) updateData.isActive = isActive;
 
+    // Desk staff follow the same rules as the Desk staff screen: signed out at
+    // once, open work back in the queue, Account Manager cover moved on.
+    if (isDeskRole(existingUser.role) && isActive !== undefined && isActive !== existingUser.isActive) {
+      const scope = await resolveDeskScope(prisma, auth.user!.id);
+      if (isActive === false) await deactivateStaff(prisma, scope, userId);
+      else await reactivateStaff(prisma, scope, userId);
+      delete updateData.isActive;
+    }
+
     const user = await prisma.user.update({
       where: { id: userId },
       data: updateData,
@@ -127,6 +138,7 @@ export async function PATCH(
 
     return NextResponse.json({ user });
   } catch (error) {
+    if (error instanceof DeskAccessError) return deskAccessResponse(error);
     console.error('Error updating user:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
@@ -156,6 +168,11 @@ export async function DELETE(
       );
     }
 
+    // See PATCH: Desk staff follow the same rules as the Desk staff screen.
+    if (isDeskRole(existingUser.role) && existingUser.isActive) {
+      await deactivateStaff(prisma, await resolveDeskScope(prisma, auth.user!.id), userId);
+    }
+
     const user = await prisma.user.update({
       where: { id: userId },
       data: { isActive: false },
@@ -174,6 +191,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true, user });
   } catch (error) {
+    if (error instanceof DeskAccessError) return deskAccessResponse(error);
     console.error('Error deactivating user:', error);
     return NextResponse.json(
       { error: 'Internal server error' },

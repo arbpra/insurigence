@@ -12,7 +12,7 @@
  * access, so they cannot create or remove their own peers.
  */
 import { randomBytes } from 'crypto';
-import { Prisma, type PrismaClient, type TaskStatus, type UserRole } from '@prisma/client';
+import { Prisma, type PrismaClient, type UserRole } from '@prisma/client';
 import { APP_URL } from '@/lib/email/client';
 import { sendEmail } from '@/lib/email/send';
 import { inviteEmail } from '@/lib/email/templates';
@@ -21,6 +21,7 @@ import { DeskAccessError, isObjectId, type DeskScope, type GuardContext } from '
 import { assertDeskPlatform } from './agency-setup';
 import { recordAudit, type AuditAction } from './audit';
 import { CLOSED_STATUSES } from './task-filters';
+import { returnToQueue } from './task-release';
 
 type Db = PrismaClient;
 
@@ -35,8 +36,6 @@ const OPEN_TASK = { status: { notIn: [...CLOSED_STATUSES] } };
  * null alone does not match a field that was never set.
  */
 const UNUSED_INVITE: Prisma.InviteTokenWhereInput = { OR: [{ usedAt: null }, { usedAt: { isSet: false } }] };
-/** Statuses that mean someone is working on it, so they cannot outlast the person. */
-const RESTART_STATUSES = ['ASSIGNED', 'IN_PROGRESS', 'QA_REVIEW'] as const;
 /** The team name in the invite: "You're invited to join The Insurigence Desk". */
 const TEAM_NAME = 'The Insurigence Desk';
 
@@ -282,23 +281,8 @@ export async function deactivateStaff(
     await tx.session.deleteMany({ where: { userId: user.id } });
     await tx.inviteToken.deleteMany({ where: { userId: user.id, ...UNUSED_INVITE } });
 
-    // Their open work goes back to the queue. Waiting tasks keep waiting, with
-    // the clock still stopped; started work has no owner now, so it starts over.
-    const tasks = await tx.task.findMany({ where: { assigneeId: user.id, ...OPEN_TASK }, select: { id: true, agencyId: true, status: true } });
-    const restart = new Set<TaskStatus>(RESTART_STATUSES);
-    const now = new Date();
-    const ids = tasks.map((t) => t.id);
-    await tx.task.updateMany({ where: { id: { in: ids }, status: { in: [...RESTART_STATUSES] } }, data: { status: 'NEW', assigneeId: null, lastActivityAt: now } });
-    await tx.task.updateMany({ where: { id: { in: ids }, assigneeId: user.id }, data: { assigneeId: null, lastActivityAt: now } });
-    if (tasks.length) {
-      await tx.taskEvent.createMany({
-        data: tasks.map((t) => ({
-          taskId: t.id, agencyId: t.agencyId, actorId: scope.userId, kind: 'UNASSIGNED' as const,
-          fromStatus: restart.has(t.status) ? t.status : null, toStatus: restart.has(t.status) ? 'NEW' as const : null,
-          metadata: { from: user.id, to: null, automatic: 'staff_deactivated' },
-        })),
-      });
-    }
+    const tasks = await tx.task.findMany({ where: { assigneeId: user.id, ...OPEN_TASK }, select: { id: true, agencyId: true, status: true, assigneeId: true } });
+    await returnToQueue(tx, tasks, scope.userId, 'staff_deactivated');
 
     // Open work under them as Account Manager moves to the agency's backup,
     // or to nobody; new work skips them too (lib/desk/tasks.ts).

@@ -559,7 +559,7 @@ Module 1–13 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43 
 |---|---|---:|---|---|
 | 15 | Enable The Desk per agency; assign primary / backup AM; Desk profile (AMS system, instructions, plan and allowance overrides) | 3.0 | ✏️ Q1, Q6 | ✅ Done |
 | 16 | Internal staff management: create / invite / deactivate AMs, VAs, Desk Admins / Operations Managers (reuses invite flow) | 2.5 | | ✅ Done |
-| 17 | Pod management: create / edit pods, add / remove VAs, authorize pods and named VAs per agency, VA sensitive-data permissions | 3.0 | ✏️ Q4 | ⬜ |
+| 17 | Pod management: create / edit pods, add / remove VAs, authorize pods and named VAs per agency, VA sensitive-data permissions | 3.0 | ✏️ Q4 | ✅ Done |
 | 18 | Routing and service-level editor: request type → pod, default priority; targets by type, complexity and priority; per-agency agreement overrides | 2.5 | ✏️ Q5 | ⬜ |
 | 19 | Business calendar editor: business hours, time zone, holidays | 2.0 | 🆕 Q5 | ⬜ |
 
@@ -666,6 +666,48 @@ Module 1–14 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 
 Module 1–15 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43, 80, 98 passed (**777 in total** with this module).
 
+**Module 17 — Pod management (✅ complete, 5 Nov 2026)**
+
+**Delivered** (`/super-admin/desk/pods`, three tabs):
+
+- **Pods and members:** create, rename, describe and switch pods off or on; add and remove VAs and Account Managers. A pod still in use (request types routed to it, follow-up rules, open requests) can't be switched off, and the message says what's using it.
+- **Agency access:** for each agency and pod, one of **Not authorized, Whole pod, or Named VAs only** (Q4: "restrict certain agencies or tasks to specific employees"). Only VAs in the pod can be named.
+- **VA permissions:** Financial and Personal documents are granted per VA. General and Policy documents are open to every VA on work they're authorized for.
+- **All changes apply immediately,** because the access layer reads these settings on every request. Each is in the audit log, with before and after where relevant.
+- **Work follows access.** When a change means a VA can no longer see a task assigned to them, it returns to the queue in the same step (work in progress restarts as New; waiting work keeps waiting with the clock stopped), and the admin is told how many. Account Managers keep their tasks, because their access comes from the agency, not the pod.
+- **Leaving a pod also removes access naming that person in it,** so adding them back later doesn't quietly restore it.
+- **Older Super Admin users page fixed** (open point from Module 16): deactivating or reactivating Desk staff there now follows the same rules as the Staff screen. Agency users behave as before.
+
+**Design decisions:**
+
+- **Named access means only those VAs.** Whole pod and named VAs are alternatives for each agency and pod, not combined, so a restriction can't be undone by a leftover whole-pod setting.
+- **Seeded pods can't be switched off yet,** because request types route to them. Module 18's routing editor is where they can be moved.
+
+**Issues:**
+
+- **My test run switched off a real pod in the shared database.** One deliberate fault removed the "pod in use" guard while a test aimed at a seeded pod, so Pod 1 (Service & AMS) was switched off from 14:58 UTC on 5 Nov until the regression exposed it. I restored it. **Nothing was affected:** the database has no tasks, and Pod 1 has no members or agency access. The test design was the fault: it now uses a temporary pod with a simulated routing count, and a new check confirms all seeded pods stay active. Re-running that fault caught it and left every seeded pod active.
+- **Leftover test records removed:** a Module 9 test run on 30 Oct had left 3 agencies and 6 users, tagged as test data with nothing attached. They were deleted. The database has no remaining test agencies or `@example.test` users.
+- **Limits of the live check:** a test server is still running and its worker for addresses such as `/pods/[id]` has failed (see Module 16). Those routes ran directly with real signed-in requests. The screen has not been clicked through in a browser.
+
+**Verified:** `tsc --noEmit` exit 0 · **99 tests passed** (`script/verify-desk-pods.ts`):
+- who may do what;
+- pod rules (names, permanent code, no-change saves);
+- member rules;
+- all three access states against real VA scopes;
+- work returning to the queue on narrowing, removal and leaving a pod, for each status;
+- Account Managers' work untouched;
+- switching pods off;
+- VA grants and revocations applying immediately;
+- the older users route, including agency users unchanged;
+- seeded pods untouched;
+- temporary records removed.
+
+**Deliberate faults:** seven were introduced one at a time. All seven were caught.
+
+**Live check:** 22 checks with real signed-in users: refusals, listing, creating a pod, a duplicate name, granting a permission, adding a member, authorizing a named VA and reading it back.
+
+Module 1–16 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43, 80, 98, 86 passed (**876 in total** with this module).
+
 ### Phase 2 — Insured Accounts (22.5 h)
 
 | # | Module | Hours | Change | Status |
@@ -733,7 +775,7 @@ Module 1–15 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–16 complete (43.0 h). **82.5 h remaining.**
+**Progress:** Modules 1–17 complete (46.0 h). **79.5 h remaining.**
 
 The client's answers added **33 hours** (see Section 9), approximately:
 
