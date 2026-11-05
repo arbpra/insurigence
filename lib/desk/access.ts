@@ -245,7 +245,7 @@ export function taskEventWhere(scope: DeskScope): Prisma.TaskEventWhereInput {
 
 // ── Single-record guards. Return the record or throw a 404. ──
 
-interface GuardContext {
+export interface GuardContext {
   /** For the audit entry on refusal. */
   ip?: string | null;
   userAgent?: string | null;

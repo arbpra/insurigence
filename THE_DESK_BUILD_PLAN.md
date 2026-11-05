@@ -557,11 +557,61 @@ Module 1–13 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43 
 
 | # | Module | Hours | Change | Status |
 |---|---|---:|---|---|
-| 15 | Enable The Desk per agency; assign primary / backup AM; Desk profile (AMS system, instructions, plan and allowance overrides) | 3.0 | ✏️ Q1, Q6 | ⬜ |
+| 15 | Enable The Desk per agency; assign primary / backup AM; Desk profile (AMS system, instructions, plan and allowance overrides) | 3.0 | ✏️ Q1, Q6 | ✅ Done |
 | 16 | Internal staff management: create / invite / deactivate AMs, VAs, Desk Admins / Operations Managers (reuses invite flow) | 2.5 | | ⬜ |
 | 17 | Pod management: create / edit pods, add / remove VAs, authorize pods and named VAs per agency, VA sensitive-data permissions | 3.0 | ✏️ Q4 | ⬜ |
 | 18 | Routing and service-level editor: request type → pod, default priority; targets by type, complexity and priority; per-agency agreement overrides | 2.5 | ✏️ Q5 | ⬜ |
 | 19 | Business calendar editor: business hours, time zone, holidays | 2.0 | 🆕 Q5 | ⬜ |
+
+**Module 15 — Per-agency Desk setup (✅ complete, 5 Nov 2026)**
+
+**Delivered:**
+
+- **Agencies list** (`/super-admin/desk/agencies`): every agency with its Desk status, Account Managers, plan and AMS, with search and an on / off filter.
+- **Setup form for each agency,** with a checklist of what's still missing (primary Account Manager, plan, AMS, an authorized pod):
+  - **Turn The Desk on or off.** Access changes immediately for the agency's users, its Account Managers and VAs. Turning it off while requests are open needs a confirmation that states how many.
+  - **Primary and backup Account Manager.** Each must be an active Account Manager, they must be different people, and a backup needs a primary.
+  - **AMS and profile (Q1):** the AMS (or "Other" with its name), instructions for Desk staff, and where the logins are kept in the password manager.
+  - **Credential guard in force.** Text that reads like a password is refused in the instructions, the login location, the AMS name and the plan notes. This applies the client's rule that passwords are never stored in The Desk.
+  - **Plan (Q6):** plan, start date, negotiated price (required for "Complete from $4,000"), managed-accounts override, notes.
+  - **Allowance overrides per service:** use the plan's allowance, set a number, or unlimited.
+- **When the Account Manager changes,** open requests move to the new one. Completed work keeps who handled it. If a request is still assigned to the person removed, the admin is told, because that person can no longer see it.
+- **Waiting billing is classified automatically.** When a plan is saved, work completed earlier without an allowance is classified, oldest first, and the admin is told how many.
+- **Every save is logged once,** with who, when, the IP address and which fields changed. Instructions and the login location are never copied into the log. Saving a form with no changes writes nothing.
+- **Access:** Super Admin and Operations Managers only. Other roles get a 403, and the refusal is logged.
+
+**Design decisions:**
+
+- **The checklist advises and doesn't block.** An agency can be turned on before it has a plan or Account Manager. Staff and pod screens arrive in Modules 16–17, and missing billing data leaves work unclassified rather than wrong.
+- **Two admins editing the same agency:** the second save is refused with "someone else just changed this agency", rather than silently overwriting the first.
+- **Allowance changes don't reclassify work already classified.** They apply to what's completed from then on, and to work still waiting.
+
+**Issues:**
+
+- **Audit accuracy:** the form sends every field on each save, so the first version logged fields as changed when they weren't. It now compares against stored values.
+- **Test gap found by deliberate faults:** removing the protection against overwriting another admin's save wasn't caught, because two truly simultaneous saves are also stopped by the database. A new test forces another save to land between this one's read and write.
+- **Not yet clicked through in a browser.** The pages compile and are served, and the API behind them was exercised over HTTP as real users. The form's on-screen behaviour gets its walkthrough in Module 45, unless checked sooner.
+- **Open point: no screen for plan-level allowances.** Module 15 sets them per agency. When the client's numbers arrive (D1), the plan-wide allowances need a screen or a one-time data entry. No module currently covers this.
+
+**Verified:** `tsc --noEmit` exit 0 · **98 tests passed** (`script/verify-desk-agency-setup.ts`):
+- who may read and save;
+- list search and filters;
+- turning on and off, and the effect on access;
+- Account Manager rules, open work moving, access removed;
+- AMS rules and the credential guard in all four text fields, with ordinary mentions allowed;
+- plan rules, price and overrides;
+- no-change saves;
+- removing a plan;
+- late billing classification (allowance of 1: oldest included, next overage);
+- out-of-date, simultaneous and interleaved saves;
+- audit contents;
+- temporary records removed.
+
+**Deliberate faults:** six were introduced one at a time (race guard, open work moving, credential guard, platform check, no-change detection, late classification). All six were caught, and the file was restored.
+
+**Live check:** the app was started and 20 requests were made as real signed-in users (anonymous, agency admin, Account Manager, VA, Operations Manager, Super Admin): refusals, a full save over HTTP, an out-of-date form, a refused credential, and both pages served. No server errors. Temporary records were removed.
+
+Module 1–14 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43, 80 passed (**691 in total** with this module).
 
 ### Phase 2 — Insured Accounts (22.5 h)
 
@@ -630,7 +680,7 @@ Module 1–13 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43 
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–14 complete (37.5 h). **88.0 h remaining.**
+**Progress:** Modules 1–15 complete (40.5 h). **85.0 h remaining.**
 
 The client's answers added **33 hours** (see Section 9), approximately:
 

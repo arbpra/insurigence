@@ -1,5 +1,5 @@
-import { DeskPage } from '@/components/desk/DeskAreaLayout';
+import { AgencyList } from '@/components/desk/admin/AgencyList';
 
 export default function Page() {
-  return <DeskPage area="ADMIN" href="/super-admin/desk/agencies" />;
+  return <AgencyList />;
 }

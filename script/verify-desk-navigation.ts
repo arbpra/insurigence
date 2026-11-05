@@ -64,9 +64,9 @@ async function wipe() {
     const missing = all.filter((i) => !existsSync(pageFile(i.area, i.href)));
     ok(`each entry has a page (${all.length})`, missing.length === 0);
     if (missing.length) console.log('    missing:', missing.map((i) => i.href).join(', '));
-    const wrong = all.filter((i) => existsSync(pageFile(i.area, i.href))
-      && !readFileSync(pageFile(i.area, i.href), 'utf8').includes(`area="${i.area}" href="${i.href}"`));
-    ok('each page renders its own entry in its own area', wrong.length === 0);
+    const placeholderSource = (i: { area: DeskArea; href: string }) => existsSync(pageFile(i.area, i.href)) ? readFileSync(pageFile(i.area, i.href), 'utf8') : '';
+    const wrong = all.filter((i) => placeholderSource(i).includes('DeskPage') && !placeholderSource(i).includes(`area="${i.area}" href="${i.href}"`));
+    ok('each placeholder renders its own entry in its own area', wrong.length === 0);
     for (const area of Object.keys(AREA_ROOTS) as DeskArea[]) {
       const layout = join(process.cwd(), 'app', area === 'ADMIN' ? '(main)' : '(desk)', ...AREA_ROOTS[area].split('/').filter(Boolean), 'layout.tsx');
       ok(`${area} has a server layout checking access`, existsSync(layout)
