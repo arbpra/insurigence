@@ -2,9 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { deskAccessResponse, DeskAccessError } from '@/lib/desk/access';
 import { deskUserRequest } from '@/lib/desk/admin-api';
-import { assignInsuredStaff, unassignInsuredStaff } from '@/lib/desk/book';
+import { assignInsuredStaff, assignableForInsured, unassignInsuredStaff } from '@/lib/desk/book';
 
 type Context = { params: Promise<{ id: string }> };
+
+/** The people who can be assigned, for those who manage assignments. */
+export async function GET(request: NextRequest, { params }: Context) {
+  try {
+    const { id } = await params;
+    const { scope, ctx } = await deskUserRequest(prisma, request);
+    return NextResponse.json({ people: await assignableForInsured(prisma, scope, id, ctx) });
+  } catch (err) {
+    return deskAccessResponse(err);
+  }
+}
 
 /** Body: { userId, role?: 'PRODUCER' | 'SERVICE' } */
 export async function PUT(request: NextRequest, { params }: Context) {

@@ -1,5 +1,8 @@
-import { DeskPage } from '@/components/desk/DeskAreaLayout';
+import { deskPageAccess } from '@/components/desk/DeskAreaLayout';
+import { TeamList } from '@/components/desk/team/TeamList';
 
-export default function Page() {
-  return <DeskPage area="AGENCY" href="/desk/team" />;
+export default async function Page() {
+  const access = await deskPageAccess('AGENCY', '/desk/team');
+  if (!access) return null;
+  return <TeamList />;
 }

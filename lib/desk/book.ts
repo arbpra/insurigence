@@ -15,8 +15,8 @@
  * Accounts are deactivated, never deleted: requests and their history refer to
  * them. Text that reads like a password is refused, as everywhere in The Desk.
  */
-import { Prisma, PolicyStatus, InsuredAssignmentRole, type InsuredStatus, type PrismaClient } from '@prisma/client';
-import { canBeAssignedToInsured, defaultAssignmentRole } from '@/lib/roles';
+import { Prisma, PolicyStatus, InsuredAssignmentRole, type InsuredStatus, type PrismaClient, type UserRole } from '@prisma/client';
+import { AGENCY_ROLES, canBeAssignedToInsured, defaultAssignmentRole, roleLabel } from '@/lib/roles';
 import {
   canManageAgencyAccess, DeskAccessError, documentWhere, getInsuredForScope, getPolicyForScope, insuredWhere, isObjectId, policyWhere,
   scopeAgencyIds, taskWhere, type DeskScope, type GuardContext,
@@ -76,7 +76,7 @@ async function forbid(db: Db, scope: DeskScope, ctx: GuardContext, entityType: s
 const canEdit = (scope: DeskScope) => scope.kind === 'AGENCY' || scope.kind === 'ACCOUNT_MANAGER' || scope.kind === 'PLATFORM';
 
 /** Deactivating an account and assigning staff: the agency's admin, its Account Manager, Insurigence admins. */
-function canManage(scope: DeskScope, agencyId: string): boolean {
+export function canManage(scope: DeskScope, agencyId: string): boolean {
   if (scope.kind === 'ACCOUNT_MANAGER') return scope.agencyIds.includes(agencyId);
   return canManageAgencyAccess(scope, agencyId);
 }
@@ -182,25 +182,38 @@ export interface InsuredListOptions {
   status?: InsuredStatus;
   /** Only accounts assigned to the person asking. */
   mine?: boolean;
+  /** Only accounts assigned, or not assigned, to this person. Not for VAs, who get no staff details. */
+  assignedTo?: string;
+  notAssignedTo?: string;
   /** Narrow to one agency (Account Managers and Insurigence admins). */
   agencyId?: string;
   page?: number;
   pageSize?: number;
 }
 
-export async function listInsureds(db: Db, scope: DeskScope, opts: InsuredListOptions = {}) {
-  const pageSize = Math.min(Math.max(1, Math.trunc(opts.pageSize ?? 25)), MAX_PAGE_SIZE);
-  // An absurd ?page= is an empty page, not a database error.
-  const page = Number.isFinite(opts.page) ? Math.min(Math.max(1, Math.trunc(opts.page!)), MAX_PAGE) : 1;
+/** The accounts a list or a bulk action covers. Always inside what the scope may see. */
+export function insuredListWhere(scope: DeskScope, opts: InsuredListOptions): Prisma.InsuredAccountWhereInput {
   const q = opts.q?.trim().slice(0, MAX_SEARCH);
   const text = q ? literal(q) : '';
   const key = q ? literal(insuredNameKey(q)) : '';
-  const where: Prisma.InsuredAccountWhereInput = {
+  // A malformed id would be a database error, and leaving the filter off would widen the list.
+  const person = (id: string) => (isObjectId(id) ? id : null);
+  const staffFilters: Prisma.InsuredAccountWhereInput[] = [];
+  if (opts.assignedTo !== undefined) {
+    const id = person(opts.assignedTo);
+    staffFilters.push(id && scope.kind !== 'VA' ? { assignments: { some: { userId: id } } } : { id: { in: [] } });
+  }
+  if (opts.notAssignedTo !== undefined) {
+    const id = person(opts.notAssignedTo);
+    staffFilters.push(id && scope.kind !== 'VA' ? { assignments: { none: { userId: id } } } : { id: { in: [] } });
+  }
+  return {
     AND: [
       insuredWhere(scope),
       opts.status ? { status: opts.status } : {},
       opts.agencyId && isObjectId(opts.agencyId) ? { agencyId: opts.agencyId } : {},
       opts.mine ? { assignments: { some: { userId: scope.userId } } } : {},
+      ...staffFilters,
       q ? {
         OR: [
           { name: { contains: text, mode: 'insensitive' } },
@@ -215,6 +228,13 @@ export async function listInsureds(db: Db, scope: DeskScope, opts: InsuredListOp
       } : {},
     ],
   };
+}
+
+export async function listInsureds(db: Db, scope: DeskScope, opts: InsuredListOptions = {}) {
+  const pageSize = Math.min(Math.max(1, Math.trunc(opts.pageSize ?? 25)), MAX_PAGE_SIZE);
+  // An absurd ?page= is an empty page, not a database error.
+  const page = Number.isFinite(opts.page) ? Math.min(Math.max(1, Math.trunc(opts.page!)), MAX_PAGE) : 1;
+  const where = insuredListWhere(scope, opts);
   const isVa = scope.kind === 'VA';
   const [total, rows] = await Promise.all([
     db.insuredAccount.count({ where }),
@@ -471,6 +491,18 @@ export async function removePolicy(db: Db, scope: DeskScope, policyId: string, c
 }
 
 // ── Staff assignments ──
+
+/** Everyone who can be assigned to this account: its agency's active people. */
+export async function assignableForInsured(db: Db, scope: DeskScope, insuredId: string, ctx: GuardContext = {}) {
+  const insured = await getInsuredForScope(db, scope, insuredId, ctx, { id: true, agencyId: true });
+  if (!canManage(scope, insured.agencyId)) return forbid(db, scope, ctx, 'InsuredAccount', insured.id, insured.agencyId, 'assignable', 'Only an agency admin or Account Manager can assign staff to an account.');
+  const users = await db.user.findMany({
+    where: { agencyId: insured.agencyId, isActive: true, role: { in: [...AGENCY_ROLES] as UserRole[] } },
+    select: { id: true, firstName: true, lastName: true, email: true, role: true },
+    orderBy: [{ firstName: 'asc' }, { email: 'asc' }],
+  });
+  return users.map((u) => ({ id: u.id, name: personName(u), roleLabel: roleLabel(u.role), defaultRole: defaultAssignmentRole(u.role) }));
+}
 
 export async function assignInsuredStaff(
   db: Db, scope: DeskScope, insuredId: string, input: { userId?: unknown; role?: unknown }, ctx: GuardContext = {}

@@ -4,7 +4,7 @@ import { deskAccessResponse, DeskAccessError } from '@/lib/desk/access';
 import { deskUserRequest } from '@/lib/desk/admin-api';
 import { createInsured, listInsureds } from '@/lib/desk/book';
 
-/** ?q= &status=ACTIVE|INACTIVE &mine=1 &agencyId= &page= &pageSize= */
+/** ?q= &status=ACTIVE|INACTIVE &mine=1 &assignedTo= &notAssignedTo= &agencyId= &page= &pageSize= */
 export async function GET(request: NextRequest) {
   try {
     const { scope } = await deskUserRequest(prisma, request);
@@ -14,6 +14,8 @@ export async function GET(request: NextRequest) {
       q: p.get('q') ?? undefined,
       status: status === 'ACTIVE' || status === 'INACTIVE' ? status : undefined,
       mine: p.get('mine') === '1',
+      assignedTo: p.get('assignedTo') ?? undefined,
+      notAssignedTo: p.get('notAssignedTo') ?? undefined,
       agencyId: p.get('agencyId') ?? undefined,
       page: Number(p.get('page')) || 1,
       pageSize: Number(p.get('pageSize')) || 25,

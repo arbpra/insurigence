@@ -811,7 +811,7 @@ Module 1–18 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 | 20 | Insured accounts API: CRUD with policies and staff assignments, scoped through the access layer | 3.0 | ✏️ Q3 | ✅ Done |
 | 21 | Agency Portal: insured list (search, filter, paging, "my accounts") + add / edit form | 3.0 | | ✅ Done |
 | 22 | Insured detail page: profile, assigned producer / CSR, policies, open tasks, documents | 2.5 | | ✅ Done |
-| 23 | Agency user permissions: agency admin sets each user's role and book access, and assigns producers / CSRs to accounts (single and bulk) | 2.5 | 🆕 Q3 | ⬜ |
+| 23 | Agency user permissions: agency admin sets each user's role and book access, and assigns producers / CSRs to accounts (single and bulk) | 2.5 | 🆕 Q3 | ✅ Done |
 | 24 | Import engine: server-side CSV / XLSX parsing, header detection, staging rows in an `ImportBatch` | 3.0 | | ⬜ |
 | 25 | Import mapping UI: map any export's columns to Desk fields, with mappings remembered per agency for the next upload | 3.0 | ✏️ Q2 | ⬜ |
 | 26 | Import validation and grouping: several policy rows per insured, insured-only rows, producer matched to agency users, date / premium / policy-status parsing, duplicate detection, preview | 3.0 | 🆕 Q2 | ⬜ |
@@ -966,6 +966,45 @@ Module 1–20 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 
 Module 1–21 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43, 80, 98, 86, 99, 91, 72, 155, 99 passed (**1,447 in total** with this module).
 
+**Module 23 — Agency user permissions and assigning staff (✅ complete, 6 Nov 2026)**
+
+**Delivered:**
+
+- **Team access screen** (`/desk/team`): everyone in the agency, with their role, book access and how many accounts they hold. The Owner / Admin changes role and book access there. "Invite someone" links to the existing `/team` page, which still handles invites and deactivating people.
+- **A person's page** (`/desk/team/[id]`): their accounts, plus adding or removing accounts in bulk, by ticking rows or by acting on everything in the current list.
+- **Assigned staff on the account page:** add and remove people, for those allowed to manage the account.
+- `lib/desk/team.ts`, `lib/desk/team-form.ts` and the `/api/desk/team` routes. The account list gains `assignedTo` / `notAssignedTo` filters, and `GET /api/desk/insureds/[id]/assignments` lists who can be assigned.
+
+**Design decisions:**
+
+- **Who may change access (Q3):** the agency's Owner / Admin and Insurigence admins. Account Managers may assign people to accounts (the Module 20 rule) but may not change roles or book access.
+- **Guards on changing access:** nobody can change their own access. Only Owner / Admin, Producer and CSR can be set. An agency always keeps one active Owner / Admin, even if two admins demote each other at the same moment. An admin demoted a moment ago can't act on an old session. A screen that is out of date is refused.
+- **Book access is cleared when someone becomes an Owner / Admin,** so an old grant doesn't come back if they are later demoted.
+- **Bulk changes are all or nothing.** If any account is outside the person's scope or agency, nothing changes and the refusal is logged. The limit is 5,000 accounts at a time. A bulk change writes one log entry with the count and the account ids.
+- **Need-to-know (Q4):** people in another agency read as not found. VAs can't filter by person, so the list can't reveal assignments. No password or hash is sent.
+- **Logged:** access changes (with from and to), assignments and refusals. Viewing the team list is not logged.
+
+**Issues:**
+
+- **Open question for the client:** Q3 says "the agency admin manages these permissions", but Account Managers can assign people to accounts under the Module 20 rule. The comment on `canManageAgencyAccess` in `lib/desk/access.ts` says Account Managers don't manage access. Roles and book access are admin only; whether an Account Manager may assign people needs the client's answer.
+- A test proved nothing: the VA filter check passed because that VA could see no accounts at all. A deliberate fault exposed this. The VA now has real work on two accounts, and the check covers both filters.
+- A Module 22 test listed the imports allowed in `AccountDetail.tsx` and needed the new `AssignedStaff` added. That was a test update, not an app fault.
+- Demoting an admin updates the agency record, so an Agency setup form open at that moment gets a "changed elsewhere" refusal. This is rare and safe.
+- Filters on a person's page aren't kept in the address, so Back resets them.
+- On a phone, the team table scrolls sideways inside its card to reach book access. The page itself doesn't overflow.
+- Sidebar links don't warn about unsaved changes.
+- The first load of the team screen took 29 s in the development server while the route compiled. Other loads weren't timed, and a production build hasn't been measured.
+
+**Verified:**
+
+- `script/verify-desk-team.ts`: 143 tests passed.
+- 27 deliberate faults, one at a time: 26 caught the first time, and the VA filter fault after the test was fixed (see Issues). The code was restored and compared afterwards.
+- 60 browser checks in Chrome only, with temporary agencies and users, at desktop and phone widths, and screenshots viewed. The browser script isn't in the repo, and no person has tried the screens.
+- No test records left behind.
+- Type check clean.
+
+Module 1–22 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43, 80, 98, 86, 99, 91, 72, 155, 99, 154 passed (**1,590 in total** with this module). The team and account page suites were re-run after their final test edits; no app code changed after the full run.
+
 ### Phase 3 — Task System Core (17 h)
 
 | # | Module | Hours | Change | Status |
@@ -1020,7 +1059,7 @@ Module 1–21 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–22 complete (59.0 h). **66.5 h remaining.**
+**Progress:** Modules 1–23 complete (61.5 h). **64.0 h remaining.**
 
 The client's answers added **33 hours** (see Section 9), approximately:
 

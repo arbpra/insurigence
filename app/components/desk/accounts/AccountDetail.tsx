@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { fileSizeLabel, localDayLabel, mailtoHref, websiteHref } from '@/lib/desk/account-form';
 import { ApiError, api } from './account-api';
+import { AssignedStaff } from './AssignedStaff';
 import { PolicyPanel, type PolicyRow } from './PolicyPanel';
 
 interface Overview {
@@ -35,7 +36,6 @@ const ACCENT = 'var(--brand-primary, #05314c)';
 const CARD = 'bg-white border border-slate-200 rounded-xl p-5 mb-5 min-w-0';
 const HEADING = 'text-base font-semibold text-slate-800';
 const NOTE = 'text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-lg p-3 mb-4';
-const ASSIGNMENT_ROLES = { PRODUCER: 'Producer', SERVICE: 'Service' };
 
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -115,7 +115,6 @@ export function AccountDetail({ accountId, justCreated }: { accountId: string; j
   const site = websiteHref(data.website);
   const place = [data.city, data.state].filter(Boolean).join(', ');
   const address = [data.addressLine1, data.addressLine2, [place, data.postalCode].filter(Boolean).join(' ')].filter(Boolean).join('\n');
-  const staff = data.assignments ?? [];
 
   return (
     <div className="max-w-5xl min-w-0" data-testid="desk-detail">
@@ -157,21 +156,7 @@ export function AccountDetail({ accountId, justCreated }: { accountId: string; j
           {data.notes && <dl className="mt-4"><Detail label="Notes">{data.notes}</Detail></dl>}
         </section>
 
-        <section className={CARD} data-testid="desk-detail-staff">
-          <h2 className={`${HEADING} mb-4`}>Assigned staff</h2>
-          {staff.length === 0 ? (
-            <p className="text-sm text-slate-600">Nobody is assigned to this account yet.</p>
-          ) : (
-            <ul className="space-y-3">
-              {staff.map((s) => (
-                <li key={s.userId} className="text-sm min-w-0" data-testid={`desk-detail-staff-${s.userId}`}>
-                  <span className="font-medium text-slate-800 break-words">{s.name}</span>
-                  <span className="block text-xs text-slate-500">{ASSIGNMENT_ROLES[s.role]}{s.isActive ? '' : ' · No longer active'}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        <AssignedStaff insuredId={data.id} staff={data.assignments ?? []} canManage={data.can.manage} onChanged={load} />
       </div>
 
       <PolicyPanel insuredId={data.id} policies={data.policies} canEdit={data.can.edit} onChanged={load} onUnsaved={setPolicyUnsaved} />
