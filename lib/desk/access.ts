@@ -364,6 +364,11 @@ export async function resolveSubmission(
     agencyId = policy.agencyId;
   }
 
+  if (insuredId) {
+    const account = await db.insuredAccount.findUnique({ where: { id: insuredId }, select: { status: true } });
+    if (account?.status === 'INACTIVE') throw new DeskAccessError(409, 'This account is inactive. Reactivate it to send a new request.');
+  }
+
   if (scope.kind === 'AGENCY') {
     return { agencyId: scope.agencyId, insuredId, policyId };
   }

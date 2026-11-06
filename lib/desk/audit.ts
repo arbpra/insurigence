@@ -15,6 +15,7 @@ export const AUDIT_ACTIONS = [
   'task.routed', 'task.restricted', 'task.escalated', 'task.note_added', 'task.billing_classified',
   'document.uploaded', 'document.viewed', 'document.downloaded', 'document.removed',
   'insured.created', 'insured.viewed', 'insured.updated', 'insured.assigned',
+  'policy.created', 'policy.updated', 'policy.removed',
   'import.staged', 'import.committed', 'import.undone',
   'agency.desk_updated', 'permission.changed',
   'staff.invited', 'staff.invite_resent', 'staff.updated', 'staff.deactivated', 'staff.reactivated',

@@ -808,7 +808,7 @@ Module 1–18 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 
 | # | Module | Hours | Change | Status |
 |---|---|---:|---|---|
-| 20 | Insured accounts API: CRUD with policies and staff assignments, scoped through the access layer | 3.0 | ✏️ Q3 | ⬜ |
+| 20 | Insured accounts API: CRUD with policies and staff assignments, scoped through the access layer | 3.0 | ✏️ Q3 | ✅ Done |
 | 21 | Agency Portal: insured list (search, filter, paging, "my accounts") + add / edit form | 3.0 | | ⬜ |
 | 22 | Insured detail page: profile, assigned producer / CSR, policies, open tasks, documents | 2.5 | | ⬜ |
 | 23 | Agency user permissions: agency admin sets each user's role and book access, and assigns producers / CSRs to accounts (single and bulk) | 2.5 | 🆕 Q3 | ⬜ |
@@ -816,6 +816,62 @@ Module 1–18 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 | 25 | Import mapping UI: map any export's columns to Desk fields, with mappings remembered per agency for the next upload | 3.0 | ✏️ Q2 | ⬜ |
 | 26 | Import validation and grouping: several policy rows per insured, insured-only rows, producer matched to agency users, date / premium / policy-status parsing, duplicate detection, preview | 3.0 | 🆕 Q2 | ⬜ |
 | 27 | Import commit, one-click undo of a batch, downloadable import template | 2.5 | | ⬜ |
+
+**Module 20 — Insured accounts API (✅ complete, 6 Nov 2026)**
+
+This module is the server side only. There is no screen yet; Modules 21 and 22 build the list, form and detail page on top of it.
+
+**Delivered:**
+
+- `lib/desk/book.ts`: list, view, add and edit accounts; add, edit and remove policies; assign and unassign agency staff.
+- `app/api/desk/insureds` (list, add), `insureds/[id]` (view, edit), `insureds/[id]/policies` (add), `insureds/[id]/assignments` (assign, unassign), `policies/[id]` (edit, remove).
+- `deskUserRequest` in `lib/desk/admin-api.ts`: a guard for Desk APIs open to any Desk user, with what they can reach decided by the access layer.
+- New audit actions for policies. Opening an account, each change and each refusal are logged. Logs list field names, never the text entered. The one exception is a removed policy's number, kept so the log shows which policy went.
+- New rule in `lib/desk/access.ts`: a new request can't be sent on an inactive account, either directly or through one of its policies.
+
+**Who can do what:**
+
+| | See | Add / edit accounts and policies | Deactivate, assign staff |
+|---|---|---|---|
+| Agency Owner / Admin | Whole book | Yes | Yes |
+| Producer / CSR | Assigned accounts, or the whole book if granted | Yes, on what they can see | No |
+| Account Manager | Covered agencies | Yes | Yes |
+| Super Admin / Operations Manager | All Desk agencies | Yes | Yes |
+| VA | Only what the access layer allows | No (read-only) | No |
+
+**Design decisions:**
+
+- **Another agency's account returns "not found", not "forbidden",** so the answer doesn't confirm the account exists. The attempt is logged.
+- **VAs get less detail (Q4, need-to-know).** They don't receive account notes, premiums, policy notes, the staff list or open-request totals, because the server leaves those fields out of the response. Of an account's policies, they see only the one on their request.
+- **Agency users can only add to their own agency,** whatever the request says. An Account Manager or platform user must name a covered, Desk-enabled agency.
+- **Someone who sees only assigned accounts is assigned to anything they add.** Otherwise a new account would vanish from their own list as soon as they saved it.
+- **Protected fields can't be set through the API:** agency, source, import batch, creator and carrier link. Only listed fields are accepted.
+- **Duplicate names are refused unless confirmed.** Matching ignores differences in how a name is written. The message says only that a same-named account exists. The form in Module 21 can offer "save anyway". The same policy number can't appear twice on one account.
+- **Accounts are deactivated, never deleted,** and not while they have open requests; the refusal gives the count. A policy can be removed only if no request has ever been made on it.
+- **Changing a policy's expiration date leaves open requests' due dates alone,** in line with Module 19's rule that existing dates aren't recalculated.
+- **Passwords (Q4):** text that looks like a credential is refused in account notes, account descriptions and policy notes. This is a screen for obvious cases, not a guarantee.
+
+**Issues:**
+
+- **Type error in the list view,** from returning the staff list conditionally. Staff are now always read and removed for VAs before the response is built. A test confirms the VA's list still comes back without staff or totals.
+- **Two mistakes in my tests, not the code:** an `await` in a non-async function, and one test expecting "forbidden" for a CSR who isn't on the account. The correct answer is "not found". It's now two tests: not on the account gives "not found", on the account but not allowed to assign gives "forbidden".
+- **Limits of the check:** the route handlers were called directly in the test process with real signed-in sessions, not through a running web server. The rest of that path is exercised when Module 21's screens are built.
+
+**Verified:** `tsc --noEmit` exit 0 · **155 tests passed** (`script/verify-desk-insureds.ts`), on temporary agencies and users only, none left behind:
+- each role's reach, and agency separation;
+- VA read-only access and the fields withheld;
+- adding, editing and the protected fields;
+- duplicates, credentials in notes, deactivation rules;
+- policies and removal rules;
+- staff assignment, including refusing other agencies' users and Desk staff;
+- out-of-date and interleaved saves;
+- audit contents, and no entry when nothing changed;
+- requests refused on inactive accounts;
+- the real route handlers, with signed-in requests.
+
+**Deliberate faults:** ten were introduced one at a time. All ten were caught, and the code was confirmed restored afterwards.
+
+Module 1–19 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43, 80, 98, 86, 99, 91, 72 passed (**1,194 in total** with this module).
 
 ### Phase 3 — Task System Core (17 h)
 
@@ -871,7 +927,7 @@ Module 1–18 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–19 complete (50.5 h). **75.0 h remaining.**
+**Progress:** Modules 1–20 complete (53.5 h). **72.0 h remaining.**
 
 The client's answers added **33 hours** (see Section 9), approximately:
 
