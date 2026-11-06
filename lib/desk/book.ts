@@ -21,8 +21,10 @@ import {
   canManageAgencyAccess, DeskAccessError, getInsuredForScope, getPolicyForScope, insuredWhere, isObjectId, policyWhere,
   scopeAgencyIds, type DeskScope, type GuardContext,
 } from './access';
+import { ACCOUNT_NAME_MAX, CONTACT_EMAIL_MAX, INSURED_TEXT, type TextRule } from './account-form';
 import { recordAudit, type AuditAction } from './audit';
 import { insuredNameKey } from './insureds';
+import { literal } from './literal-match';
 import { looksLikeCredential } from './profile';
 import { CLOSED_STATUSES } from './task-filters';
 
@@ -34,10 +36,12 @@ const OPEN_TASK = { status: { notIn: [...CLOSED_STATUSES] } };
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_PREMIUM_CENTS = 100_000_000_000; // $1 billion: anything above is a typing error
 const MAX_PAGE_SIZE = 100;
+const MAX_PAGE = 1_000_000;
+const MAX_SEARCH = 200;
 const CHANGED_ELSEWHERE = 'Someone else just changed this. Reload to see their changes, then try again.';
 
 const bad = (message: string) => new DeskAccessError(400, message);
-const conflict = (message: string) => new DeskAccessError(409, message);
+const conflict = (message: string, code?: string) => new DeskAccessError(409, message, code);
 
 async function inTransaction<T>(db: Db, fn: (tx: Tx) => Promise<T>): Promise<T> {
   try {
@@ -73,24 +77,6 @@ function canManage(scope: DeskScope, agencyId: string): boolean {
 
 // ── Field rules ──
 
-type TextRule = { label: string; max: number; screen?: boolean };
-
-const INSURED_TEXT: Record<string, TextRule> = {
-  dba: { label: 'DBA name', max: 200 },
-  contactName: { label: 'Contact name', max: 200 },
-  contactPhone: { label: 'Contact phone', max: 50 },
-  website: { label: 'Website', max: 300 },
-  addressLine1: { label: 'Address', max: 200 },
-  addressLine2: { label: 'Address line 2', max: 200 },
-  city: { label: 'City', max: 100 },
-  state: { label: 'State', max: 50 },
-  postalCode: { label: 'Postal code', max: 20 },
-  industry: { label: 'Industry', max: 100 },
-  description: { label: 'Description', max: 2000, screen: true },
-  notes: { label: 'Notes', max: 5000, screen: true },
-  externalRef: { label: 'AMS reference', max: 100 },
-};
-
 const POLICY_TEXT: Record<string, TextRule> = {
   policyNumber: { label: 'Policy number', max: 100 },
   lineOfBusiness: { label: 'Line of business', max: 100 },
@@ -112,13 +98,13 @@ function text(value: unknown, rule: TextRule): string | null {
 }
 
 function requiredName(value: unknown): string {
-  const name = text(value, { label: 'Account name', max: 200 });
+  const name = text(value, { label: 'Account name', max: ACCOUNT_NAME_MAX });
   if (!name) throw bad('Account name is required.');
   return name;
 }
 
 function email(value: unknown): string | null {
-  const t = text(value, { label: 'Contact email', max: 254 });
+  const t = text(value, { label: 'Contact email', max: CONTACT_EMAIL_MAX });
   if (t && !EMAIL_RE.test(t)) throw bad('Contact email is not a valid address.');
   return t ? t.toLowerCase() : null;
 }
@@ -201,9 +187,11 @@ export interface InsuredListOptions {
 
 export async function listInsureds(db: Db, scope: DeskScope, opts: InsuredListOptions = {}) {
   const pageSize = Math.min(Math.max(1, Math.trunc(opts.pageSize ?? 25)), MAX_PAGE_SIZE);
-  const page = Math.max(1, Math.trunc(opts.page ?? 1));
-  const q = opts.q?.trim();
-  const key = q ? insuredNameKey(q) : '';
+  // An absurd ?page= is an empty page, not a database error.
+  const page = Number.isFinite(opts.page) ? Math.min(Math.max(1, Math.trunc(opts.page!)), MAX_PAGE) : 1;
+  const q = opts.q?.trim().slice(0, MAX_SEARCH);
+  const text = q ? literal(q) : '';
+  const key = q ? literal(insuredNameKey(q)) : '';
   const where: Prisma.InsuredAccountWhereInput = {
     AND: [
       insuredWhere(scope),
@@ -212,13 +200,14 @@ export async function listInsureds(db: Db, scope: DeskScope, opts: InsuredListOp
       opts.mine ? { assignments: { some: { userId: scope.userId } } } : {},
       q ? {
         OR: [
-          { name: { contains: q, mode: 'insensitive' } },
+          { name: { contains: text, mode: 'insensitive' } },
           { nameKey: { contains: key } },
-          { dba: { contains: q, mode: 'insensitive' } },
-          { contactName: { contains: q, mode: 'insensitive' } },
-          { contactEmail: { contains: q, mode: 'insensitive' } },
-          { externalRef: { contains: q, mode: 'insensitive' } },
-          { policies: { some: { policyNumber: { contains: q, mode: 'insensitive' } } } },
+          { dba: { contains: text, mode: 'insensitive' } },
+          { contactName: { contains: text, mode: 'insensitive' } },
+          { contactEmail: { contains: text, mode: 'insensitive' } },
+          { externalRef: { contains: text, mode: 'insensitive' } },
+          // Only policies this user may see: otherwise a search could confirm a number they have no access to.
+          { policies: { some: { AND: [policyWhere(scope), { policyNumber: { contains: text, mode: 'insensitive' } }] } } },
         ],
       } : {},
     ],
@@ -297,7 +286,7 @@ async function targetAgency(db: Db, scope: DeskScope, requested: unknown, ctx: G
 /** Refuses a same-named active account in the agency, unless the request confirms it. Says only that one exists. */
 async function assertNotDuplicate(db: Db, agencyId: string, nameKey: string, exceptId?: string): Promise<void> {
   const same = await db.insuredAccount.count({ where: { agencyId, nameKey, status: 'ACTIVE', ...(exceptId ? { id: { not: exceptId } } : {}) } });
-  if (same) throw conflict('An account with this name already exists in this agency.');
+  if (same) throw conflict('An account with this name already exists in this agency.', 'DUPLICATE_NAME');
 }
 
 export async function createInsured(db: Db, scope: DeskScope, input: Record<string, unknown>, ctx: GuardContext = {}): Promise<{ id: string }> {
@@ -329,7 +318,7 @@ export async function createInsured(db: Db, scope: DeskScope, input: Record<stri
 export async function updateInsured(db: Db, scope: DeskScope, insuredId: string, input: Record<string, unknown>, ctx: GuardContext = {}): Promise<void> {
   const current = await getInsuredForScope(db, scope, insuredId, ctx);
   if (!canEdit(scope)) return forbid(db, scope, ctx, 'InsuredAccount', current.id, current.agencyId, 'update', 'VAs cannot change accounts.');
-  if (input.version !== undefined && input.version !== current.updatedAt.toISOString()) throw conflict(CHANGED_ELSEWHERE);
+  if (input.version !== undefined && input.version !== current.updatedAt.toISOString()) throw conflict(CHANGED_ELSEWHERE, 'CHANGED_ELSEWHERE');
 
   const fields: Prisma.InsuredAccountUpdateManyMutationInput = insuredFields(input);
   if (input.name !== undefined) {
@@ -346,6 +335,9 @@ export async function updateInsured(db: Db, scope: DeskScope, insuredId: string,
       if (input.status === 'INACTIVE') {
         const open = await db.task.count({ where: { insuredId: current.id, ...OPEN_TASK } });
         if (open) throw conflict(`This account has ${open} open request${open === 1 ? '' : 's'}. Complete or cancel them first.`);
+      } else if (input.allowDuplicate !== true) {
+        // Another active account may have taken this name while this one was inactive.
+        await assertNotDuplicate(db, current.agencyId, (fields.nameKey as string | undefined) ?? current.nameKey, current.id);
       }
       fields.status = input.status;
     }

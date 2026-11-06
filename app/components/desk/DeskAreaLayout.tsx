@@ -33,15 +33,25 @@ export async function DeskAreaLayout({ area, embedded, children }: { area: DeskA
 }
 
 /**
- * A Desk page not built yet. Items limited to some roles (e.g. Import for
- * agency admins) are enforced here too, not only hidden from the sidebar.
- * The area root also lists a few facts about the user's Desk access.
+ * The session for a page under a sidebar item, or null if the layout has already
+ * shown something else. Items limited to some roles (e.g. Import for agency
+ * admins) are enforced here too, not only hidden from the sidebar.
  */
-export async function DeskPage({ area, href }: { area: DeskArea; href: string }) {
+export async function deskPageAccess(area: DeskArea, href: string) {
   const session = await currentDeskSession(area);
   if (!session) redirect(loginRedirectFor(area));
-  if (!session.gate.ok) return null; // the layout has already handled it
+  if (!session.gate.ok) return null;
   if (!itemAllowed(href, session.user.role)) redirect(AREA_ROOTS[area]);
+  return session;
+}
+
+/**
+ * A Desk page not built yet. The area root also lists a few facts about the
+ * user's Desk access.
+ */
+export async function DeskPage({ area, href }: { area: DeskArea; href: string }) {
+  const session = await deskPageAccess(area, href);
+  if (!session) return null;
   const facts = href === AREA_ROOTS[area] ? await overviewFacts(prisma, area, session.scope) : [];
   return <DeskPlaceholder href={href} facts={facts} />;
 }

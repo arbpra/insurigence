@@ -809,7 +809,7 @@ Module 1–18 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 | # | Module | Hours | Change | Status |
 |---|---|---:|---|---|
 | 20 | Insured accounts API: CRUD with policies and staff assignments, scoped through the access layer | 3.0 | ✏️ Q3 | ✅ Done |
-| 21 | Agency Portal: insured list (search, filter, paging, "my accounts") + add / edit form | 3.0 | | ⬜ |
+| 21 | Agency Portal: insured list (search, filter, paging, "my accounts") + add / edit form | 3.0 | | ✅ Done |
 | 22 | Insured detail page: profile, assigned producer / CSR, policies, open tasks, documents | 2.5 | | ⬜ |
 | 23 | Agency user permissions: agency admin sets each user's role and book access, and assigns producers / CSRs to accounts (single and bulk) | 2.5 | 🆕 Q3 | ⬜ |
 | 24 | Import engine: server-side CSV / XLSX parsing, header detection, staging rows in an `ImportBatch` | 3.0 | | ⬜ |
@@ -873,6 +873,57 @@ This module is the server side only. There is no screen yet; Modules 21 and 22 b
 
 Module 1–19 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43, 80, 98, 86, 99, 91, 72 passed (**1,194 in total** with this module).
 
+**Module 21 — Agency Portal account list and form (✅ complete, 6 Nov 2026)**
+
+**Delivered:**
+
+- **Accounts list** (`/desk/accounts`): search by name, DBA, contact, email, AMS reference or policy number; status filter; "My accounts"; 25 per page. Filters are kept in the address, so a reload or Back returns to the same view.
+- **Add and edit** (`/desk/accounts/new`, `/desk/accounts/[id]/edit`): business, contact, address and other details.
+- **Deactivate and reactivate** on the edit page, for those allowed to, with the reason shown when it isn't possible.
+- `lib/desk/account-form.ts`: the form and filter logic and the field limits, shared by the screens and the server.
+- `lib/desk/literal-match.ts`: makes user text safe to search with (see Issues).
+- `deskPageAccess` in `DeskAreaLayout`: the server-side access check for built pages. Placeholder pages use it too.
+
+**Design decisions:**
+
+- **Rows open the edit page for now.** Module 22 adds the account's own page, with policies and assigned staff, and rows will open that instead.
+- **Default view is active accounts.** Inactive ones are one filter away and labelled.
+- **"My accounts" appears only for people who see the whole book.** For anyone else it would change nothing.
+- **Duplicate names can be saved after confirming.** The refusal offers "It's a different business: continue anyway". Changing any field withdraws the offer, so it can't save values other than those on screen.
+- **If someone else saved first,** the save is refused, what was typed stays on screen, and reloading is a separate choice.
+- **Refusals carry a code** (`DUPLICATE_NAME`, `CHANGED_ELSEWHERE`), so screens don't depend on the wording of a message. "Not found" answers carry none.
+- **Filters don't go back to the server for the page,** only for the rows, so they respond immediately.
+- **Leaving with unsaved changes asks first** from the form's own links, and on closing or reloading the tab. Sidebar links don't ask yet.
+
+**Issues:**
+
+- **Search text was treated as a pattern (found by this module's tests).** Prisma on MongoDB sends `contains`, and `equals` with `mode: 'insensitive'`, to the database as a regular expression without escaping it. Typing "(" gave a server error, ".*" matched everything the user could see, and a crafted pattern could tie up the database. None of this crossed agencies, because the access filter still applied. Fixed in the account, agency and staff searches and the pod name check, which came from earlier modules.
+- **The same problem exists outside The Desk and is NOT fixed, pending a decision:**
+  - `app/api/auth/signup/route.ts` checks the agency name this way on the public signup page. A real agency name containing a bracket, such as "Smith & Co (East)", fails; ".*" reports that the agency exists; a crafted pattern can test which agency names exist or tie up the database, with no sign-in. This was confirmed by running the same query directly, read-only. The signup route itself wasn't called, because a successful call creates a real agency.
+  - `app/api/super-admin/users/route.ts` search fails on "(" (Super Admin only).
+- **A VA could confirm a policy number through search** on a policy of that account outside their work (a Module 20 gap). Search now covers only policies they may see.
+- **Reactivating an account skipped the duplicate check** (a Module 20 gap), which could give two active accounts the same name. It now asks first.
+- **An absurd `?page=` value gave a server error** (a Module 20 gap). It now gives an empty page, and the screen steps back to the last real one.
+- **Found by the browser check:** the range label changed before the new rows arrived, and each filter click re-rendered the page on the server, so checkboxes lagged. Both fixed.
+- **Two mistakes in my tests, not the code:** a wrong session helper call, and a test expecting no match for a search that reduces to the word "a".
+- **Limits of the check:** the browser check script is not in the repo, because the project has no browser test tooling and I didn't add a dependency. The check ran in Chrome only, and no person has tried these screens yet.
+
+**Verified:** `tsc --noEmit` exit 0 · **99 tests passed** (`script/verify-desk-accounts.ts`), on temporary records, none left behind:
+- form values, changed-field detection and cleared fields;
+- filters, the address round trip and bad `?page=` values;
+- every form field reaching the server and returning;
+- browser code importing nothing from the server;
+- paging, status filters, "my accounts" and agency separation;
+- odd search input, and literal matching in all four places;
+- VA policy-number search;
+- refusal codes and reactivation rules.
+
+**Deliberate faults:** fifteen were introduced one at a time. All fifteen were caught, and the code was confirmed restored afterwards.
+
+**Browser check:** 51 checks in real Chrome against a temporary dev server, using temporary agencies and users, with no script errors. This is the first time a Desk screen has been clicked through. Covered: paging; typing a search with a bracket; status and "My accounts"; reload; an old link past the end; adding; a refused password; the duplicate flow; editing; someone else saving first; leaving with unsaved changes; deactivate and reactivate; Back to a filtered list; another agency's account; a producer's narrower view; an agency without The Desk; not signed in; phone width. The screens were also checked by eye from screenshots. The server was stopped afterwards and no records were left. The admin screens from Modules 15–19 are still not clicked through.
+
+Module 1–20 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43, 80, 98, 86, 99, 91, 72, 155 passed (**1,293 in total** with this module).
+
 ### Phase 3 — Task System Core (17 h)
 
 | # | Module | Hours | Change | Status |
@@ -927,7 +978,7 @@ Module 1–19 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–20 complete (53.5 h). **72.0 h remaining.**
+**Progress:** Modules 1–21 complete (56.5 h). **69.0 h remaining.**
 
 The client's answers added **33 hours** (see Section 9), approximately:
 

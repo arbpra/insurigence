@@ -17,6 +17,7 @@ import { APP_URL } from '@/lib/email/client';
 import { sendEmail } from '@/lib/email/send';
 import { inviteEmail } from '@/lib/email/templates';
 import { DESK_ROLES, isDeskRole, roleLabel } from '@/lib/roles';
+import { literal } from './literal-match';
 import { DeskAccessError, isObjectId, type DeskScope, type GuardContext } from './access';
 import { assertDeskPlatform } from './agency-setup';
 import { recordAudit, type AuditAction } from './audit';
@@ -99,7 +100,7 @@ export async function listStaff(
   db: Db, scope: DeskScope, opts: { q?: string; role?: string; status?: 'active' | 'inactive' } = {}
 ): Promise<StaffRow[]> {
   assertDeskPlatform(scope);
-  const q = opts.q?.trim();
+  const q = opts.q?.trim() ? literal(opts.q.trim()) : '';
   const roles = opts.role && isDeskRole(opts.role) ? [opts.role as UserRole] : ([...DESK_ROLES] as UserRole[]);
   const users = await db.user.findMany({
     where: {

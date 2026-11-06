@@ -8,6 +8,7 @@
  * password-vault pointer themselves.
  */
 import { Prisma, type AmsSystem, type PrismaClient, type ServiceCategory } from '@prisma/client';
+import { literal } from './literal-match';
 import { DeskAccessError, isObjectId, type DeskScope, type GuardContext } from './access';
 import { recordAudit } from './audit';
 import { classifyPendingBilling } from './billing-capture';
@@ -56,7 +57,7 @@ export async function listDeskAgencies(
   const q = opts.q?.trim();
   const rows = await db.agency.findMany({
     where: {
-      ...(q ? { name: { contains: q, mode: 'insensitive' as const } } : {}),
+      ...(q ? { name: { contains: literal(q), mode: 'insensitive' as const } } : {}),
       ...(opts.desk ? { deskEnabled: opts.desk === 'on' } : {}),
     },
     orderBy: { name: 'asc' },

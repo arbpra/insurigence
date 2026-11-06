@@ -55,7 +55,8 @@ export type DeskScope =
  * / 409 are shown to the user, so they never contain other agencies' data.
  */
 export class DeskAccessError extends Error {
-  constructor(public status: 400 | 401 | 403 | 404 | 409, message: string) {
+  /** `code` lets a screen respond to a particular refusal without reading its wording. */
+  constructor(public status: 400 | 401 | 403 | 404 | 409, message: string, public code?: string) {
     super(message);
     this.name = 'DeskAccessError';
   }
@@ -405,7 +406,8 @@ export function canManageAgencyAccess(scope: DeskScope, agencyId: string): boole
 /** Turns a DeskAccessError into its response; anything else is rethrown. */
 export function deskAccessResponse(err: unknown): NextResponse {
   if (err instanceof DeskAccessError) {
-    return NextResponse.json({ error: err.status === 404 ? 'Not found' : err.message }, { status: err.status });
+    if (err.status === 404) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    return NextResponse.json({ error: err.message, ...(err.code ? { code: err.code } : {}) }, { status: err.status });
   }
   throw err;
 }

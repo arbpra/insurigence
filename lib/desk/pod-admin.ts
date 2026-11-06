@@ -17,6 +17,7 @@
 import { randomBytes } from 'crypto';
 import { Prisma, type DocumentSensitivity, type PrismaClient } from '@prisma/client';
 import { canBePodMember, roleLabel } from '@/lib/roles';
+import { literal } from './literal-match';
 import { DeskAccessError, isObjectId, type DeskScope, type GuardContext } from './access';
 import { assertDeskPlatform } from './agency-setup';
 import { recordAudit, type AuditAction } from './audit';
@@ -110,7 +111,7 @@ function podDescription(value: unknown): string | null {
 }
 
 async function assertNameFree(db: Db, name: string, exceptId?: string) {
-  const same = await db.pod.findFirst({ where: { name: { equals: name, mode: 'insensitive' }, ...(exceptId ? { id: { not: exceptId } } : {}) }, select: { id: true } });
+  const same = await db.pod.findFirst({ where: { name: { equals: literal(name), mode: 'insensitive' }, ...(exceptId ? { id: { not: exceptId } } : {}) }, select: { id: true } });
   if (same) throw conflict('Another pod already has this name.');
 }
 
