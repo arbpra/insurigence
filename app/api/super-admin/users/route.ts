@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
 
     const users = await prisma.user.findMany({
       where,
+      omit: { passwordHash: true },
       include: {
         agency: {
           select: {
@@ -127,6 +128,7 @@ export async function POST(request: NextRequest) {
         isActive: true,
         mustChangePassword: true,
       },
+      omit: { passwordHash: true },
       include: {
         agency: {
           select: {

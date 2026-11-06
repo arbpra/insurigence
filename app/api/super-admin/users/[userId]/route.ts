@@ -18,6 +18,7 @@ export async function GET(
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
+      omit: { passwordHash: true },
       include: {
         agency: {
           select: {
@@ -112,6 +113,7 @@ export async function PATCH(
     const user = await prisma.user.update({
       where: { id: userId },
       data: updateData,
+      omit: { passwordHash: true },
       include: {
         agency: {
           select: {
@@ -176,6 +178,7 @@ export async function DELETE(
     const user = await prisma.user.update({
       where: { id: userId },
       data: { isActive: false },
+      omit: { passwordHash: true },
     });
 
     await prisma.activityEvent.create({
