@@ -1,5 +1,5 @@
-import { DeskPage } from '@/components/desk/DeskAreaLayout';
+import { CalendarEditor } from '@/components/desk/admin/CalendarEditor';
 
 export default function Page() {
-  return <DeskPage area="ADMIN" href="/super-admin/desk/calendar" />;
+  return <CalendarEditor />;
 }

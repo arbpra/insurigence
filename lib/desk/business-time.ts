@@ -8,9 +8,9 @@
  * task's waiting periods (on the agency, carrier or insured) are taken out
  * of elapsed time.
  *
- * Time-zone handling uses Intl only (no library). Business hours never fall
- * inside a daylight-saving jump (1–3 a.m.), and conversions re-check the
- * offset, so DST changes are handled.
+ * Time-zone handling uses Intl only (no library). Conversions re-check the
+ * offset, so DST changes are handled, including business hours an admin has
+ * set to fall inside a daylight-saving jump (verify-desk-calendar.ts).
  */
 import type { PrismaClient } from '@prisma/client';
 import { DEFAULT_CALENDAR } from './defaults';

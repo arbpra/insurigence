@@ -182,8 +182,9 @@ export async function ensureDeskDefaults(prisma: PrismaClient) {
     calendar = true;
   }
 
-  const existingHolidays = new Set((await prisma.deskHoliday.findMany({ select: { date: true } })).map((h) => h.date));
-  const holidays = DEFAULT_HOLIDAYS.filter((h) => !existingHolidays.has(h.date));
+  // Only into an empty list: once holidays exist the admin owns them, and a
+  // holiday they removed on purpose must not come back on the next seed.
+  const holidays = (await prisma.deskHoliday.count()) === 0 ? DEFAULT_HOLIDAYS : [];
   if (holidays.length) await prisma.deskHoliday.createMany({ data: [...holidays] });
 
   return { pods, routing, followUps, plans, serviceLevels, calendar, holidays: holidays.length };

@@ -561,7 +561,7 @@ Module 1–13 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43 
 | 16 | Internal staff management: create / invite / deactivate AMs, VAs, Desk Admins / Operations Managers (reuses invite flow) | 2.5 | | ✅ Done |
 | 17 | Pod management: create / edit pods, add / remove VAs, authorize pods and named VAs per agency, VA sensitive-data permissions | 3.0 | ✏️ Q4 | ✅ Done |
 | 18 | Routing and service-level editor: request type → pod, default priority; targets by type, complexity and priority; per-agency agreement overrides | 2.5 | ✏️ Q5 | ✅ Done |
-| 19 | Business calendar editor: business hours, time zone, holidays | 2.0 | 🆕 Q5 | ⬜ |
+| 19 | Business calendar editor: business hours, time zone, holidays | 2.0 | 🆕 Q5 | ✅ Done |
 
 **Module 15 — Per-agency Desk setup (✅ complete, 5 Nov 2026)**
 
@@ -756,6 +756,54 @@ Module 1–16 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 
 Module 1–17 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43, 80, 98, 86, 99 passed (**967 in total** with this module).
 
+**Module 19 — Business calendar editor (✅ complete, 6 Nov 2026). Phase 1, Admin Setup, is now complete.**
+
+**Delivered** (`/super-admin/desk/calendar`):
+
+- **Business hours:** time zone, opening and closing times, and working days. D2 can now be entered without code.
+- **Worked examples:** the page shows what the saved calendar means for a request made now: when the clock starts, and when a 4-hour and a 1-day target would be due.
+- **Holidays:** add and remove, listed by year. These days never count toward a target.
+- **Running-out warning:** when the list ends within 90 days, the page says so, because days off would otherwise count as worked. The seeded list ends on 31 Dec 2027.
+- **Every change is in the audit log** with before and after. Saving with no change writes nothing.
+- **Access:** Super Admin and Operations Managers only.
+
+**Design decisions:**
+
+- **Changes apply from the next calculation.** Open requests keep the due date they already have. Time waited is measured with the calendar in force when the wait ends.
+- **Named time zones only.** Fixed offsets such as "+05:30" are refused, because they ignore daylight saving.
+- **Hours must open and close on the same day.** An overnight shift can't be entered. If the client needs one, it's a change to the business-time engine.
+- **Two admins editing:** the second save is refused rather than overwriting the first.
+- **The seeder now fills the holiday list only when it's empty.** Before this, it would have brought back any default holiday an admin removed on purpose. It also means future default holidays won't be added automatically; the warning above covers that.
+
+**Issues:**
+
+- **Business-time code assumed hours never fall inside the daylight-saving jump.** That was safe with fixed hours but not with editable ones. New tests cover opening inside the spring jump, hours inside the repeated autumn hour, nearly round-the-clock days, one-minute days, one-day weeks, and zones with half-hour daylight saving. All passed with no code change, and the outdated comment was corrected.
+- **Tests never write to the real calendar** (lesson from Module 17). It's one shared record, so saves go to an in-memory stand-in, holidays use dates in 2099 only, and the real calendar and holidays are compared against a snapshot on every run.
+- **Session ended during the fault and regression run.** A killed run skips its own cleanup, so I checked for faults left in the code (none) and for damage to real data (none). It had left one staff test's records (4 agencies, 13 users, 2 tasks, 2 insureds), which I deleted by that run's tag after confirming no other tasks existed. The four suites that hadn't run were then completed.
+- **Limits of the live check:** no real calendar change was saved over HTTP, to avoid altering shared data; that path is covered by the tests through the stand-in. The screen has not been clicked through in a browser.
+
+**Verified:** `tsc --noEmit` exit 0 · **72 tests passed** (`script/verify-desk-calendar.ts`):
+- who may read and change;
+- time-zone, hours and working-day rules;
+- no-change saves;
+- worked examples;
+- audit contents;
+- out-of-date, simultaneous and interleaved saves;
+- an unseeded Desk;
+- open requests keeping their dates while new ones use the new hours;
+- holiday rules, and the arithmetic skipping a holiday;
+- the running-out warning;
+- the seeder leaving an existing list alone;
+- unusual hours across daylight saving;
+- real data unchanged;
+- temporary records removed.
+
+**Deliberate faults:** seven were introduced one at a time. All seven were caught.
+
+**Live check:** 25 checks over real HTTP with signed-in users: refusals for each role, reading the calendar, a no-change save, invalid hours and zone, an out-of-date form, adding and removing a 2099 holiday, the page served. The real calendar and holidays were confirmed unchanged afterwards.
+
+Module 1–18 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43, 80, 98, 86, 99, 91 passed (**1,039 in total** with this module).
+
 ### Phase 2 — Insured Accounts (22.5 h)
 
 | # | Module | Hours | Change | Status |
@@ -823,7 +871,7 @@ Module 1–17 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–18 complete (48.5 h). **77.0 h remaining.**
+**Progress:** Modules 1–19 complete (50.5 h). **75.0 h remaining.**
 
 The client's answers added **33 hours** (see Section 9), approximately:
 
@@ -1014,7 +1062,7 @@ DeskAuditLog       actorId, action, entity, entityId, agencyId, ip, userAgent, a
 | # | Detail | Needed by | Placeholder until then |
 |---|---|---|---|
 | D1 | Monthly allowances per tier (managed accounts, COIs, endorsements, renewals, remarketing credits) and which services can be billed as overage | Module 13 | Plans created with zero allowances; editable |
-| D2 | Desk business hours, time zone and holiday list | Module 11 | Mon–Fri 9:00–17:00 US Eastern; US federal holidays |
+| D2 | Desk business hours, time zone and holiday list | Module 11 | Mon–Fri 9:00–17:00 US Eastern; US federal holidays; can be changed in the Module 19 editor once confirmed |
 | D3 | Document sensitivity categories: are General / Policy / Financial / Personal the right four? | Module 8 | Those four |
 | D4 | Can a Producer submit requests for accounts outside their assignment? | Module 9 | No: only accounts they can see |
 | D5 | Targets for ACORD, Loss Runs, Proposal Prep, QA Review and Other (none given) | Module 12 | No target date for these types; can be entered in the Module 18 editor once confirmed |

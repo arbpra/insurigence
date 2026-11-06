@@ -20,6 +20,7 @@ export const AUDIT_ACTIONS = [
   'staff.invited', 'staff.invite_resent', 'staff.updated', 'staff.deactivated', 'staff.reactivated',
   'pod.created', 'pod.updated', 'pod.member_added', 'pod.member_removed', 'pod.access_changed',
   'routing.changed', 'service_level.changed',
+  'calendar.changed', 'holiday.added', 'holiday.removed',
   'access.denied',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
