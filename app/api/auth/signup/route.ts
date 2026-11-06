@@ -3,6 +3,7 @@ import { randomBytes } from 'crypto';
 import prisma from '@/lib/prisma';
 import { hashPassword, createSession } from '@/lib/auth';
 import { DEFAULT_COMMERCIAL_GL_FORM } from '@/lib/defaultIntakeForm';
+import { literal } from '@/lib/desk/literal-match';
 
 /**
  * Agency self-signup.
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
     // data. Joining an existing agency must go through an invite, never by typing
     // its name (which anyone could guess).
     const existingAgency = await prisma.agency.findFirst({
-      where: { name: { equals: agencyName, mode: 'insensitive' } },
+      where: { name: { equals: literal(agencyName), mode: 'insensitive' } },
       select: { id: true },
     });
     if (existingAgency) {

@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { validateSuperAdmin } from '@/lib/super-admin-auth';
 import { hashPassword, generateTempPassword } from '@/lib/auth';
 import { isRole, isDeskRole, agencyIdForRole } from '@/lib/roles';
+import { literal } from '@/lib/desk/literal-match';
 
 export async function GET(request: NextRequest) {
   const auth = await validateSuperAdmin(request);
@@ -32,10 +33,11 @@ export async function GET(request: NextRequest) {
     }
 
     if (search) {
+      const text = literal(search);
       where.OR = [
-        { email: { contains: search, mode: 'insensitive' } },
-        { firstName: { contains: search, mode: 'insensitive' } },
-        { lastName: { contains: search, mode: 'insensitive' } },
+        { email: { contains: text, mode: 'insensitive' } },
+        { firstName: { contains: text, mode: 'insensitive' } },
+        { lastName: { contains: text, mode: 'insensitive' } },
       ];
     }
 

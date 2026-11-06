@@ -898,9 +898,9 @@ Module 1–19 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 **Issues:**
 
 - **Search text was treated as a pattern (found by this module's tests).** Prisma on MongoDB sends `contains`, and `equals` with `mode: 'insensitive'`, to the database as a regular expression without escaping it. Typing "(" gave a server error, ".*" matched everything the user could see, and a crafted pattern could tie up the database. None of this crossed agencies, because the access filter still applied. Fixed in the account, agency and staff searches and the pod name check, which came from earlier modules.
-- **The same problem exists outside The Desk and is NOT fixed, pending a decision:**
-  - `app/api/auth/signup/route.ts` checks the agency name this way on the public signup page. A real agency name containing a bracket, such as "Smith & Co (East)", fails; ".*" reports that the agency exists; a crafted pattern can test which agency names exist or tie up the database, with no sign-in. This was confirmed by running the same query directly, read-only. The signup route itself wasn't called, because a successful call creates a real agency.
-  - `app/api/super-admin/users/route.ts` search fails on "(" (Super Admin only).
+- **The same problem existed outside The Desk.** Fixed straight after this module in a separate commit, with its own test (`script/verify-text-matching.ts`, 11 tests, 9 of which failed before the fix):
+  - `app/api/auth/signup/route.ts` checked the agency name this way on the public signup page. An agency name such as "Smith & Co (East)" could sign up, but the same name could then sign up again, because the duplicate check missed it (an earlier draft of this report wrongly said such a name fails). An unclosed bracket was a server error; ".*" reported that an agency exists; a crafted pattern could test which agency names exist or tie up the database, with no sign-in.
+  - `app/api/super-admin/users/route.ts` search failed on "(" (Super Admin only).
 - **A VA could confirm a policy number through search** on a policy of that account outside their work (a Module 20 gap). Search now covers only policies they may see.
 - **Reactivating an account skipped the duplicate check** (a Module 20 gap), which could give two active accounts the same name. It now asks first.
 - **An absurd `?page=` value gave a server error** (a Module 20 gap). It now gives an empty page, and the screen steps back to the last real one.
