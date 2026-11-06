@@ -810,7 +810,7 @@ Module 1–18 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 |---|---|---:|---|---|
 | 20 | Insured accounts API: CRUD with policies and staff assignments, scoped through the access layer | 3.0 | ✏️ Q3 | ✅ Done |
 | 21 | Agency Portal: insured list (search, filter, paging, "my accounts") + add / edit form | 3.0 | | ✅ Done |
-| 22 | Insured detail page: profile, assigned producer / CSR, policies, open tasks, documents | 2.5 | | ⬜ |
+| 22 | Insured detail page: profile, assigned producer / CSR, policies, open tasks, documents | 2.5 | | ✅ Done |
 | 23 | Agency user permissions: agency admin sets each user's role and book access, and assigns producers / CSRs to accounts (single and bulk) | 2.5 | 🆕 Q3 | ⬜ |
 | 24 | Import engine: server-side CSV / XLSX parsing, header detection, staging rows in an `ImportBatch` | 3.0 | | ⬜ |
 | 25 | Import mapping UI: map any export's columns to Desk fields, with mappings remembered per agency for the next upload | 3.0 | ✏️ Q2 | ⬜ |
@@ -924,6 +924,48 @@ Module 1–19 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 
 Module 1–20 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43, 80, 98, 86, 99, 91, 72, 155 passed (**1,293 in total** with this module).
 
+**Module 22 — Account page (✅ complete, 6 Nov 2026)**
+
+**Delivered:**
+
+- **The account's own page** (`/desk/accounts/[id]`): details, assigned staff, policies, open requests and documents. List rows and a newly added account now open it, and the edit form's back link returns to it.
+- **Policies:** add, change and remove on the page.
+- `GET /api/desk/insureds/[id]/overview`: the account with the open requests and documents this user may see, through the access layer's filters.
+- `lib/desk/policy-form.ts`: the policy form's logic and field limits, shared by the screen and the server.
+
+**Design decisions:**
+
+- **Agency users see the simplified status only.** A request waiting on a carrier or in QA reads "In progress"; one waiting on the agency reads "Needs your attention" and stands out. Due dates, pods, assignees, billing and restrictions are not sent.
+- **Documents:** agency users see only files shared with the agency; VAs only the categories they hold, on work they can see. Removed files are hidden from everyone. Storage locations are never sent. The log records which documents were listed.
+- **Assigned staff is display only here.** Assigning people is Module 23, as planned.
+- **Documents can't be opened yet, and requests aren't links.** Opening a file, with its logging, is Module 30; the request page is Module 33. Documents can't be uploaded until Module 30, so that section is empty on real accounts until then.
+- **A subtask is part of its parent's request,** so it isn't listed or counted separately, here or in the account list.
+- **The page shows the newest 50 requests and 50 documents,** with the true total. The full tracker is Module 33.
+- **A policy must name something:** a number, line of business or carrier. This is checked in the form and on the server. Imports have their own rules (Module 26).
+- **Premiums are worked out in whole cents from the digits, and policy dates are read as text,** so rounding and time zones can't change them.
+- **The website field is only a link if it is http or https.** A stored "javascript:" address is shown as plain text.
+
+**Issues:**
+
+- **Found by the browser check:** a hidden table heading stretched the page sideways by 210 px at phone width, and file names broke into fragments on a phone. Both fixed.
+- **My test's cleanup failed on the first run** because tasks with subtasks can't be deleted first, leaving that run's temporary records in the shared database (2 agencies, 8 users, 1 pod, 59 tasks, 3 accounts). I checked that they were only that run's records, deleted them by tag, and fixed the cleanup. Another test mistake counted a view logged by an earlier step.
+- **A small mismatch remains:** deactivating an account is refused while any task on it is open, subtasks included, but the page counts top-level requests only. If a request closes while its subtask stays open, the refusal's count won't match the page. Subtasks arrive in Module 38, which should settle this.
+- **Limits of the check:** Chrome only, the browser script is not in the repo, and no person has tried this page yet. Sidebar links still don't warn about unsaved changes.
+
+**Verified:** `tsc --noEmit` exit 0 · **154 tests passed** (`script/verify-desk-account-detail.ts`), on temporary records, none left behind:
+- premium parsing and exact cents, the policy form, links, dates in other time zones;
+- browser code importing nothing from the server;
+- what an agency admin, an assigned or unassigned producer, another agency, an Account Manager and a VA each get;
+- nothing internal reaching an agency user; no storage location reaching anyone;
+- restricted requests and ungranted categories hidden from a VA;
+- logging, long lists, policy rules, out-of-date saves, and refusals over HTTP.
+
+**Deliberate faults:** twenty were introduced one at a time. All twenty were caught, and the code was confirmed restored afterwards.
+
+**Browser check:** 65 checks in real Chrome against a temporary dev server, using temporary agencies and users, with no script errors. Covered: list to page and Back to the filtered list; everything the page shows; internal files absent; adding a policy, with empty, bad-premium, wrong-order-date and password refusals; changing; someone else saving first; leaving with unsaved changes; removing; edit and back; a new account; a stored script link not running; inactive accounts; another agency; assigned and unassigned producers; not signed in; phone width. The screens were also checked by eye from screenshots. The server was stopped afterwards and no records were left.
+
+Module 1–21 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43, 80, 98, 86, 99, 91, 72, 155, 99 passed (**1,447 in total** with this module).
+
 ### Phase 3 — Task System Core (17 h)
 
 | # | Module | Hours | Change | Status |
@@ -978,7 +1020,7 @@ Module 1–20 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–21 complete (56.5 h). **69.0 h remaining.**
+**Progress:** Modules 1–22 complete (59.0 h). **66.5 h remaining.**
 
 The client's answers added **33 hours** (see Section 9), approximately:
 

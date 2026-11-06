@@ -180,7 +180,7 @@ export function AccountList({ wholeBook, canImport }: { wholeBook: boolean; canI
               {rows.map((a) => (
                 <tr key={a.id} className="border-b border-slate-100 last:border-0" data-testid={`desk-account-${a.id}`}>
                   <td className="px-4 py-3">
-                    <Link href={`/desk/accounts/${a.id}/edit`} className="font-medium text-slate-800 hover:underline">{a.name}</Link>
+                    <Link href={`/desk/accounts/${a.id}`} className="font-medium text-slate-800 hover:underline">{a.name}</Link>
                     {a.status === 'INACTIVE' && <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">Inactive</span>}
                     {a.dba && <div className="text-xs text-slate-500">DBA {a.dba}</div>}
                   </td>

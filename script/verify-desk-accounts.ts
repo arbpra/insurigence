@@ -86,7 +86,7 @@ function pureLogic() {
   ok('the shared logic imports nothing', !/^import /m.test(read('lib/desk/account-form.ts')));
   for (const p of ['app/components/desk/accounts/AccountList.tsx', 'app/components/desk/accounts/AccountForm.tsx']) {
     const imports = read(p).match(/^import [^;]+;/gm) ?? [];
-    ok(`${p.split('/').pop()}: only React, Next and the shared logic`, read(p).startsWith("'use client'") && imports.every((i) => /from '(react|next\/link|next\/navigation|@\/lib\/desk\/account-form)'/.test(i)));
+    ok(`${p.split('/').pop()}: only React, Next and the shared logic`, read(p).startsWith("'use client'") && imports.every((i) => /from '(react|next\/link|next\/navigation|@\/lib\/desk\/account-form|\.\/account-api)'/.test(i)));
   }
   ok('the server uses the same limits as the form', read('lib/desk/book.ts').includes("from './account-form'") && !/const INSURED_TEXT/.test(read('lib/desk/book.ts')));
   for (const p of ['app/(desk)/desk/accounts/page.tsx', 'app/(desk)/desk/accounts/new/page.tsx', 'app/(desk)/desk/accounts/[id]/edit/page.tsx']) {

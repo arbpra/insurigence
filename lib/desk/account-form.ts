@@ -66,6 +66,47 @@ export function changedAccountFields(form: AccountFormValues, saved: AccountForm
   return changes;
 }
 
+// ── Showing an account ──
+
+/**
+ * A link for the website field, which is free text. Only http and https: a value
+ * such as "javascript:..." would otherwise run in the viewer's session when clicked.
+ */
+export function websiteHref(value: string | null | undefined): string | null {
+  const t = value?.trim();
+  if (!t || /\s/.test(t)) return null;
+  try {
+    const url = new URL(/^[a-z][a-z0-9+.-]*:/i.test(t) ? t : `https://${t}`);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "2026-01-31" → "Jan 31, 2026". Read from the text: through a Date it could show the day before. */
+export function dayLabel(value: string | null | undefined): string {
+  const m = value ? /^(\d{4})-(\d{2})-(\d{2})/.exec(value) : null;
+  return m ? `${MONTHS[+m[2] - 1]} ${+m[3]}, ${m[1]}` : '—';
+}
+
+/** A moment in time, as the day it was where the viewer is. */
+export function localDayLabel(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+/** Encoded, so an imported value such as "a@b.test?bcc=x" can't add to the message. */
+export function mailtoHref(email: string): string {
+  return `mailto:${encodeURIComponent(email).replace(/%40/g, '@')}`;
+}
+
+export function fileSizeLabel(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 // ── The list ──
 
 export type AccountStatusFilter = 'ACTIVE' | 'INACTIVE' | 'ALL';

@@ -7,6 +7,7 @@ import {
   ACCOUNT_NAME_MAX, CONTACT_EMAIL_MAX, INSURED_TEXT, changedAccountFields, formFromAccount, newAccountPayload,
   type AccountFormKey, type AccountFormValues,
 } from '@/lib/desk/account-form';
+import { ApiError, api } from './account-api';
 
 interface SavedAccount extends Partial<Record<AccountFormKey, string | null>> {
   id: string;
@@ -14,19 +15,6 @@ interface SavedAccount extends Partial<Record<AccountFormKey, string | null>> {
   version: string;
   openTasks?: number;
   can: { edit: boolean; manage: boolean };
-}
-
-class ApiError extends Error {
-  constructor(message: string, public status: number, public code?: string) {
-    super(message);
-  }
-}
-
-async function api<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...init });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(body.error || 'Something went wrong.', res.status, body.code);
-  return body;
 }
 
 const INPUT = 'w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white';
@@ -38,14 +26,14 @@ const SECONDARY = 'px-4 py-2 rounded-lg text-sm font-medium border border-slate-
 const blank = formFromAccount();
 
 /** Add an account (no accountId) or edit one. Policies and assigned staff are on the account's own page. */
-export function AccountForm({ accountId, justCreated }: { accountId?: string; justCreated?: boolean }) {
+export function AccountForm({ accountId }: { accountId?: string }) {
   const router = useRouter();
   const [account, setAccount] = useState<SavedAccount | null>(null);
   const [saved, setSaved] = useState<AccountFormValues>(blank);
   const [form, setForm] = useState<AccountFormValues>(blank);
   const [loadError, setLoadError] = useState('');
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState(justCreated ? 'Account added.' : '');
+  const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   // A refusal the user can act on: saving a duplicate name anyway, or reloading after someone else's change.
   const [duplicate, setDuplicate] = useState<null | (() => void)>(null);
@@ -106,7 +94,7 @@ export function AccountForm({ accountId, justCreated }: { accountId?: string; ju
     const confirmed = allowDuplicate ? { allowDuplicate: true } : {};
     if (!editing) {
       const created = await api<{ id: string }>('/api/desk/insureds', { method: 'POST', body: JSON.stringify({ ...newAccountPayload(form), ...confirmed }) });
-      router.push(`/desk/accounts/${created.id}/edit?created=1`);
+      router.push(`/desk/accounts/${created.id}?created=1`);
       return;
     }
     const changes = changedAccountFields(form, saved);
@@ -153,7 +141,8 @@ export function AccountForm({ accountId, justCreated }: { accountId?: string; ju
     );
   };
 
-  const backLink = <Link href="/desk/accounts" className="text-sm text-slate-600 hover:underline" onClick={leave} data-testid="desk-account-back">← Accounts</Link>;
+  const backHref = editing && account ? `/desk/accounts/${account.id}` : '/desk/accounts';
+  const backLink = <Link href={backHref} className="text-sm text-slate-600 hover:underline" onClick={leave} data-testid="desk-account-back">{editing && account ? '← Back to account' : '← Accounts'}</Link>;
 
   if (loadError) {
     return (
@@ -232,7 +221,7 @@ export function AccountForm({ accountId, justCreated }: { accountId?: string; ju
           <button type="submit" disabled={busy} className="px-5 py-2.5 rounded-lg text-sm font-medium text-white disabled:opacity-60" style={{ backgroundColor: ACCENT }} data-testid="desk-account-save">
             {editing ? 'Save changes' : 'Add account'}
           </button>
-          <Link href="/desk/accounts" className={SECONDARY} onClick={leave} data-testid="desk-account-cancel">{editing ? 'Back to accounts' : 'Cancel'}</Link>
+          <Link href={backHref} className={SECONDARY} onClick={leave} data-testid="desk-account-cancel">{editing ? 'Back to account' : 'Cancel'}</Link>
         </div>
       </form>
 
