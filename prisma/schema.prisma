@@ -991,6 +991,8 @@ model Policy {
 
 enum ImportBatchStatus {
   STAGED
+  /// Being written to the book. One that stays here stopped part way, and can be undone.
+  COMMITTING
   COMMITTED
   FAILED
   UNDONE
@@ -1040,6 +1042,8 @@ model ImportBatch {
   committedAt         DateTime?
   undoneAt            DateTime?
   undoneById          String?           @db.ObjectId
+  /// What undo removed and kept: counts, and the names of a few accounts kept.
+  undoSummary         Json?
 
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt

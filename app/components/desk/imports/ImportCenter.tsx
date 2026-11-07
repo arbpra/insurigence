@@ -19,6 +19,27 @@ export interface ImportSummary {
   sheetName: string | null;
   sheetNames: string[];
   createdAt: string;
+  insuredsCreated: number;
+  policiesCreated: number;
+  rowsSkipped: number;
+  canUndo: boolean;
+  undoSummary: UndoSummary | null;
+}
+
+export interface UndoSummary {
+  accountsRemoved: number;
+  policiesRemoved: number;
+  accountsKept: number;
+  policiesKept: number;
+  keptNames: string[];
+}
+
+/** What undo did, in a sentence. */
+export function undoSentence(s: UndoSummary): string {
+  const plural = (n: number, word: string) => `${n.toLocaleString('en-US')} ${word}${n === 1 ? '' : 's'}`;
+  const removed = `Removed ${plural(s.accountsRemoved, 'account')} and ${plural(s.policiesRemoved, 'policy').replace('policys', 'policies')}.`;
+  if (!s.accountsKept && !s.policiesKept) return removed;
+  return `${removed} Kept ${plural(s.accountsKept, 'account')} and ${plural(s.policiesKept, 'policy').replace('policys', 'policies')} that had requests or were changed after the import.`;
 }
 
 const ACCENT = 'var(--brand-primary, #05314c)';
@@ -31,6 +52,7 @@ export function ImportCenter() {
   const [imports, setImports] = useState<ImportSummary[] | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
   /** A workbook with several sheets: the file is kept in memory while one is chosen. */
   const [choosing, setChoosing] = useState<{ file: File; batch: ImportSummary } | null>(null);
 
@@ -103,6 +125,22 @@ export function ImportCenter() {
     }
   };
 
+  const undo = async (item: ImportSummary) => {
+    if (!window.confirm(`Undo ${item.fileName}? What it added is removed, except anything with requests or changed since.`)) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const result = await api<ImportSummary>(`/api/desk/imports/${item.id}/undo`, { method: 'POST' });
+      if (result.undoSummary) setNotice(undoSentence(result.undoSummary));
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'That import could not be undone.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const discard = async (item: ImportSummary) => {
     if (!window.confirm(`Discard ${item.fileName}? Its rows will be removed.`)) return;
     setBusy(true);
@@ -127,7 +165,9 @@ export function ImportCenter() {
 
       <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 mb-5">
         <h2 className="text-base font-semibold text-slate-800 mb-1">Upload a file</h2>
-        <p className="text-sm text-slate-500 mb-3">CSV or Excel (.xlsx), up to {MAX_IMPORT_BYTES / 1024 / 1024} MB. Older .xls files need saving as .xlsx first. Don&apos;t include passwords: any The Desk recognises are left out.</p>
+        <p className="text-sm text-slate-500 mb-3">CSV or Excel (.xlsx), up to {MAX_IMPORT_BYTES / 1024 / 1024} MB. Older .xls files need saving as .xlsx first. Don&apos;t include passwords: any The Desk recognises are left out.{' '}
+          <a href="/api/desk/imports/template" download className="underline text-slate-700" data-testid="desk-import-template">Download a template</a> if your system has no export. Replace its example rows with your own.
+        </p>
         <input
           ref={input} type="file" accept={IMPORT_ACCEPT} disabled={busy} className="block w-full max-w-md text-sm text-slate-700" aria-label="File to import" data-testid="desk-import-file"
           onChange={(e) => upload(e.target.files?.[0])}
@@ -151,6 +191,7 @@ export function ImportCenter() {
       </div>
 
       {error && <p className="text-sm text-red-600 mb-4" role="alert" data-testid="desk-import-error">{error}</p>}
+      {notice && <p className="text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-lg p-3 mb-4" role="status" data-testid="desk-import-notice">{notice}</p>}
       {!imports && !error && <p className="text-sm text-slate-500" data-testid="desk-import-loading">Loading…</p>}
 
       {imports && imports.length > 0 && (
@@ -174,9 +215,14 @@ export function ImportCenter() {
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">{item.rowCount.toLocaleString('en-US')}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{localDayLabel(item.createdAt)}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{importStatusLabel(item.status, item.mapped)}</td>
+                  <td className="px-4 py-3 min-w-[10rem]" data-testid={`desk-import-status-${item.id}`}>
+                    {item.status === 'COMMITTING' && item.canUndo ? 'Didn\'t finish. Undo it, then upload again.' : importStatusLabel(item.status, item.mapped)}
+                    {item.status === 'COMMITTED' && <div className="text-xs text-slate-500">{item.insuredsCreated.toLocaleString('en-US')} new accounts, {item.policiesCreated.toLocaleString('en-US')} policies</div>}
+                    {item.status === 'UNDONE' && item.undoSummary && <div className="text-xs text-slate-500">{undoSentence(item.undoSummary)}</div>}
+                  </td>
                   <td className="px-4 py-3 whitespace-nowrap text-right">
                     {item.status === 'STAGED' && <Link href={`/desk/import/${item.id}`} className="underline text-slate-700 mr-3" data-testid={`desk-import-open-${item.id}`}>Continue</Link>}
+                    {item.canUndo && <button type="button" className="underline text-slate-700 disabled:opacity-60" disabled={busy} data-testid={`desk-import-undo-${item.id}`} onClick={() => undo(item)}>Undo</button>}
                     {(item.status === 'STAGED' || item.status === 'FAILED') && (
                       <button type="button" className="underline text-slate-500 disabled:opacity-60" disabled={busy} data-testid={`desk-import-discard-${item.id}`} onClick={() => discard(item)}>Discard</button>
                     )}

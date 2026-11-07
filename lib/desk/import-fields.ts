@@ -203,6 +203,7 @@ export function sampleValues(rows: { cells: string[] }[], columnIndex: number, h
 
 export function importStatusLabel(status: string, mapped: boolean): string {
   if (status === 'STAGED') return mapped ? 'Columns chosen' : 'Choose columns';
+  if (status === 'COMMITTING') return 'Importing…';
   if (status === 'COMMITTED') return 'Imported';
   if (status === 'UNDONE') return 'Undone';
   return 'Didn\'t finish';

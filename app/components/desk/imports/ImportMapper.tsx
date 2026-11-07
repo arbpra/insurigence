@@ -140,6 +140,7 @@ export function ImportMapper({ importId }: { importId: string }) {
       setVersion(result.version);
       setDirty(false);
       setSaved(true);
+      router.push(`/desk/import/${encodeURIComponent(importId)}/preview`);
     });
   };
 
@@ -263,12 +264,13 @@ export function ImportMapper({ importId }: { importId: string }) {
       )}
       {saved && !dirty && (
         <p className="text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-lg p-3 mb-3" role="status" data-testid="desk-mapper-saved">
-          Your column choices are saved, and will be used next time. Checking the rows and previewing the import aren&apos;t available yet, so nothing has been added to your accounts.
+          Your column choices are saved, and will be used next time. Nothing has been added to your accounts yet.{' '}
+          <Link href={`/desk/import/${encodeURIComponent(importId)}/preview`} className="underline" data-testid="desk-mapper-preview">Preview the import</Link>
         </p>
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        <button type="button" className={PRIMARY} style={{ background: ACCENT }} disabled={busy} data-testid="desk-mapper-save" onClick={save}>{busy ? 'Saving…' : 'Save columns'}</button>
+        <button type="button" className={PRIMARY} style={{ background: ACCENT }} disabled={busy} data-testid="desk-mapper-save" onClick={save}>{busy ? 'Saving…' : 'Save and preview'}</button>
         <button type="button" className={SECONDARY} disabled={busy} data-testid="desk-mapper-discard" onClick={discard}>Discard this import</button>
         <span className="text-xs text-slate-500" data-testid="desk-mapper-count">{chosen} of {columns.length} columns chosen</span>
       </div>

@@ -814,8 +814,8 @@ Module 1–18 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 | 23 | Agency user permissions: agency admin sets each user's role and book access, and assigns producers / CSRs to accounts (single and bulk) | 2.5 | 🆕 Q3 | ✅ Done |
 | 24 | Import engine: server-side CSV / XLSX parsing, header detection, staging rows in an `ImportBatch` | 3.0 | | ✅ Done |
 | 25 | Import mapping UI: map any export's columns to Desk fields, with mappings remembered per agency for the next upload | 3.0 | ✏️ Q2 | ✅ Done |
-| 26 | Import validation and grouping: several policy rows per insured, insured-only rows, producer matched to agency users, date / premium / policy-status parsing, duplicate detection, preview | 3.0 | 🆕 Q2 | ⬜ |
-| 27 | Import commit, one-click undo of a batch, downloadable import template | 2.5 | | ⬜ |
+| 26 | Import validation and grouping: several policy rows per insured, insured-only rows, producer matched to agency users, date / premium / policy-status parsing, duplicate detection, preview | 3.0 | 🆕 Q2 | ✅ Done |
+| 27 | Import commit, one-click undo of a batch, downloadable import template | 2.5 | | ✅ Done |
 
 **Module 20 — Insured accounts API (✅ complete, 6 Nov 2026)**
 
@@ -1100,6 +1100,78 @@ Browser run in Chrome: **40 checks passed** against the running app, covering up
 
 Module 1–24 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43, 80, 98, 86, 99, 91, 72, 155, 99, 154, 143, 259 passed (**1,974 in total** with this module), plus the text-matching (11) and user-responses (13) suites. Only the mapping tests changed after the full run, and that suite was re-run.
 
+**Module 26 — Import validation, grouping and preview (✅ complete, 7 Nov 2026)**
+
+**Delivered:**
+
+- **Reading the cells** (`lib/desk/import-plan.ts`, no server code, so the rules can be tested alone): dates (YYYY-MM-DD, M/D/YYYY, M/D/YY, month names, DD-Mon-YY, with any time removed; years 1950–2150), premium (whole cents worked out from the digits; `$`, commas and USD allowed; a third decimal rounds; negatives refused), and policy status (a list of common AMS words). Blank, `-`, `N/A`, `none` and `null` count as empty.
+- **Grouping:** several policy rows become one account with several policies, and insured-only rows become accounts with no policy (Q2). The client code decides the group. A row with no code joins the only code used for that name. If a name has two codes, they stay separate accounts with a warning.
+- **Producer:** matched to the agency's active users by email, "Jane Smith" or "Smith, Jane". Two people with the same name match neither. Names that match nobody are listed for the user, and the account goes in with no producer.
+- **Matching the book:** by client code, then by the same name. A same-named account with a different code becomes a new account with a warning. Two possible matches mean the row is left out rather than guessed.
+- **Duplicates:** a policy number repeated within an account keeps the latest expiration. Rows with no number compare line, carrier and dates. A policy already on the book's account is skipped.
+- **Preview** (`/desk/import/[id]/preview`, `GET /api/desk/imports/[id]/preview`): figures, a choice for accounts already in the book, notes, a table of problems by row, and what will go in. Shows the first 50 accounts and first 200 problems, with totals. Logged as `import.previewed`, with counts only.
+
+**Design decisions:**
+
+- **A row with an error is left out whole;** the rest can still import, and a corrected file can be uploaded later without adding anything twice. Errors: no name, a value too long, a bad date or premium, an unknown status on a policy row, policy details with no number, line or carrier, an expiration on or before the effective date, and a total line.
+- **Warnings don't stop a row:** a bad email is left blank; a blank status with a past expiration becomes Expired; a stated status is kept even if the date has passed (with a warning); a producer with no match; account fields that disagree (the first row wins).
+- **Dates read month first,** as these are US agencies. A day-first file would misread some dates and refuse others.
+- **An import never changes an account already in the book:** not its details and not its people. It adds new policies, or the user chooses to leave those rows out. That choice is for the whole file.
+
+**Issues:**
+
+- A real bug found by the tests: a spelling difference within a name-only group was described as "same client code". It now compares names.
+- On phones the problem table clipped its explanation. The name now sits in the same cell. Found by looking at a screenshot; the automatic checks passed.
+
+**Not done or limited:**
+
+- AMS "continuation" rows with a blank name are errors and don't inherit the name above.
+- The choice for existing accounts applies to the whole file, not per account.
+- No real AMS export has been tried. The sample files are still needed from the client.
+
+**Module 27 — Import commit, undo and template (✅ complete, 7 Nov 2026)**
+
+**Delivered:**
+
+- **Commit** (`lib/desk/import-commit.ts`, `POST /api/desk/imports/[id]/commit`): the screen sends the figures it showed, and the import stops with `PREVIEW_OUT_OF_DATE` if the book has changed since. Accounts, policies and producer assignments are written in chunks, marked with the batch and source IMPORT. Counts are saved and logged as `import.committed`. The rows are then deleted, since they are a copy of client data.
+- **One at a time:** only one import per agency can run, and a double click goes in once (new status `COMMITTING`). If a write fails, what was written is removed and the import can be tried again. If that cleanup fails too, the import stays `COMMITTING` so a retry can't double up, and it can be undone from the list after 15 minutes.
+- **Undo** (`POST /api/desk/imports/[id]/undo`): one button on the import list and the result screen. It removes what the import added, but **keeps anything worked on since**: accounts or policies with tasks, anything edited, and accounts with policies added by hand. A kept account keeps its policies. The result says what was removed and kept, with up to 20 names (`ImportBatch.undoSummary`). Logged as `import.undone`, with counts only. It can be repeated if cut short.
+- **Template** (`GET /api/desk/imports/template`): a CSV whose columns map themselves, with two policies on one account and one insured-only row, and example dates in the future. Agency admins only.
+- **Screens:** the commit button names the counts, a result screen follows it, and the import list shows counts, the undo result and an Undo button.
+
+**Design decisions:**
+
+- **One audit entry per import, with counts,** rather than one per account. Q4's "all actions should be logged" is met at batch level, and each account and policy carries its batch.
+- **Producers are assigned with the role PRODUCER,** and only on new accounts.
+- **Skipped rows can't be seen again after the result screen,** because the rows are deleted. The file and the preview showed them.
+- **Undo uses raw deletes,** checking for tasks and policies immediately before each chunk of 1,000, five chunks at once. Through Prisma's `deleteMany` a full-book undo took 330 s; it's now 108.5 s. The cost: Prisma's own safeguard is replaced by that check, leaving a very small window in which a task created at that exact moment could lose its link. A change seen by the check stops the undo with a 409, and it can be repeated.
+
+**Issues:**
+
+- The deliberate-fault run missed 2 of 121:
+  - **Double-click timing:** a real test gap. The old race test didn't reliably hit the moment a second click arrives just after the first has claimed the import. A test now sets up that exact timing, and the fault is caught. The code itself was right.
+  - **A premium length check:** it could never decide anything, because the size check after it refuses the same amounts. The check was removed and a 400-digit amount added to the tests.
+- A browser check read the list before it had refreshed after undo. The check was wrong and now waits.
+
+**Not done or limited:**
+
+- **Large files on a web host:** at the row limit, commit takes about a minute and undo nearly two, from this machine. A host's request time limit could cut these off. Undo can be repeated, and a stopped commit can be undone after 15 minutes, but the hosting limit is still unknown.
+- Nothing warns if the template's example rows are left in the file.
+- Insurigence admins can use these through the API only, with no screen. Account managers are refused.
+- Unfinished imports don't expire on their own. This is still an open question for the client.
+
+**Verified:**
+
+`npx tsc --noEmit` clean. New `script/verify-desk-import-commit.ts`: **323 passed**, 174 of them on the rules alone, against the shared database using temporary agencies and users removed at the end. No test agencies or users were left afterwards, and no import was left in `COMMITTING`.
+
+Deliberate faults: **120 of 120 caught** after the two fixes above (the first run caught 119 of 121, and the removed check took its fault with it). Each fault was judged by a finished run, and checksums confirmed the code was restored.
+
+Browser run in Chrome: **40 checks passed**, covering preview, commit, the result screen, undo, the template and refusals. Desktop and phone screenshots were viewed. Only the unused premium check changed in the app code after this run.
+
+One-off test at the row limit (49,999 rows, 25,000 accounts, 5.4 MB, this machine to Atlas): upload 17.9 s, preview 17.9 s, commit 56–61 s, preview against the full book 16.2 s with nothing added twice, undo 108.5 s with all records removed. This is not part of the suite.
+
+Module 1–25 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43, 80, 98, 86, 99, 91, 72, 155, 99, 154, 143, 259, 125 passed (**2,297 in total** with this module), plus the text-matching (11) and user-responses (13) suites. No tests changed after this full run.
+
 ### Phase 3 — Task System Core (17 h)
 
 | # | Module | Hours | Change | Status |
@@ -1154,7 +1226,7 @@ Module 1–24 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–25 complete (67.5 h). **58.0 h remaining.**
+**Progress:** Modules 1–27 complete (73.0 h). **52.5 h remaining.**
 
 The client's answers added **33 hours** (see Section 9), approximately:
 
