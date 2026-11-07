@@ -812,7 +812,7 @@ Module 1–18 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 | 21 | Agency Portal: insured list (search, filter, paging, "my accounts") + add / edit form | 3.0 | | ✅ Done |
 | 22 | Insured detail page: profile, assigned producer / CSR, policies, open tasks, documents | 2.5 | | ✅ Done |
 | 23 | Agency user permissions: agency admin sets each user's role and book access, and assigns producers / CSRs to accounts (single and bulk) | 2.5 | 🆕 Q3 | ✅ Done |
-| 24 | Import engine: server-side CSV / XLSX parsing, header detection, staging rows in an `ImportBatch` | 3.0 | | ⬜ |
+| 24 | Import engine: server-side CSV / XLSX parsing, header detection, staging rows in an `ImportBatch` | 3.0 | | ✅ Done |
 | 25 | Import mapping UI: map any export's columns to Desk fields, with mappings remembered per agency for the next upload | 3.0 | ✏️ Q2 | ⬜ |
 | 26 | Import validation and grouping: several policy rows per insured, insured-only rows, producer matched to agency users, date / premium / policy-status parsing, duplicate detection, preview | 3.0 | 🆕 Q2 | ⬜ |
 | 27 | Import commit, one-click undo of a batch, downloadable import template | 2.5 | | ⬜ |
@@ -1005,6 +1005,56 @@ Module 1–21 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 
 Module 1–22 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43, 80, 98, 86, 99, 91, 72, 155, 99, 154 passed (**1,590 in total** with this module). The team and account page suites were re-run after their final test edits; no app code changed after the full run.
 
+**Module 24 — Import engine (✅ complete, 7 Nov 2026)**
+
+**Delivered:**
+
+- **Reading files** (`lib/desk/import-parse.ts`): CSV, TSV and text exports, and `.xlsx` / `.xlsm` workbooks. CSV handles Windows and UTF-16 encodings and comma, tab, semicolon or pipe separators. Workbooks keep dates as dates, leading zeros (`00742`) and long id numbers intact, and hidden sheets are not offered.
+- **Finding the column names** (`lib/desk/import-headers.ts`): looks through the first 25 rows, so a report title above the table doesn't matter. Columns with no name or a repeated name get a unique one.
+- **Staging** (`lib/desk/imports.ts`): each row is stored as an `ImportRow`, in an `ImportBatch` the next modules work from. Nothing reaches the book of business until the import is committed (Module 27).
+- **Routes** under `/api/desk/imports`: upload and list; read, correct the header row and discard one import; read its rows in pages.
+- **Limits:** 9 MB file, 96 MB unpacked, 50,000 rows, 200 columns, 10,000 characters a cell, 10 unfinished imports per agency. Each refusal says what was wrong.
+- **No screen in this module.** `/desk/import` stays a placeholder until Module 25.
+
+**Design decisions:**
+
+- **Passwords are left out before anything is saved (Q4).** A column labelled like a password, in the first 25 rows, is blanked in full. So is any cell that reads like a credential. The upload reports the affected column letters and a count, never the values, and changing the header row can't bring them back.
+- **Who may import:** the agency's Owner / Admin and Insurigence admins, as line 529 of this plan says. Account Managers, Producers, CSRs and VAs are refused. Someone in another agency gets a 404, and the refusal is logged.
+- **Everything is logged with counts only:** staged, refused, viewed, header changed, discarded. Client data and file names stay out of the log.
+- **The original file is not kept.** Only its rows are.
+- **Rows are stored as a list of cells lined up with the column names,** not keyed by column name, because a file can name a column `__proto__` or `$where`. Rows above the header are stored too, so the user can pick a different row. This replaces the earlier description of `ImportRow` in Module 3 and adds format, sheet, header and screening fields to `ImportBatch`.
+- **Header detection is a best guess.** The batch records whether it is confident, so the Module 25 screen knows when to ask.
+- **Two small new libraries instead of a spreadsheet package:** `fflate` for unzipping and `saxes` for reading the XML. The npm `xlsx` package is stuck on an old version and `exceljs` has had no release since 2023 and no defence against zip bombs. Unpacked size is counted as it unpacks, and XML document types are refused.
+- **Direct database commands for writing and deleting rows.** Prisma's `createMany` managed about 326 rows a second here, too slow for a full book inside one request; direct inserts managed about 3,445. Cells stay plain strings, and the write count is checked because these commands report failure in their result.
+- **A batch stays marked FAILED until all its rows are in,** so one that stops halfway is never taken for a finished one. If saving fails, its rows and batch are removed.
+
+**Issues:**
+
+- **Upload failed on many-entry zip files for the wrong reason:** `fflate` overflowed the stack before the 5,000-entry limit. The limit is now 2,000, tested at 1,990, 2,001 and 50,000 entries.
+- **Full-size uploads were too slow** (found when a 50,000-row test ran past my time limit), which led to the direct inserts above.
+- **Deliberate-fault run, interrupted:** the session ended during the first run and left one fault in `lib/desk/imports.ts`, plus 3 agencies, 7 users, 3 batches and 13 rows of test data under one run tag. The fault was reversed and confirmed by checksum, and the records removed by that exact tag. Results after the machine ran out of memory had been counted as caught when the process had simply died. They were discarded, and the fault script now counts only runs that finish. The suite wasn't identified as the cause of the memory shortage.
+- **Faults that first went uncaught:** 7 in all. 5 were test gaps, now covered: title-row and data-row detection, an Account Manager naming their own agency, the status while rows are being written, and a change landing between the check and the write. The other 2 led to a test for harmless document types and the removal of a redundant guard. No test gap hid an app bug.
+
+**Limits to know about:**
+
+- **No genuine Microsoft Excel file or real AMS export has been tested.** Workbooks came from `exceljs` and `openpyxl`, plus hand-built test files. Sample exports from the client are needed before this can be called proven.
+- **Old `.xls` files are refused,** with instructions to re-save as `.xlsx`. AMS exports are often `.xls`, so the client should confirm whether theirs are.
+- **Staged rows have no automatic expiry.** They stay until discarded or committed, limited to 10 unfinished imports per agency. They are client data, so an expiry may be wanted.
+- **The upload runs inside one request,** and parsing a large file briefly blocks the server. Timings are from the dev server on this machine; production has not been measured.
+- **Password detection has limits.** A column label is matched on the whole cell in the first 25 rows, so an unusual label can slip past, and a false match drops a real column (which is reported).
+- **A cell starting with `=` stays as text.** That matters if rows are ever exported back to a spreadsheet.
+
+**Verified:**
+
+- `script/verify-desk-imports.ts`: 259 tests passed.
+- 52 deliberate faults, one at a time: all caught after the changes above. The code was restored and compared by checksum.
+- Real dev server with a temporary agency: a 50,000-row, 5.13 MB CSV uploaded in 20.2 s with all rows stored, and discarded in 15.6 s. A 9.000 MB file (27,026 rows) arrived whole. 9.20 MB and 12 MB files were refused. A workbook uploaded, and the server kept answering.
+- Workbooks written by `exceljs` and `openpyxl` read correctly: dates, rich text, formula results, `00742`, a hidden sheet not offered, and column names on row 3. A formula with no saved result reads as blank.
+- No test records left behind: 0 import batches and 0 import rows in the database afterwards.
+- Type check clean.
+
+Module 1–23 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43, 80, 98, 86, 99, 91, 72, 155, 99, 154, 143 passed (**1,849 in total** with this module), plus the text-matching (11) and user-responses (13) suites. Only the import tests changed after the full run, and that suite was re-run.
+
 ### Phase 3 — Task System Core (17 h)
 
 | # | Module | Hours | Change | Status |
@@ -1059,7 +1109,7 @@ Module 1–22 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–23 complete (61.5 h). **64.0 h remaining.**
+**Progress:** Modules 1–24 complete (64.5 h). **61.0 h remaining.**
 
 The client's answers added **33 hours** (see Section 9), approximately:
 

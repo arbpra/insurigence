@@ -1013,7 +1013,21 @@ model ImportBatch {
 
   fileName            String
   fileSize            Int?
+  /// CSV or XLSX. The file itself is not kept, only its rows.
+  format              String?
+  /// The worksheet read, and all that could have been (visible ones only).
+  sheetName           String?
+  sheetNames          String[]          @default([])
   status              ImportBatchStatus @default(STAGED)
+  /// The spreadsheet row holding the column names. 0: the file has none.
+  headerRow           Int               @default(1)
+  /// False when the row was a best guess, so the mapping step should ask.
+  headerConfident     Boolean           @default(false)
+  /// Column names in order, unique and never blank. A row's cells line up with these.
+  headers             String[]          @default([])
+  columnCount         Int               @default(0)
+  /// What was left out because it looked like a credential: { columns: ["F"], cells: 2 }. Never the values.
+  screened            Json?
   /// { sourceColumn: targetField } chosen in the mapping step.
   columnMapping       Json?
 
@@ -1042,7 +1056,10 @@ model ImportRow {
   agencyId   String          @db.ObjectId
   /// 1-based row number as the user sees it in their spreadsheet.
   rowNumber  Int
-  /// The row as parsed: { sourceColumn: cellValue }.
+  /// The row as parsed: an array of cell text, lined up with the batch's headers.
+  /// An array, not an object keyed by column name, because those names come from
+  /// the file and could be "__proto__" or "$where". Rows above the header row are
+  /// stored too, so the header row can be changed without uploading again.
   data       Json
   status     ImportRowStatus @default(PENDING)
   errors     String[]        @default([])
