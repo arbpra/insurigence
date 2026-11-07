@@ -813,7 +813,7 @@ Module 1–18 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 | 22 | Insured detail page: profile, assigned producer / CSR, policies, open tasks, documents | 2.5 | | ✅ Done |
 | 23 | Agency user permissions: agency admin sets each user's role and book access, and assigns producers / CSRs to accounts (single and bulk) | 2.5 | 🆕 Q3 | ✅ Done |
 | 24 | Import engine: server-side CSV / XLSX parsing, header detection, staging rows in an `ImportBatch` | 3.0 | | ✅ Done |
-| 25 | Import mapping UI: map any export's columns to Desk fields, with mappings remembered per agency for the next upload | 3.0 | ✏️ Q2 | ⬜ |
+| 25 | Import mapping UI: map any export's columns to Desk fields, with mappings remembered per agency for the next upload | 3.0 | ✏️ Q2 | ✅ Done |
 | 26 | Import validation and grouping: several policy rows per insured, insured-only rows, producer matched to agency users, date / premium / policy-status parsing, duplicate detection, preview | 3.0 | 🆕 Q2 | ⬜ |
 | 27 | Import commit, one-click undo of a batch, downloadable import template | 2.5 | | ⬜ |
 
@@ -1055,6 +1055,51 @@ Module 1–22 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 
 Module 1–23 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43, 80, 98, 86, 99, 91, 72, 155, 99, 154, 143 passed (**1,849 in total** with this module), plus the text-matching (11) and user-responses (13) suites. Only the import tests changed after the full run, and that suite was re-run.
 
+**Module 25 — Import mapping screen (✅ complete, 7 Nov 2026)**
+
+**Delivered:**
+
+- **Import page** (`/desk/import`): upload a CSV or Excel file, pick the sheet if a workbook has several, and see earlier imports with their status, row count, Continue and Discard. A file over the 9 MB limit is refused before it is sent.
+- **Mapping page** (`/desk/import/[id]`): every column in the file is listed with example values and a dropdown of Desk fields, plus a label saying where the suggestion came from (saved, remembered, or guessed from the name). Choosing a field already in use moves it to the new column.
+- **Header row:** shows which row was read as the column names, and lets the user pick another from the first 25 rows or say the file has no column names. It opens by itself when the system isn't confident.
+- **Fields** (`lib/desk/import-fields.ts`): the Q2 list. Account: named insured (required), DBA, contact name, email and phone, website, address, industry, description, notes, the AMS's client reference and assigned producer. Policy: number, line, carrier, effective and expiration dates, premium, status, notes and reference.
+- **Remembered per agency** (new `ImportColumnMemory`): saving a mapping remembers each column name's field, and the next upload starts from that, even when columns have moved or changed case. Columns the agency turned down stay turned down. Another agency never sees it.
+- **Saving** (`GET` / `PUT /api/desk/imports/[id]/mapping`): checked against the file's real columns, refused if someone else changed the import first, and logged as `import.mapped` with field names only, never the file's text.
+- **Notes on screen:** says when no policy column is chosen (accounts only) and when no expiration date is chosen, since renewal work relies on it. Insured-only files are allowed, as Q2 asks.
+
+**Design decisions:**
+
+- **Memory is by column name, not by whole file layout.** A client export and a policy export from one AMS share one memory, and a new column doesn't throw away what was learned. Generated names such as "Column B" aren't remembered, and neither are columns simply left out, unless the system would otherwise have suggested them. Otherwise stray names from a client's file would be kept.
+- **Memory is saved when the mapping is saved, and stays after a discard.** The choice is what's being learned, so it doesn't wait for the import to finish.
+- **Guesses need an exact known name.** "Company" suggests carrier and "Company Name" suggests named insured. These are suggestions the user confirms, and nothing is imported without that.
+- **Saving stops at "saved".** The screen says plainly that checking rows and previewing aren't available yet. Those come in Modules 26 and 27, and nothing reaches the book until then.
+- **Only Owner/Admin has the screen.** Insurigence admins can reach the same actions through the API with `?agencyId`, but have no screen for picking an agency. Account managers are refused.
+- **A different sheet means uploading again.** The file stays in browser memory while the choice is made, and the earlier sheet's import is removed first, so it doesn't count against the limit on unfinished imports.
+
+**Issues found and fixed:**
+
+- **A Module 24 bug:** two changes colliding on the header row or a discard gave a server error instead of "changed elsewhere". The Module 24 test only counted the winners, so it missed this. Changing the header row, discarding and saving now share one fix, tested for both database error types.
+- **Choices being reset:** in the browser run, a slow second page load overwrote what the user had picked, and those choices were then saved as suggestions. Only the latest load now applies.
+- **A heading far too large:** "Upload a file" picked up the site's global heading style. Only a screenshot showed this. It's fixed and reconfirmed by a new screenshot.
+- **A test gap from the deliberate faults:** nothing checked that correcting a remembered choice replaces the old one. A test was added and now catches that fault.
+
+**Known limits:**
+
+- A wrongly chosen header row could store a mapped data value as a column name in the agency's memory. This is a small risk: it needs the user to confirm the wrong row and map that value.
+- Only the assigned producer is mapped, as Q2 lists. A CSR column isn't offered, though it would be easy to add.
+- The header picker shows the first 25 rows only.
+- Each visit to the mapping page logs `import.viewed`, so a repeat visit adds an entry.
+- One browser run gave a single 404 on `/desk/import` from the dev server. It didn't happen again on later runs. It looks like a dev-server cache glitch, but the cause isn't confirmed.
+- Tested in Chrome only, by script. No person has used these screens yet, and no real AMS export or genuine Excel file from an agency has been tried. **Sample exports from the client are still needed.**
+
+**Verified:**
+
+`npx tsc --noEmit` clean. New `script/verify-desk-import-mapping.ts`: **125 passed**, against the shared database using temporary agencies and users, removed afterwards. 36 deliberate faults were put into the code: 35 caught (one after the test above was added). The other doesn't change behaviour: a list sent to the route is still refused with a 400, by validation instead of the first check, so no test could tell them apart. Checksums confirm all the faults were removed.
+
+Browser run in Chrome: **40 checks passed** against the running app, covering upload, mapping, remembering on the next upload, the header picker, password screening, several sheets, two people changing one import, another agency being refused, and phone width with no sideways scrolling. Screenshots were viewed.
+
+Module 1–24 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43, 80, 98, 86, 99, 91, 72, 155, 99, 154, 143, 259 passed (**1,974 in total** with this module), plus the text-matching (11) and user-responses (13) suites. Only the mapping tests changed after the full run, and that suite was re-run.
+
 ### Phase 3 — Task System Core (17 h)
 
 | # | Module | Hours | Change | Status |
@@ -1109,7 +1154,7 @@ Module 1–23 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–24 complete (64.5 h). **61.0 h remaining.**
+**Progress:** Modules 1–25 complete (67.5 h). **58.0 h remaining.**
 
 The client's answers added **33 hours** (see Section 9), approximately:
 

@@ -207,6 +207,7 @@ model Agency {
   insureds             InsuredAccount[]
   policies             Policy[]
   importBatches        ImportBatch[]
+  importColumnMemory   ImportColumnMemory?
   tasks                Task[]
   deskPlan             AgencyDeskPlan?
 }
@@ -1028,7 +1029,7 @@ model ImportBatch {
   columnCount         Int               @default(0)
   /// What was left out because it looked like a credential: { columns: ["F"], cells: 2 }. Never the values.
   screened            Json?
-  /// { sourceColumn: targetField } chosen in the mapping step.
+  /// { field: column } chosen in the mapping step. Keyed by The Desk's own field names, never the file's.
   columnMapping       Json?
 
   rowCount            Int               @default(0)
@@ -1048,6 +1049,18 @@ model ImportBatch {
   rows                ImportRow[]
 
   @@index([agencyId, createdAt])
+}
+
+/// How an agency mapped its export columns, so the next upload starts from it.
+/// A list of { column, field } decisions, one per column name, latest first.
+model ImportColumnMemory {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId    String   @unique @db.ObjectId
+  columns     Json
+  updatedById String   @db.ObjectId
+  updatedAt   DateTime @updatedAt
+
+  agency      Agency   @relation(fields: [agencyId], references: [id], onDelete: Cascade)
 }
 
 model ImportRow {

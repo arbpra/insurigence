@@ -14,6 +14,7 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { canManageAgencyAccess, DeskAccessError, isObjectId, type DeskScope, type GuardContext } from './access';
 import { recordAudit, type AuditAction } from './audit';
+import { columnsFromMapping, mergeColumnMemory, parseColumnMemory, suggestColumns, validateMapping, type ColumnMapping } from './import-fields';
 import {
   HEADER_SCAN_ROWS, IMPORT_PAGE_SIZE, columnLetter, detectHeaderRow, isCredentialLabel, uniqueHeaders, type ParsedRow,
 } from './import-headers';
@@ -36,6 +37,14 @@ const conflict = (message: string, code?: string) => new DeskAccessError(409, me
 
 function audit(db: Pick<Db, 'deskAuditLog'> | Prisma.TransactionClient, scope: DeskScope, ctx: GuardContext, action: AuditAction, entityId: string | null, agencyId: string | null, metadata: Record<string, unknown> = {}) {
   return recordAudit(db, { actor: { id: scope.userId, role: scope.role }, action, entityType: 'ImportBatch', entityId, agencyId, metadata, ip: ctx.ip, userAgent: ctx.userAgent });
+}
+
+/** Two people changing one import at once: one gets a 409, not a server error. */
+function inTransaction<T>(db: Db, work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+  return db.$transaction(work, TX_OPTIONS).catch((err) => {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && (err.code === 'P2034' || err.code === 'P2002')) throw conflict(CHANGED_ELSEWHERE, 'CHANGED_ELSEWHERE');
+    throw err;
+  });
 }
 
 async function logRefusal(db: Db, scope: DeskScope, ctx: GuardContext, entityId: string | null, agencyId: string | null, op: string) {
@@ -73,7 +82,7 @@ function batchView(b: BatchRow) {
   return {
     id: b.id, version: b.updatedAt.toISOString(), agencyId: b.agencyId, fileName: b.fileName, fileSize: b.fileSize, format: b.format, status: b.status,
     sheetName: b.sheetName, sheetNames: b.sheetNames, headerRow: b.headerRow, headerConfident: b.headerConfident, headers: b.headers,
-    columnCount: b.columnCount, rowCount: b.rowCount, screened: b.screened, createdAt: b.createdAt.toISOString(),
+    columnCount: b.columnCount, rowCount: b.rowCount, screened: b.screened, mapped: b.columnMapping !== null, createdAt: b.createdAt.toISOString(),
   };
 }
 
@@ -251,7 +260,7 @@ export async function setImportHeaderRow(db: Db, scope: DeskScope, id: string, i
   const rowCount = await db.importRow.count({ where: { batchId: batch.id, rowNumber: { gt: headerRow } } });
   if (!rowCount) throw bad('There are no rows below that one to import.');
 
-  return db.$transaction(async (tx) => {
+  return inTransaction(db, async (tx) => {
     const { count } = await tx.importBatch.updateMany({
       where: { id: batch.id, status: 'STAGED', updatedAt: batch.updatedAt },
       data: { headerRow, headerConfident: true, headers: uniqueHeaders(cells, batch.columnCount), rowCount, columnMapping: null },
@@ -259,7 +268,46 @@ export async function setImportHeaderRow(db: Db, scope: DeskScope, id: string, i
     if (count !== 1) throw conflict(CHANGED_ELSEWHERE, 'CHANGED_ELSEWHERE');
     await audit(tx, scope, ctx, 'import.header_changed', batch.id, batch.agencyId, { from: batch.headerRow, to: headerRow, rowCount });
     return batchView(await tx.importBatch.findUniqueOrThrow({ where: { id: batch.id } }));
-  }, TX_OPTIONS);
+  });
+}
+
+/**
+ * What each column maps to: the choice saved on this import, or else a suggestion
+ * from what this agency chose before and what the column's name says.
+ */
+export async function getImportMapping(db: Db, scope: DeskScope, id: string, ctx: GuardContext = {}) {
+  const batch = await loadBatch(db, scope, id, ctx, 'import.mapping');
+  if (batch.status !== 'STAGED') throw conflict('This import can no longer be changed.', 'NOT_STAGED');
+  const saved = batch.columnMapping === null ? null : validateMapping(batch.columnMapping, batch.headers);
+  if (saved && !saved.errors.length) return { version: batch.updatedAt.toISOString(), saved: true, columns: columnsFromMapping(batch.headers, saved.mapping) };
+  const memory = await db.importColumnMemory.findUnique({ where: { agencyId: batch.agencyId } });
+  return { version: batch.updatedAt.toISOString(), saved: false, columns: suggestColumns(batch.headers, parseColumnMemory(memory?.columns)) };
+}
+
+/** Saves the choice on this import, and remembers it for this agency's next upload. Only field names go in the log. */
+export async function saveImportMapping(db: Db, scope: DeskScope, id: string, input: Record<string, unknown>, ctx: GuardContext = {}) {
+  const batch = await loadBatch(db, scope, id, ctx, 'import.map');
+  if (batch.status !== 'STAGED') throw conflict('This import can no longer be changed.', 'NOT_STAGED');
+  if (input.version !== undefined && input.version !== batch.updatedAt.toISOString()) throw conflict(CHANGED_ELSEWHERE, 'CHANGED_ELSEWHERE');
+  const { mapping, errors } = validateMapping(input.mapping, batch.headers);
+  if (errors.length) throw bad(errors.join(' '), 'INVALID_MAPPING');
+
+  return inTransaction(db, async (tx) => {
+    const { count } = await tx.importBatch.updateMany({
+      where: { id: batch.id, status: 'STAGED', updatedAt: batch.updatedAt },
+      data: { columnMapping: mapping as Prisma.InputJsonObject },
+    });
+    if (count !== 1) throw conflict(CHANGED_ELSEWHERE, 'CHANGED_ELSEWHERE');
+    const memory = await tx.importColumnMemory.findUnique({ where: { agencyId: batch.agencyId } });
+    const columns = mergeColumnMemory(parseColumnMemory(memory?.columns), batch.headers, mapping as ColumnMapping) as unknown as Prisma.InputJsonArray;
+    await tx.importColumnMemory.upsert({
+      where: { agencyId: batch.agencyId },
+      create: { agencyId: batch.agencyId, columns, updatedById: scope.userId },
+      update: { columns, updatedById: scope.userId },
+    });
+    await audit(tx, scope, ctx, 'import.mapped', batch.id, batch.agencyId, { fields: Object.keys(mapping), columnCount: batch.headers.length });
+    return batchView(await tx.importBatch.findUniqueOrThrow({ where: { id: batch.id } }));
+  });
 }
 
 /**
@@ -271,11 +319,11 @@ export async function setImportHeaderRow(db: Db, scope: DeskScope, id: string, i
 export async function discardImport(db: Db, scope: DeskScope, id: string, ctx: GuardContext = {}) {
   const batch = await loadBatch(db, scope, id, ctx, 'import.discard');
   if (batch.status !== 'STAGED' && batch.status !== 'FAILED') throw conflict('This import has been committed. Undo it instead.', 'NOT_STAGED');
-  await db.$transaction(async (tx) => {
+  await inTransaction(db, async (tx) => {
     const { count } = await tx.importBatch.updateMany({ where: { id: batch.id, status: { in: ['STAGED', 'FAILED'] } }, data: { status: 'FAILED' } });
     if (count !== 1) throw conflict(CHANGED_ELSEWHERE, 'CHANGED_ELSEWHERE');
     await audit(tx, scope, ctx, 'import.discarded', batch.id, batch.agencyId, { rowCount: batch.rowCount });
-  }, TX_OPTIONS);
+  });
   await removeRows(db, batch.id);
   await db.importBatch.delete({ where: { id: batch.id } });
   return { discarded: true };

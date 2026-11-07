@@ -16,7 +16,7 @@ export const AUDIT_ACTIONS = [
   'document.uploaded', 'document.viewed', 'document.downloaded', 'document.removed',
   'insured.created', 'insured.viewed', 'insured.updated', 'insured.assigned',
   'policy.created', 'policy.updated', 'policy.removed',
-  'import.staged', 'import.rejected', 'import.viewed', 'import.header_changed', 'import.discarded', 'import.committed', 'import.undone',
+  'import.staged', 'import.rejected', 'import.viewed', 'import.header_changed', 'import.mapped', 'import.discarded', 'import.committed', 'import.undone',
   'agency.desk_updated', 'permission.changed',
   'staff.invited', 'staff.invite_resent', 'staff.updated', 'staff.deactivated', 'staff.reactivated',
   'pod.created', 'pod.updated', 'pod.member_added', 'pod.member_removed', 'pod.access_changed',
