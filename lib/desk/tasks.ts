@@ -1,6 +1,6 @@
 /**
  * The Desk task service: the only code that creates or changes tasks.
- * API routes (Module 28) are thin wrappers around these functions.
+ * The API (lib/desk/task-api.ts) wraps these and decides what each person is shown.
  *
  * Every function takes the caller's DeskScope (lib/desk/access.ts), finds the
  * task through the access layer (404 when out of scope), checks the role's
@@ -255,10 +255,9 @@ export async function createTask(db: Db, scope: DeskScope, input: CreateTaskInpu
  *  - Desk VA: only on tasks assigned to them.
  *  - Account / Operations Manager: any task they can see; only they reopen.
  *  - Agency users: may only cancel, and only before work starts (New / Assigned).
- * Waiting and cancelling need a reason. A "waiting on agency" reason is shown
- * to the agency (it says what is needed); other reasons stay internal unless
- * the agency-facing status changes. A concurrent change is a 409, never a
- * silent overwrite.
+ * Waiting and cancelling need a reason. The agency is shown it only when it's
+ * addressed to them: what is needed from them, or why a request was cancelled
+ * (lib/desk/task-api.ts). A concurrent change is a 409, never a silent overwrite.
  */
 export async function changeTaskStatus(
   db: Db, scope: DeskScope, taskId: string, to: string, opts: { reason?: string | null } = {}, ctx: Ctx = {}
@@ -507,8 +506,9 @@ export async function addTaskNote(
 
 /**
  * What an agency user is shown of a task: the simplified status, and none of
- * the internal fields (pod, assignee, named-staff restriction, billing,
- * target snapshot, escalation).
+ * the internal fields (pod, assignee, named-staff restriction, billing, due
+ * dates, escalation, or when the team last touched it). Targets are internal,
+ * not guarantees (client answer Q5).
  */
 export function agencyTaskView(task: Task) {
   const status = agencyStatus(task.status);
@@ -524,10 +524,8 @@ export function agencyTaskView(task: Task) {
     policyId: task.policyId,
     status,
     statusLabel: AGENCY_STATUS_LABELS[status],
-    dueAt: task.dueAt,
     createdAt: task.createdAt,
     completedAt: task.completedAt,
     cancelledAt: task.cancelledAt,
-    lastActivityAt: task.lastActivityAt,
   };
 }

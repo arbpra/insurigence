@@ -379,11 +379,12 @@ export async function resolveSubmission(
     if (!isObjectId(requested) || (allowed !== 'ALL' && !allowed.includes(requested))) {
       return refuse(db, scope, 'Agency', requested ?? 'none', isObjectId(requested) ? requested : null, ctx, { op: 'submit' });
     }
-    if (allowed === 'ALL') {
-      const agency = await db.agency.findUnique({ where: { id: requested }, select: { deskEnabled: true } });
-      if (!agency?.deskEnabled) return refuse(db, scope, 'Agency', requested, requested, ctx, { op: 'submit', reason: 'desk not enabled' });
-    }
     agencyId = requested;
+  }
+  // AMs' agencies are already Desk-enabled; platform roles can reach any agency's account.
+  if (scope.kind === 'PLATFORM') {
+    const agency = await db.agency.findUnique({ where: { id: agencyId }, select: { deskEnabled: true } });
+    if (!agency?.deskEnabled) return refuse(db, scope, 'Agency', agencyId, agencyId, ctx, { op: 'submit', reason: 'desk not enabled' });
   }
   return { agencyId, insuredId, policyId };
 }

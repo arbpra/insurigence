@@ -1172,11 +1172,53 @@ One-off test at the row limit (49,999 rows, 25,000 accounts, 5.4 MB, this machin
 
 Module 1–25 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43, 80, 98, 86, 99, 91, 72, 155, 99, 154, 143, 259, 125 passed (**2,297 in total** with this module), plus the text-matching (11) and user-responses (13) suites. No tests changed after this full run.
 
+**Module 28 — Task API (✅ complete, 8 Nov 2026)**
+
+**Delivered:**
+
+- **One set of routes for every portal** (`lib/desk/task-api.ts`, `app/api/desk/tasks/`): `GET/POST /api/desk/tasks` (list, file a request), `GET /api/desk/tasks/[id]` (detail with history), and `POST .../status`, `.../assign`, `.../notes`. Each signed-in person is limited to what their role allows, using the scope rules from Modules 9–11. Anything out of reach is a 404 and is logged as a refused access.
+- **List** with search (title, account name, `#reference`), status, type, priority, account, open only, and "mine". Staff can also filter by agency, pod (or none), assignee (a person, me, or nobody) and overdue, and sort by newest, latest activity or due date. Pages hold up to 100 rows. Lists leave out the request details text.
+- **Three views of a request:**
+  - **Agency:** the simplified status, the account and policy, with no due date, last-activity time, pod, assignee or billing.
+  - **VA:** what's needed to do the work, including the due date and whether it's overdue.
+  - **Account Manager and Insurigence staff:** the VA view plus the target, paused time, escalation, the restriction list and billing.
+- **History** with names, not ids. In the agency's history, Desk staff appear as "Your Desk team", while colleagues in the same agency appear by name.
+- **Opening a request is logged** (`task.viewed`, with the reference only).
+
+**Design decisions:**
+
+- **Agencies never see due dates or activity times** (Q5, "internal targets, not guarantees"). Filters and sorts on internal fields have no effect for them, and asking for an internal status returns 400, so the list can't be used to work these out. `agencyTaskView` no longer returns `dueAt` or `lastActivityAt`.
+- **Status reasons reach the agency** only for Needs your attention and Cancelled. Other reasons stay internal.
+- **VAs see less than managers** (Q4 need-to-know): no billing, restriction list or reason, escalation reason or targets. History details for VAs come from a short list of allowed fields, not the full record.
+- **A Producer keeps sight of requests they filed,** including the account name, even after being taken off that account.
+- **If the view can't be logged, the request doesn't open** (Q4, "all actions should be logged").
+- **Assigning with no person given is a 400,** not an unassign. Unassigning needs an explicit `null`.
+
+**Issues:**
+
+- **An Operations Manager could file a request against a Desk-disabled agency** by going through one of its accounts. The check only ran when the agency was named directly. It now runs after the agency is worked out, either way (`lib/desk/access.ts`).
+- The deliberate-fault run caught **56 of 61**. The 5 missed change nothing visible: four were the routes' own refusal of a list body, which the next layer refuses anyway with the same 400; one made the due-date sort run an extra empty lookup.
+
+**Not done or limited:**
+
+- **No screens yet.** They follow in Modules 29–33.
+- The history shows the latest 500 entries, with the total count.
+- A VA can add a note shared with the agency on a request they haven't picked up, if it's in their pod.
+- The new suite takes about 7 minutes, because it goes through the real routes against Atlas.
+
+**Verified:**
+
+`npx tsc --noEmit` clean. New `script/verify-desk-task-api.ts`: **227 passed**, through the real route handlers with signed-in sessions, against the shared database using temporary agencies, users and pods removed at the end. No test records were left afterwards.
+
+Deliberate faults: **56 of 61 caught**, the 5 missed explained above. Each fault was judged by a finished run, and checksums confirmed the code was restored.
+
+Module 1–27 suites re-run: all 26 earlier Desk suites passed, 0 failed (**2,524 in total** with this module), plus the text-matching (11) and user-responses (13) suites. No code changed after this full run.
+
 ### Phase 3 — Task System Core (17 h)
 
 | # | Module | Hours | Change | Status |
 |---|---|---:|---|---|
-| 28 | Task API: create, scoped list, detail, transition, assign, notes | 3.0 | | ⬜ |
+| 28 | Task API: create, scoped list, detail, transition, assign, notes | 3.0 | | ✅ Done |
 | 29 | Agency: submit service request (insured picker, request type, complexity, details, attachments) | 2.5 | | ⬜ |
 | 30 | Task documents: upload / download / remove on R2, internal vs agency-visible, sensitivity category, every view and download logged | 2.5 | ✏️ Q4 | ⬜ |
 | 31 | Pod queue for VAs: queue, filters, pick up / assign, "My tasks" | 3.0 | | ⬜ |
@@ -1226,7 +1268,7 @@ Module 1–25 suites re-run: 21, 22, 28, 26, 31, 33, 31, 37, 61, 46, 58, 76, 43,
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–27 complete (73.0 h). **52.5 h remaining.**
+**Progress:** Modules 1–28 complete (76.0 h). **49.5 h remaining.**
 
 The client's answers added **33 hours** (see Section 9), approximately:
 
