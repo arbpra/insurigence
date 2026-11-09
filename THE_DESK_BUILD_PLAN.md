@@ -1214,12 +1214,53 @@ Deliberate faults: **56 of 61 caught**, the 5 missed explained above. Each fault
 
 Module 1–27 suites re-run: all 26 earlier Desk suites passed, 0 failed (**2,524 in total** with this module), plus the text-matching (11) and user-responses (13) suites. No code changed after this full run.
 
+**Module 29 — Agency: send a service request (✅ complete, 9 Nov 2026)**
+
+**Delivered:**
+
+- **New request form** (`/desk/requests/new`, `app/components/desk/requests/RequestForm.tsx`), for Owner / Admin, Producer and CSR:
+  - **Account:** search by name, DBA or policy number, showing active accounts only. A Producer or CSR with assigned-only access finds only their accounts. A request can also be marked "not about one account".
+  - **Policy:** optional, with current policies first, each showing number, line, carrier and expiration.
+  - **Request type,** with a one-line explanation of each; **complexity** (Standard or Complex, with what counts as complex); a **title**, suggested from the type and account until the user types their own; and **details**, with a character count and the warning never to enter passwords or carrier logins.
+  - **After sending:** a confirmation with the request number, type, account and status "Received", with buttons to send another for the same account, go back to the account, or see all requests.
+  - Missing fields are listed before anything is sent, and leaving with unsent work asks first.
+- **New request button** on each active account's page, opening the form with that account chosen (`?insuredId=`). A link to an inactive account explains why it can't be used, and Send is turned off.
+- **Form rules** (`lib/desk/request-form.ts`, no server code): the types an agency may send, what's required, the body sent and the title suggestion. The browser and server use the same rules.
+
+**Design decisions:**
+
+- **Agencies can't send a QA review.** It's the Desk team's own step, so it isn't on the form, and the server refuses it from agency users with a 400 (`lib/desk/tasks.ts`). Account Managers and Insurigence staff can still file one.
+- **No priority on the form.** The routing rule for the type sets it, so agencies can't mark everything urgent. The Desk team can change it.
+- **No due date or target on the form or the confirmation** (Q5, "internal targets, not guarantees").
+- **The account comes from the API,** never from the address alone. A link carrying an account the user can't see gets the same "isn't available" message as one that doesn't exist.
+
+**Issues:**
+
+- The first two browser runs timed out on the first page load. The development server's build cache had broken after an earlier run was stopped: even existing pages didn't compile. The cache was moved aside and rebuilt; nothing in the app changed.
+- The browser check's own cleanup removed things in the wrong order. Its records were removed by their exact tag, the order was fixed, and a re-run left nothing behind.
+
+**Not done or limited:**
+
+- **Attachments come in Module 30,** where document storage is built. The form will gain an attach step then.
+- **The "Requests" list and a request's own page are Module 33.** Until then, the confirmation's "All requests" button leads to the placeholder page.
+- A double click can't send twice, because the button is off while sending. A retry after a lost connection could still file a second copy.
+
+**Verified:**
+
+`npx tsc --noEmit` clean. New `script/verify-desk-request-form.ts`: **66 passed**, 26 of them on the form rules alone, and the rest through the real routes against the shared database using temporary agencies and users removed at the end.
+
+Deliberate faults: **29 of 29 caught**. Each fault was judged by a finished run, and checksums confirmed the code was restored.
+
+Browser run in Chrome: **33 checks passed**, covering searching, choosing a policy, the title suggestion, sending, the confirmation, a request without an account, the account page button, an inactive account, a Producer's view, the unsaved-work warning and a phone width. Desktop and phone screenshots were viewed. Nothing was left behind.
+
+Module 1–28 suites re-run: all 27 earlier Desk suites passed, 0 failed (**2,590 in total** with this module), plus the text-matching (11) and user-responses (13) suites. No code changed after this full run.
+
 ### Phase 3 — Task System Core (17 h)
 
 | # | Module | Hours | Change | Status |
 |---|---|---:|---|---|
 | 28 | Task API: create, scoped list, detail, transition, assign, notes | 3.0 | | ✅ Done |
-| 29 | Agency: submit service request (insured picker, request type, complexity, details, attachments) | 2.5 | | ⬜ |
+| 29 | Agency: submit service request (insured picker, request type, complexity, details, attachments) | 2.5 | | ✅ Done |
 | 30 | Task documents: upload / download / remove on R2, internal vs agency-visible, sensitivity category, every view and download logged | 2.5 | ✏️ Q4 | ⬜ |
 | 31 | Pod queue for VAs: queue, filters, pick up / assign, "My tasks" | 3.0 | | ⬜ |
 | 32 | Internal task workspace: status and waiting reason, internal and agency notes, history timeline, documents, reassign, complexity and billing review | 3.0 | | ⬜ |
@@ -1268,7 +1309,7 @@ Module 1–27 suites re-run: all 26 earlier Desk suites passed, 0 failed (**2,52
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–28 complete (76.0 h). **49.5 h remaining.**
+**Progress:** Modules 1–29 complete (78.5 h). **47.0 h remaining.**
 
 The client's answers added **33 hours** (see Section 9), approximately:
 

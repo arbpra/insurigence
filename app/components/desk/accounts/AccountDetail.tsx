@@ -124,9 +124,14 @@ export function AccountDetail({ accountId, justCreated }: { accountId: string; j
           <h1 className="text-2xl font-bold tracking-tight break-words" style={{ color: ACCENT }} data-testid="page-title">{data.name}</h1>
           {data.dba && <p className="text-sm text-slate-500 break-words">DBA {data.dba}</p>}
         </div>
-        {data.can.edit && (
-          <Link href={`/desk/accounts/${data.id}/edit`} onClick={leave} className="px-4 py-2 rounded-lg text-sm font-medium border border-slate-300 bg-white text-slate-700" data-testid="desk-detail-edit">Edit details</Link>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {data.status === 'ACTIVE' && (
+            <Link href={`/desk/requests/new?insuredId=${data.id}`} onClick={leave} className="px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ backgroundColor: ACCENT }} data-testid="desk-detail-new-request">New request</Link>
+          )}
+          {data.can.edit && (
+            <Link href={`/desk/accounts/${data.id}/edit`} onClick={leave} className="px-4 py-2 rounded-lg text-sm font-medium border border-slate-300 bg-white text-slate-700" data-testid="desk-detail-edit">Edit details</Link>
+          )}
+        </div>
       </div>
 
       {data.status === 'INACTIVE' && <p className={NOTE} data-testid="desk-detail-inactive">This account is inactive. No new requests can be sent for it.</p>}

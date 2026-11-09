@@ -25,6 +25,7 @@ import {
 import { nextTaskReference } from './sequence';
 import { pickServiceLevelTarget, targetSnapshot } from './service-levels';
 import { UNASSIGNED } from './task-filters';
+import { agencyMaySend } from './request-form';
 
 type Db = PrismaClient;
 type Tx = Prisma.TransactionClient;
@@ -183,6 +184,8 @@ function cleanText(v: unknown, field: string, max: number, required: boolean): s
  */
 export async function createTask(db: Db, scope: DeskScope, input: CreateTaskInput, ctx: Ctx = {}): Promise<Task> {
   if (!oneOf(TaskType, input.type)) throw bad('Choose a valid request type.');
+  // QA review is the Desk team's own step; agencies choose from the request types their form lists.
+  if (scope.kind === 'AGENCY' && !agencyMaySend(input.type)) throw bad('Choose a valid request type.');
   const title = cleanText(input.title, 'Title', 200, true)!;
   const description = cleanText(input.description, 'Details', 10_000, false);
   if (input.complexity != null && !oneOf(TaskComplexity, input.complexity)) throw bad('Choose standard or complex.');
