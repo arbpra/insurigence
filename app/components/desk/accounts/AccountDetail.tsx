@@ -215,7 +215,10 @@ export function AccountDetail({ accountId, justCreated }: { accountId: string; j
               <tbody>
                 {data.documents.rows.map((d) => (
                   <tr key={d.id} className="border-b border-slate-100 last:border-0" data-testid={`desk-detail-document-${d.id}`}>
-                    <td className="py-2 pr-4 text-slate-800 break-words min-w-[12rem]">{d.fileName} <span className="text-xs text-slate-500 whitespace-nowrap">{fileSizeLabel(d.fileSize)}</span></td>
+                    <td className="py-2 pr-4 text-slate-800 break-words min-w-[12rem]">
+                      {/* PDFs and images open in a new tab; other files download. Each open is logged. */}
+                      <a href={`/api/desk/documents/${d.id}?view=1`} target="_blank" rel="noopener noreferrer" className="underline hover:no-underline" data-testid={`desk-detail-document-open-${d.id}`}>{d.fileName}</a>{' '}
+                      <span className="text-xs text-slate-500 whitespace-nowrap">{fileSizeLabel(d.fileSize)}</span></td>
                     <td className="py-2 pr-4 text-slate-600 whitespace-nowrap">{d.categoryLabel}</td>
                     <td className="py-2 pr-4 text-slate-600 whitespace-nowrap">#{d.requestReference}</td>
                     <td className="py-2 text-slate-600 whitespace-nowrap">{localDayLabel(d.addedAt)}</td>

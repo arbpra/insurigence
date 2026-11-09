@@ -94,6 +94,11 @@ export function quoteDocumentKey(agencyId: string, quoteOptionId: string, filena
   return `agencies/${agencyId}/quote-options/${quoteOptionId}/${randomUUID()}-${safeFilename(filename)}`;
 }
 
+/** Object key for a Desk task's document; the agency leads, as for quotes. */
+export function taskDocumentKey(agencyId: string, taskId: string, filename: string): string {
+  return `agencies/${agencyId}/tasks/${taskId}/${randomUUID()}-${safeFilename(filename)}`;
+}
+
 export async function putObject(params: {
   key: string;
   body: Buffer | Uint8Array;
@@ -123,6 +128,17 @@ export async function getDownloadUrl(key: string, downloadName?: string): Promis
       ? { ResponseContentDisposition: `attachment; filename="${safeFilename(downloadName)}"` }
       : {}),
   });
+  return getSignedUrl(getClient(), command, { expiresIn: DOWNLOAD_URL_TTL_SECONDS });
+}
+
+/**
+ * A time-limited link that either downloads the file or, for types a browser
+ * shows safely (PDF and images), opens it. The name is sent both as a plain
+ * fallback and UTF-8 encoded, so non-English names survive.
+ */
+export async function getFileUrl(key: string, opts: { fileName: string; inline: boolean; contentType: string }): Promise<string> {
+  const disposition = `${opts.inline ? 'inline' : 'attachment'}; filename="${safeFilename(opts.fileName)}"; filename*=UTF-8''${encodeURIComponent(opts.fileName)}`;
+  const command = new GetObjectCommand({ Bucket: bucket(), Key: key, ResponseContentDisposition: disposition, ResponseContentType: opts.contentType });
   return getSignedUrl(getClient(), command, { expiresIn: DOWNLOAD_URL_TTL_SECONDS });
 }
 

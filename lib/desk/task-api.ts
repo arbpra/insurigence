@@ -18,6 +18,7 @@ import { literal } from './literal-match';
 import { TASK_TYPE_LABELS } from './service-levels';
 import { AGENCY_STATUS_LABELS, STATUS_LABELS, addTaskNote, agencyStatus, agencyTaskView, assignTask, changeTaskStatus, createTask, type AgencyStatus } from './tasks';
 import { CLOSED_STATUSES, UNASSIGNED, UNROUTED } from './task-filters';
+import { taskDocumentsFor } from './task-documents';
 
 type Db = PrismaClient;
 
@@ -301,12 +302,15 @@ export async function getTaskDetail(db: Db, scope: DeskScope, taskId: string, ct
     ? await db.user.findMany({ where: { id: { in: [...ids] } }, select: { id: true, firstName: true, lastName: true, email: true, agencyId: true } })
     : [];
   const actors = new Map<string, Actor>(people.map((p) => [p.id, p]));
+  const documents = await taskDocumentsFor(db, scope, task);
   await recordAudit(db, {
     actor: { id: scope.userId, role: scope.role }, action: 'task.viewed', entityType: 'Task', entityId: task.id, agencyId: task.agencyId,
-    metadata: { reference: task.reference }, ...ctx,
+    // Which files were listed, so a later question about who saw a file can be answered.
+    metadata: { reference: task.reference, documentIds: documents.map((d) => d.id) }, ...ctx,
   });
   return {
     ...viewFor(scope, task, new Date()),
+    documents,
     eventsTotal,
     events: events.map((e) => (scope.kind === 'AGENCY' ? agencyEventView(e, task.agencyId, actors) : staffEventView(scope, e, actors))),
   };

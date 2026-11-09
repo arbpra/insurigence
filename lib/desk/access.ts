@@ -56,7 +56,7 @@ export type DeskScope =
  */
 export class DeskAccessError extends Error {
   /** `code` lets a screen respond to a particular refusal without reading its wording. */
-  constructor(public status: 400 | 401 | 403 | 404 | 409, message: string, public code?: string) {
+  constructor(public status: 400 | 401 | 403 | 404 | 409 | 503, message: string, public code?: string) {
     super(message);
     this.name = 'DeskAccessError';
   }

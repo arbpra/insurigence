@@ -242,9 +242,16 @@ const answer = async (r: Response) => ({ status: r.status, json: await r.json().
     {
       const order = (r: { json: Json }) => (r.json.rows as { title: string }[]).map((t) => t.title.replace(`${TAG} `, ''));
       const open = `${inA}&status=ASSIGNED,WAITING_ON_CARRIER,WAITING_ON_AGENCY,QA_REVIEW,NEW`;
-      const due = order(await list(tOps, `${open}&sort=due`));
-      ok('due: soonest first', due.slice(0, 4).join() === 'qa,carrier,needs agency,assigned');
-      ok('due: no date comes last', due.length === 10 && due.slice(4).every((t) => !['qa', 'carrier', 'needs agency', 'assigned'].includes(t)));
+      // Requests filed through the API above get a real due date from their service level, which
+      // depends on the time of day, so only the fixtures' relative order is fixed.
+      const dueRows = ((await list(tOps, `${open}&sort=due`)).json.rows as { title: string; dueAt: string | null }[])
+        .map((t) => ({ title: t.title.replace(`${TAG} `, ''), dueAt: t.dueAt ? Date.parse(t.dueAt) : null }));
+      const due = dueRows.map((t) => t.title);
+      const fixed = ['qa', 'carrier', 'needs agency', 'assigned'];
+      const dated = dueRows.filter((t) => t.dueAt !== null);
+      ok('due: soonest first', dated.every((t, i) => i === 0 || t.dueAt! >= dated[i - 1].dueAt!)
+        && dueRows.map((t) => t.title).filter((t) => fixed.includes(t)).join() === fixed.join());
+      ok('due: no date comes last', dueRows.length === 10 && dated.length >= 4 && dueRows.slice(dated.length).every((t) => t.dueAt === null));
       const a = order(await list(tOps, `${open}&sort=due&pageSize=3&page=1`));
       const b = order(await list(tOps, `${open}&sort=due&pageSize=3&page=2`));
       const c = order(await list(tOps, `${open}&sort=due&pageSize=3&page=3`));

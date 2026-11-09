@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import type { TaskType } from '@prisma/client';
+import type { DocumentSensitivity, TaskType } from '@prisma/client';
 import {
   AGENCY_REQUEST_TYPES, COMPLEXITY_HINTS, REQUEST_DETAILS_MAX, REQUEST_TITLE_MAX,
   blankRequest, missingFields, requestDirty, requestPayload, suggestedTitle, type RequestFormValues,
 } from '@/lib/desk/request-form';
+import { CATEGORY_HINTS, DOCUMENT_ACCEPT, DOCUMENT_KINDS_TEXT, MAX_DOCUMENT_BYTES, MAX_FILES_PER_SEND, formatBytes, precheckDocument } from '@/lib/desk/document-files';
+import { SENSITIVITY_LABELS } from '@/lib/desk/need-to-know';
 import { ApiError, api } from '../accounts/account-api';
 
 interface Policy {
@@ -19,6 +21,26 @@ interface Policy {
 }
 interface Account { id: string; name: string; dba: string | null; status: 'ACTIVE' | 'INACTIVE'; policies: Policy[] }
 interface Found { id: string; name: string; dba: string | null; city: string | null; state: string | null }
+/** A file chosen to attach. The category has no default: the sender classifies each one. */
+interface Attachment { key: number; file: File; sensitivity: DocumentSensitivity | ''; problem: string | null }
+interface Attached { name: string; error: string | null }
+const CATEGORIES = Object.keys(SENSITIVITY_LABELS) as DocumentSensitivity[];
+
+/** Sends one file to a request. Not through api(): the body is a form, not JSON. */
+async function attach(taskId: string, a: Attachment): Promise<string | null> {
+  const body = new FormData();
+  body.append('file', a.file);
+  body.append('sensitivity', a.sensitivity);
+  try {
+    const res = await fetch(`/api/desk/tasks/${encodeURIComponent(taskId)}/documents`, { method: 'POST', body });
+    if (res.ok) return null;
+    const answer = await res.json().catch(() => ({}));
+    return answer.error || 'It could not be attached.';
+  } catch {
+    return 'The connection dropped while sending it.';
+  }
+}
+
 interface Sent { id: string; reference: number; typeLabel: string; title: string; statusLabel: string; insured: { id: string; name: string } | null }
 
 const INPUT = 'w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white';
@@ -56,11 +78,15 @@ export function RequestForm({ insuredId }: { insuredId: string | null }) {
   const [error, setError] = useState('');
   const [problems, setProblems] = useState<string[]>([]);
   const [sent, setSent] = useState<Sent | null>(null);
+  const [files, setFiles] = useState<Attachment[]>([]);
+  const [attached, setAttached] = useState<Attached[]>([]);
+  const [progress, setProgress] = useState('');
+  const fileKey = useRef(0);
   const searchSeq = useRef(0);
 
   const title = titleEdited ? form.title : suggestedTitle(form.type, account?.name ?? null);
   const values = { ...form, title };
-  const dirty = !sent && (requestDirty({ ...form, title: titleEdited ? form.title : '' }, start) || titleEdited);
+  const dirty = !sent && (requestDirty({ ...form, title: titleEdited ? form.title : '' }, start) || titleEdited || files.length > 0);
   const set = (change: Partial<RequestFormValues>) => { setForm((f) => ({ ...f, ...change })); setProblems([]); setError(''); };
 
   const chooseAccount = useCallback(async (id: string) => {
@@ -119,13 +145,26 @@ export function RequestForm({ insuredId }: { insuredId: string | null }) {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (busy) return;
-    const missing = missingFields(values);
+    const missing = [
+      ...missingFields(values),
+      ...files.filter((f) => f.problem).map((f) => `${f.problem} Remove it to send.`),
+      ...files.filter((f) => !f.problem && !f.sensitivity).map((f) => `Choose what kind of document ${f.file.name} is.`),
+    ];
     setProblems(missing);
     if (missing.length) return;
     setBusy(true);
     setError('');
     try {
       const created = await api<Sent>('/api/desk/tasks', { method: 'POST', body: JSON.stringify(requestPayload(values)) });
+      // The request exists now; each file follows on its own, so one failure doesn't lose the others.
+      const results: Attached[] = [];
+      for (const [i, a] of files.entries()) {
+        setProgress(`Attaching ${i + 1} of ${files.length}: ${a.file.name}`);
+        results.push({ name: a.file.name, error: await attach(created.id, a) });
+      }
+      setProgress('');
+      setAttached(results);
+      setFiles([]);
       setSent(created);
       window.scrollTo?.({ top: 0 });
     } catch (err) {
@@ -134,8 +173,19 @@ export function RequestForm({ insuredId }: { insuredId: string | null }) {
         : message(err));
     } finally {
       setBusy(false);
+      setProgress('');
     }
   };
+
+  const addFiles = (list: FileList | null) => {
+    if (!list) return;
+    const room = MAX_FILES_PER_SEND - files.length;
+    const chosen = [...list].slice(0, Math.max(0, room)).map((file) => ({ key: ++fileKey.current, file, sensitivity: '' as const, problem: precheckDocument(file.name, file.size) }));
+    setFiles((f) => [...f, ...chosen]);
+    setProblems(list.length > room ? [`You can attach up to ${MAX_FILES_PER_SEND} files at once.`] : []);
+  };
+  const setCategory = (key: number, sensitivity: DocumentSensitivity | '') => setFiles((f) => f.map((a) => (a.key === key ? { ...a, sensitivity } : a)));
+  const dropFile = (key: number) => { setFiles((f) => f.filter((a) => a.key !== key)); setProblems([]); };
 
   const another = () => {
     const keep = sent?.insured ? account : null;
@@ -145,6 +195,8 @@ export function RequestForm({ insuredId }: { insuredId: string | null }) {
     setTitleEdited(false);
     setSearch('');
     setFound(null);
+    setFiles([]);
+    setAttached([]);
   };
 
   const accountLink = (id: string, text: string, testId: string) => (
@@ -165,6 +217,22 @@ export function RequestForm({ insuredId }: { insuredId: string | null }) {
             <dt className="text-slate-500">Account</dt><dd className="break-words" data-testid="desk-request-sent-account">{sent.insured?.name ?? 'Not about one account'}</dd>
             <dt className="text-slate-500">Status</dt><dd data-testid="desk-request-sent-status">{sent.statusLabel}</dd>
           </dl>
+          {attached.some((a) => !a.error) && (
+            <div className="mt-4" data-testid="desk-request-sent-files">
+              <p className="text-sm font-medium text-slate-700 mb-1">Attached</p>
+              <ul className="text-sm text-slate-700 list-disc pl-5">
+                {attached.filter((a) => !a.error).map((a, i) => <li key={i} className="break-words">{a.name}</li>)}
+              </ul>
+            </div>
+          )}
+          {attached.some((a) => a.error) && (
+            <div className="mt-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3" role="alert" data-testid="desk-request-sent-failed">
+              <p className="font-medium mb-1">The request was sent, but these files weren&apos;t attached:</p>
+              <ul className="list-disc pl-5">
+                {attached.filter((a) => a.error).map((a, i) => <li key={i} className="break-words">{a.error!.includes(a.name) ? a.error : `${a.name}: ${a.error}`}</li>)}
+              </ul>
+            </div>
+          )}
         </section>
         <div className="flex flex-wrap gap-3">
           <button type="button" className="px-5 py-2.5 rounded-lg text-sm font-medium text-white" style={{ backgroundColor: ACCENT }} onClick={another} data-testid="desk-request-another">
@@ -305,6 +373,49 @@ export function RequestForm({ insuredId }: { insuredId: string | null }) {
           </div>
         </section>
 
+        <section className={CARD} data-testid="desk-request-documents">
+          <h2 className="text-base font-semibold text-slate-800 mb-1">Documents</h2>
+          <p className="text-xs text-slate-500 mb-4">
+            Optional. {DOCUMENT_KINDS_TEXT}, up to {MAX_DOCUMENT_BYTES / 1024 / 1024} MB each and {MAX_FILES_PER_SEND} at a time. Choose a category for each, so only the right people can open it.
+          </p>
+          {files.length > 0 && (
+            <ul className="mb-4 grid gap-3 list-none p-0" data-testid="desk-request-files">
+              {files.map((a) => (
+                <li key={a.key} className="border border-slate-200 rounded-lg p-3 min-w-0" data-testid="desk-request-file">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <p className="text-sm text-slate-800 break-words min-w-0">{a.file.name} <span className="text-xs text-slate-500 whitespace-nowrap">{formatBytes(a.file.size)}</span></p>
+                    <button type="button" className="text-sm text-slate-600 underline" onClick={() => dropFile(a.key)} aria-label={`Remove ${a.file.name}`} data-testid="desk-request-file-remove">Remove</button>
+                  </div>
+                  {a.problem ? (
+                    <p className="text-sm text-red-600 mt-1" data-testid="desk-request-file-problem">{a.problem}</p>
+                  ) : (
+                    <>
+                      <select
+                        aria-label={`Category for ${a.file.name}`} className={`${INPUT} mt-2`} value={a.sensitivity}
+                        onChange={(e) => setCategory(a.key, e.target.value as DocumentSensitivity | '')} data-testid="desk-request-file-category"
+                      >
+                        <option value="">Choose a category…</option>
+                        {CATEGORIES.map((c) => <option key={c} value={c}>{SENSITIVITY_LABELS[c]}</option>)}
+                      </select>
+                      {a.sensitivity && <p className="text-xs text-slate-500 mt-1">{CATEGORY_HINTS[a.sensitivity]}</p>}
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {files.length < MAX_FILES_PER_SEND && (
+            <label className={`${SECONDARY} inline-block cursor-pointer`}>
+              Choose files
+              <input
+                type="file" multiple accept={DOCUMENT_ACCEPT} className="sr-only" data-testid="desk-request-file-input"
+                onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }}
+              />
+            </label>
+          )}
+        </section>
+
+        {progress && <p className="text-sm text-slate-600 mb-3" role="status" data-testid="desk-request-progress">{progress}</p>}
         <div className="flex flex-wrap items-center gap-3 mb-5">
           <button
             type="submit" disabled={busy || loadingAccount || inactive}

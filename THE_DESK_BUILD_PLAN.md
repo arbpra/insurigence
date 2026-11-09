@@ -1255,13 +1255,59 @@ Browser run in Chrome: **33 checks passed**, covering searching, choosing a poli
 
 Module 1–28 suites re-run: all 27 earlier Desk suites passed, 0 failed (**2,590 in total** with this module), plus the text-matching (11) and user-responses (13) suites. No code changed after this full run.
 
+**Module 30 — Task documents (✅ complete, 9 Nov 2026)**
+
+**Delivered:**
+
+- **Upload** (`POST /api/desk/tasks/{id}/documents`, `lib/desk/task-documents.ts`): one file per upload, at most 9 MB, at most 50 files per request. Each file needs a **category** (General, Policy, Financial or Personal), chosen by the uploader with no default. A VA can only attach a category they hold (Q4).
+- **What may be attached** (`lib/desk/document-files.ts`): PDF, Word, Excel, CSV, text, Outlook and email files, and JPG, PNG, WebP or HEIC images. The extension picks the type, and the file's first bytes must match it, so a program renamed to `.pdf` is refused. The type stored and served comes from this list, never from the uploader's browser. File names lose any folders and control characters, and long names are shortened with the extension kept.
+- **Who sees which file:** files the agency uploads are always shared with the agency. Files the Desk team uploads are internal unless shared. The agency never sees which files are internal, and sees Desk staff as "Your Desk team". Everyone else sees only what their access allows (assigned work, pod, restriction, category), using the same rules as tasks.
+- **Opening** (`GET /api/desk/documents/{id}`): after the access check, the open is logged (`document.viewed` or `document.downloaded`), then the browser is sent to a 5-minute signed R2 link. PDFs and images open in the browser; everything else downloads. The link isn't cached and isn't passed on as a referrer. If the log can't be written, the file isn't opened.
+- **Removing** (`DELETE /api/desk/documents/{id}`): uploaders can remove their own files while the request is open. An agency Owner/Admin can remove files uploaded by their colleagues. Account Managers and Operations Managers can remove any file, even on a closed request. The record is kept, marked removed, and shown in the request's history; the stored copy is deleted. A refused attempt is logged.
+- **History and logs:** each upload and removal adds an entry to the request's history (as visible as the file) and an audit entry. Audit entries hold ids, category, sharing, size and type, never the file name. Opening a request's detail logs which files were listed.
+- **New request form:** a Documents step. Files are checked as they're chosen; each needs a category, with a one-line explanation of each. Files are sent one at a time after the request is created, with progress shown. The confirmation lists what was attached and, separately, any file that wasn't and why, making clear the request itself was sent.
+- **Account page:** each shared file is now a link that opens through the checked route.
+
+**Design decisions:**
+
+- **Files go after the request is created,** one per upload. A failed file never loses the request, and each upload stays under the 10 MB body limit Next applies to API routes. That limit is also why files are capped at 9 MB.
+- **No default category.** Defaulting to General would quietly put sensitive files where more people can see them.
+- **The browser never gets a storage location.** It only gets the checked route, which logs before it links. A copied link expires in 5 minutes.
+- **Without R2, uploads and opens answer "File storage is not set up yet"** (503) instead of failing part-way. Nothing is half-saved.
+
+**Issues:**
+
+- The first deliberate-fault run found 3 gaps in the tests: the two link headers (not cached, no referrer) and two people removing the same file at once. Tests were added and all three are now caught.
+- The browser check first failed because the development server's build cache had broken again (pages returned "not found"). The cache was moved aside and the server rebuilt. While I was clearing out the old cache copy, a link inside it led the delete into the project's installed `@prisma/client` package and emptied it. The package was restored at the exact locked version (6.19.2), and every suite below ran on the restored copy. No project code was affected.
+- The browser run showed two small display flaws, now fixed: stray bullets beside the file cards, and a failed file's name shown twice in the error.
+- The full re-run found a Module 28 test that depended on the time of day. A request filed through the API gets a real due date from its service level, and on a weekday afternoon that date fell between two fixed test dates. The sorting was correct; the test now checks the order itself rather than fixed positions.
+
+**Not done or limited:**
+
+- **Real R2 upload not tried here.** This machine has no R2 credentials. Storage is tested with a stand-in, and the signed link with placeholder settings (signing needs no network). Worth one real upload once R2 is set up.
+- **A request's own page (Modules 32/33)** will show its files with upload, open and remove. Until then, files are added from the New request form and opened from the account page.
+- **Sharing can't be changed after upload** yet. The Desk team picks it when uploading.
+- **Attaching a file doesn't resume a request that's waiting on the agency;** only an agency reply does (Module 28).
+- **The older quote-document upload still allows 15 MB,** above the 10 MB body limit, so its larger files would fail. That route was left unchanged; it should be capped at 9 MB.
+- **Removed files' stored copies are deleted.** If files must be kept for a retention period, that needs a rule.
+
+**Verified:**
+
+`npx tsc --noEmit` clean. New `script/verify-desk-task-documents.ts`: **123 passed**, covering the file rules, the service with an in-memory store, database and log failures, and the real routes with signed-in sessions, against the shared database using temporary agencies and users removed at the end.
+
+Deliberate faults: **55 of 55 caught**, after the 3 gaps above were closed. Each fault was judged by a finished run, and checksums confirmed the code was restored.
+
+Browser run in Chrome: **25 checks passed**, covering choosing files, bad and oversized files, categories, sending with one file attached and one refused, the real route without R2, the account page link, the internal file hidden from the agency, and a phone width. Desktop and phone screenshots were viewed. Nothing was left behind.
+
+Module 1–29 suites re-run: all 28 earlier Desk suites passed, 0 failed (**2,713 in total** with this module), plus the text-matching (11) and user-responses (13) suites. Two suites (imports and insured accounts) stopped part-way in the full run when the machine ran out of memory; both passed in full when run again on their own. No code changed after these runs.
+
 ### Phase 3 — Task System Core (17 h)
 
 | # | Module | Hours | Change | Status |
 |---|---|---:|---|---|
 | 28 | Task API: create, scoped list, detail, transition, assign, notes | 3.0 | | ✅ Done |
 | 29 | Agency: submit service request (insured picker, request type, complexity, details, attachments) | 2.5 | | ✅ Done |
-| 30 | Task documents: upload / download / remove on R2, internal vs agency-visible, sensitivity category, every view and download logged | 2.5 | ✏️ Q4 | ⬜ |
+| 30 | Task documents: upload / download / remove on R2, internal vs agency-visible, sensitivity category, every view and download logged | 2.5 | ✏️ Q4 | ✅ Done |
 | 31 | Pod queue for VAs: queue, filters, pick up / assign, "My tasks" | 3.0 | | ⬜ |
 | 32 | Internal task workspace: status and waiting reason, internal and agency notes, history timeline, documents, reassign, complexity and billing review | 3.0 | | ⬜ |
 | 33 | Agency tracker: simplified statuses, "Needs your attention", completed work, agency task view | 3.0 | | ⬜ |
@@ -1309,7 +1355,7 @@ Module 1–28 suites re-run: all 27 earlier Desk suites passed, 0 failed (**2,59
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–29 complete (78.5 h). **47.0 h remaining.**
+**Progress:** Modules 1–30 complete (81.0 h). **44.5 h remaining.**
 
 The client's answers added **33 hours** (see Section 9), approximately:
 
