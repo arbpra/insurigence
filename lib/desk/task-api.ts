@@ -186,7 +186,7 @@ const OPEN: Prisma.TaskWhereInput = { status: { notIn: [...CLOSED_STATUSES] } };
 const NO_DUE_DATE: Prisma.TaskWhereInput = { OR: [{ dueAt: null }, { dueAt: { isSet: false } }] };
 const NOT_WAITING: Prisma.TaskWhereInput = { OR: [{ slaPausedAt: null }, { slaPausedAt: { isSet: false } }] };
 
-function listWhere(scope: DeskScope, opts: TaskListOptions, now: Date): Prisma.TaskWhereInput {
+export function listWhere(scope: DeskScope, opts: TaskListOptions, now: Date): Prisma.TaskWhereInput {
   const agency = scope.kind === 'AGENCY';
   const statuses = agency
     ? internalStatuses(listOf<AgencyStatus>(opts.status, AGENCY_STATUS_LABELS, 'status'))

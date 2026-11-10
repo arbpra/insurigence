@@ -1301,6 +1301,67 @@ Browser run in Chrome: **25 checks passed**, covering choosing files, bad and ov
 
 Module 1–29 suites re-run: all 28 earlier Desk suites passed, 0 failed (**2,713 in total** with this module), plus the text-matching (11) and user-responses (13) suites. Two suites (imports and insured accounts) stopped part-way in the full run when the machine ran out of memory; both passed in full when run again on their own. No code changed after these runs.
 
+**Module 31 — Pod queue and My tasks (✅ complete, 10 Nov 2026)**
+
+**Delivered:**
+
+- **Pod queue** (`/desk-ops/queue`): open work nobody holds yet, soonest due first.
+  - **VAs** see only their own pods and agencies, minus anything restricted to someone else. Each request has a **Pick up** button.
+  - **Account Managers and Operations Managers** also see work not yet routed to a pod. Instead of Pick up, they **Assign** the request to someone.
+  - **Summary line:** how many are waiting, how many are overdue and how many the person holds.
+- **My tasks** (`/desk-ops/my-tasks`): the person's own work, split into All open, To start, In progress, Waiting, QA review and Completed.
+  - **Start** moves a request from Assigned to In progress.
+  - **Release** sends it back to the queue, after asking first.
+  - Completed work is listed most recent first.
+- **Filters on both pages:** search (title, account or #number), pod, agency, request type, priority, overdue only, and order (due soonest or newest). They are kept in the address, so Back and shared links work. The pod and agency filters only appear when there's more than one to choose from.
+- **Each row:** number, title, type, agency, account, an Urgent or High badge, Complex, the current stage, the due line and the pod.
+  - **Due line:** "Overdue by 3 hours", "Due in 2 hours" (amber when within 4 hours) or "No target".
+  - **Waiting work** says "Clock stopped 2 hours ago" instead of overdue, because its clock is paused.
+- **Assign list** (`GET /api/desk/tasks/{id}/assignees`, `lib/desk/task-queue.ts`): the request's pod members and the agency's Account Managers.
+  - Each person is checked against their own access, the same way assigning checks it, so the list never offers someone the server would refuse.
+  - VAs come first, least busy at the top, with the pod lead marked. Each entry shows the person's open work.
+- **Queue options** (`GET /api/desk/queue`): the pods and agencies the person may filter by, and the counts. Both go through the same access rules as the request list.
+
+**Design decisions:**
+
+- **VAs pick up; only managers hand work to others,** as decided in Module 12. A VA who tries to pick up something a colleague just took is told "Someone else has already picked up #…", and the list refreshes.
+- **Released work goes back as New, even if it had been started,** because nobody is working it any more. This is the rule already used when someone loses access. Waiting work stays waiting, with its clock stopped. Before this change, a released in-progress request stayed "In progress" with nobody on it (`lib/desk/tasks.ts`).
+- **The queue is the Desk team's.** Agency users get the same "not found" as anything out of reach, and the attempt is logged (Q4). Agency users who open the page are sent to their own home page.
+- **Due dates appear here because this is the internal view** (Q5: internal targets). Agencies still never see them.
+
+**Issues:**
+
+- The first browser run showed the phone layout squeezing each title into a narrow column beside the buttons. The buttons now drop below the title on narrow screens, and a check guards it.
+- A refused agency request to the assign list returned 403 instead of the usual logged 404. Fixed, and covered by tests.
+
+**Not done or limited:**
+
+- **Request titles aren't links yet.** A request's own working page (status, notes, history, documents) is Module 32.
+- **No bulk actions** (picking up or assigning several requests at once).
+- **The assign list's open-work count covers all of a person's agencies,** so an Account Manager sees how busy a VA is in total, not which agencies the work is for.
+- **The lists don't refresh on their own.** They reload after each action and on demand. Automatic refresh can come with notifications (Module 37).
+
+**Verified:**
+
+`npx tsc --noEmit` clean. New `script/verify-desk-task-queue.ts`: **86 passed**.
+- **The screen rules:** filters, address, the query sent to the server, and the due lines.
+- **Queue options and the assign list** for a VA, the pod lead, an Account Manager, an Operations Manager and an agency user.
+- **The real routes with signed-in sessions:** listing, filters, pick up, start, release, hand-over, history and audit.
+- **Test data:** run against the shared database using temporary agencies, pods and people, all removed at the end.
+
+Deliberate faults: **34 of 34 caught**. Each fault was judged by a finished run, and the code was confirmed restored afterwards.
+
+Browser run in Chrome: **32 checks passed**, covering:
+- a VA's queue: counts, order, due lines, filters, search and the empty state;
+- picking up, and losing a race to a colleague;
+- My tasks: start, the stage views and release;
+- an Account Manager assigning from the list;
+- a phone width, and an agency user being turned away.
+
+Screenshots were viewed. Nothing was left behind.
+
+Module 1–30 suites re-run: all 29 earlier Desk suites passed, 0 failed (**2,799 in total** with this module), plus the text-matching (11) and user-responses (13) suites. The run was interrupted once when the session ended; it was resumed from the suite it stopped in, after checking that no temporary records were left behind. No code changed after this run.
+
 ### Phase 3 — Task System Core (17 h)
 
 | # | Module | Hours | Change | Status |
@@ -1308,7 +1369,7 @@ Module 1–29 suites re-run: all 28 earlier Desk suites passed, 0 failed (**2,71
 | 28 | Task API: create, scoped list, detail, transition, assign, notes | 3.0 | | ✅ Done |
 | 29 | Agency: submit service request (insured picker, request type, complexity, details, attachments) | 2.5 | | ✅ Done |
 | 30 | Task documents: upload / download / remove on R2, internal vs agency-visible, sensitivity category, every view and download logged | 2.5 | ✏️ Q4 | ✅ Done |
-| 31 | Pod queue for VAs: queue, filters, pick up / assign, "My tasks" | 3.0 | | ⬜ |
+| 31 | Pod queue for VAs: queue, filters, pick up / assign, "My tasks" | 3.0 | | ✅ Done |
 | 32 | Internal task workspace: status and waiting reason, internal and agency notes, history timeline, documents, reassign, complexity and billing review | 3.0 | | ⬜ |
 | 33 | Agency tracker: simplified statuses, "Needs your attention", completed work, agency task view | 3.0 | | ⬜ |
 
@@ -1355,7 +1416,7 @@ Module 1–29 suites re-run: all 28 earlier Desk suites passed, 0 failed (**2,71
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–30 complete (81.0 h). **44.5 h remaining.**
+**Progress:** Modules 1–31 complete (84.0 h). **41.5 h remaining.**
 
 The client's answers added **33 hours** (see Section 9), approximately:
 

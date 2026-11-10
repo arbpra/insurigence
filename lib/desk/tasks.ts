@@ -421,9 +421,12 @@ export async function assignTask(
     if (!visible) throw bad('That person is not authorised for this agency, pod or task.');
   }
 
+  // Released work goes back to the queue as New, even if it had been started: nobody
+  // is working it any more (the same rule as when someone loses access). Waiting
+  // work stays waiting, with its clock still stopped.
   const status: TaskStatus = assigneeId
     ? (task.status === 'NEW' ? 'ASSIGNED' : task.status)
-    : (task.status === 'ASSIGNED' ? 'NEW' : task.status);
+    : (task.status === 'ASSIGNED' || task.status === 'IN_PROGRESS' ? 'NEW' : task.status);
 
   return inTransaction(db, async (tx) => {
     const { count } = await tx.task.updateMany({
