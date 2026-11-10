@@ -1180,6 +1180,8 @@ enum TaskEventKind {
   ESCALATED
   DEESCALATED
   SUBTASK_CREATED
+  /// Complexity, priority or billing changed by an Account or Operations Manager (Module 32).
+  RECLASSIFIED
 }
 
 /// A unit of Desk work, always tied to an agency and, when applicable, an

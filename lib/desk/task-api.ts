@@ -16,7 +16,8 @@ import { DeskAccessError, getTaskForScope, isObjectId, taskEventWhere, taskWhere
 import { recordAudit } from './audit';
 import { literal } from './literal-match';
 import { TASK_TYPE_LABELS } from './service-levels';
-import { AGENCY_STATUS_LABELS, STATUS_LABELS, addTaskNote, agencyStatus, agencyTaskView, assignTask, changeTaskStatus, createTask, type AgencyStatus } from './tasks';
+import { AGENCY_STATUS_LABELS, STATUS_LABELS, addTaskNote, agencyStatus, agencyTaskView, assignTask, changeTaskStatus, createTask, reviewTask, type AgencyStatus } from './tasks';
+import { statusMoves } from './task-statuses';
 import { CLOSED_STATUSES, UNASSIGNED, UNROUTED } from './task-filters';
 import { taskDocumentsFor } from './task-documents';
 
@@ -310,9 +311,28 @@ export async function getTaskDetail(db: Db, scope: DeskScope, taskId: string, ct
   });
   return {
     ...viewFor(scope, task, new Date()),
+    ...(scope.kind === 'AGENCY' ? {} : { permissions: staffPermissions(scope, task) }),
     documents,
     eventsTotal,
     events: events.map((e) => (scope.kind === 'AGENCY' ? agencyEventView(e, task.agencyId, actors) : staffEventView(scope, e, actors))),
+  };
+}
+
+/**
+ * What the workspace offers this person on this task. Only a guide for the
+ * screen: the task service checks every change again.
+ */
+function staffPermissions(scope: DeskScope, task: TaskRow) {
+  const manager = isManager(scope);
+  const holdsIt = task.assigneeId === scope.userId;
+  const open = !isClosed(task.status);
+  return {
+    statusMoves: statusMoves(task.status, { manager, holdsIt, assigned: !!task.assigneeId }),
+    pickUp: scope.kind === 'VA' && open && !task.assigneeId,
+    release: open && holdsIt,
+    assign: manager && open,
+    review: manager && open,
+    addDocuments: open,
   };
 }
 
@@ -340,6 +360,12 @@ export async function setTaskAssignee(db: Db, scope: DeskScope, taskId: string, 
   // Null means unassign, so a missing or malformed person mustn't be read as that.
   if (body.assigneeId !== null && !isObjectId(body.assigneeId)) throw bad('Choose who to assign, or null to unassign.');
   const task = await assignTask(db, scope, taskId, body.assigneeId, ctx);
+  return viewById(db, scope, task.id);
+}
+
+/** Body: any of { complexity, priority, billableUnits, nonBillable }, and a reason. Managers only. */
+export async function reviewTaskFields(db: Db, scope: DeskScope, taskId: string, body: Record<string, unknown>, ctx: GuardContext = {}) {
+  const task = await reviewTask(db, scope, taskId, body, ctx);
   return viewById(db, scope, task.id);
 }
 

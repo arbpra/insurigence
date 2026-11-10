@@ -1362,6 +1362,74 @@ Screenshots were viewed. Nothing was left behind.
 
 Module 1–30 suites re-run: all 29 earlier Desk suites passed, 0 failed (**2,799 in total** with this module), plus the text-matching (11) and user-responses (13) suites. The run was interrupted once when the session ended; it was resumed from the suite it stopped in, after checking that no temporary records were left behind. No code changed after this run.
 
+**Module 32 — Internal task workspace (✅ complete, 10 Nov 2026)**
+
+**Delivered:**
+
+- **A page for each request** (`/desk-ops/tasks/{id}`), opened from its title in the Pod queue or My tasks. It shows:
+  - **Header:** number, title, stage, priority, complexity and the due line.
+  - **Facts:** type, agency, account, policy (number, line, carrier, expiry), pod, who has it, the Account Manager, and when it was filed, started and completed. Managers also see whether it is restricted.
+  - **The request's details,** with their line breaks kept.
+- **Work panel:** only the moves the server will accept for this person on this request (Start work, Wait on agency / carrier / insured, Send to QA review, Complete, Cancel, Reopen), plus Pick up, Release and, for managers, Assign / Reassign from the checked list (Module 31).
+  - **Reasons:** waiting, cancelling and reopening ask for one. The box says who will read it: the agency for "waiting on agency" and cancelling; the Desk team only otherwise.
+  - **Confirmations:** completing and releasing ask first.
+- **Notes:** internal by default. "Share with the agency" is a deliberate tick, and the button and hint change to say the agency will see it.
+- **History:** newest first. Each entry reads plainly ("In progress → Waiting on carrier", "Reassigned from Vera to Leo", "Note shared with the agency") with the reason or note under it. Entries the agency can see are marked.
+- **Documents:** open (in the browser for PDFs and images) or download through the checked route, with category, size, audience and who added them. Staff can attach files (internal unless shared, category required) and remove them where Module 30 allows.
+- **Classification and billing** (Account and Operations Managers):
+  - **What can change:** complexity, priority, billable units (1–50) and non-billable, each with a required reason (`POST /api/desk/tasks/{id}/review`, `reviewTask` in `lib/desk/tasks.ts`).
+  - **Due date:** a new complexity or priority re-picks the service-level target and recalculates the due date from when the clock started. Time already spent waiting still doesn't count.
+  - **Billing line:** shows where the work counts (and, once completed, whether it was included, an overage or non-billable).
+- **History of reclassifications:** each one is in the internal history, listing every change ("Complexity: Standard → Complex", "Billable units: 1 → 2") with the reason. The audit log records the facts, not the reason.
+- **Status rules in one place:** the allowed moves, labels and which moves need a reason are now in `lib/desk/task-statuses.ts`, used by both the server and the screen, so the screen can't offer a move the server refuses.
+
+**Design decisions:**
+
+- **Only managers reclassify or change billing,** and only while the request is open. Billing is decided at completion, so a completed request is reopened first (Module 13's rule for giving back allowance).
+- **The due date moves with the classification,** recalculated from the original start, not from the moment of the change. `slaDueAt` (the commitment) becomes the new target's date without waiting time; `dueAt` still allows for it.
+- **The agency never sees a reclassification.** VAs see that a request was reclassified and why, but not the billing details.
+- **New event kind `RECLASSIFIED`** in the schema. MongoDB needs no migration; the Prisma client was regenerated.
+
+**Issues:**
+
+- The browser run found the confirmation appearing a moment before the history updated. The page now reloads first and confirms after.
+- The screenshots showed four display problems, now fixed and checked:
+  - a closed request offered "Start work" instead of "Reopen";
+  - a closed request showed "Completed" twice in its header;
+  - the billing line on completed, unclassified work still said "decided when completed";
+  - on a phone, the work buttons came after the whole history.
+
+**Not done or limited:**
+
+- **No editing of a request's title or details,** and no change of sharing for a document after upload.
+- **Restriction and escalation are shown, not changed, here.** Escalation is Module 41; restricting a task to named people has no screen yet.
+- **History shows the latest 500 entries;** older ones are counted but not listed.
+- **No subtasks yet** (Module 38).
+
+**Verified:**
+
+`npx tsc --noEmit` clean. New `script/verify-desk-task-workspace.ts`: **60 passed**.
+- **The shared status rules,** checked against the service.
+- **How history reads, and the review form.**
+- **Reclassification:** the target re-picked, the due date from the original start with waiting time kept out, the reason in the history but not the audit log, a concurrent change refused, closed work refused, VA and agency refused and logged.
+- **What the page offers** a VA, a colleague, an Account Manager and on a closed request.
+- **The real routes with signed-in sessions.**
+- **Test data:** run against the shared database using a temporary agency, pod, people and agency-only targets, all removed at the end.
+
+Deliberate faults: **29 of 29 caught**. Each fault was judged by a finished run, and the code was confirmed restored afterwards.
+
+Browser run in Chrome: **34 checks passed**, covering:
+- a VA opening a request from My tasks, starting it, waiting on the carrier with a reason, and resuming;
+- internal and shared notes;
+- documents: a category they don't hold refused, and no R2 here;
+- an Account Manager reclassifying, completing, and seeing "Reopen";
+- another agency's request refused;
+- a phone width.
+
+Screenshots were viewed. Nothing was left behind.
+
+Module 1–31 suites re-run: all 30 earlier Desk suites passed, 0 failed (**2,859 in total** with this module), plus the text-matching (11) and user-responses (13) suites. No code changed after this run.
+
 ### Phase 3 — Task System Core (17 h)
 
 | # | Module | Hours | Change | Status |
@@ -1370,7 +1438,7 @@ Module 1–30 suites re-run: all 29 earlier Desk suites passed, 0 failed (**2,79
 | 29 | Agency: submit service request (insured picker, request type, complexity, details, attachments) | 2.5 | | ✅ Done |
 | 30 | Task documents: upload / download / remove on R2, internal vs agency-visible, sensitivity category, every view and download logged | 2.5 | ✏️ Q4 | ✅ Done |
 | 31 | Pod queue for VAs: queue, filters, pick up / assign, "My tasks" | 3.0 | | ✅ Done |
-| 32 | Internal task workspace: status and waiting reason, internal and agency notes, history timeline, documents, reassign, complexity and billing review | 3.0 | | ⬜ |
+| 32 | Internal task workspace: status and waiting reason, internal and agency notes, history timeline, documents, reassign, complexity and billing review | 3.0 | | ✅ Done |
 | 33 | Agency tracker: simplified statuses, "Needs your attention", completed work, agency task view | 3.0 | | ⬜ |
 
 ### Phase 4 — Account Manager Portal & Communication (11 h)
@@ -1416,7 +1484,7 @@ Module 1–30 suites re-run: all 29 earlier Desk suites passed, 0 failed (**2,79
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–31 complete (84.0 h). **41.5 h remaining.**
+**Progress:** Modules 1–32 complete (87.0 h). **38.5 h remaining.**
 
 The client's answers added **33 hours** (see Section 9), approximately:
 

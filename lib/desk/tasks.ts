@@ -20,12 +20,13 @@ import { DeskAccessError, getTaskForScope, resolveDeskScope, resolveSubmission, 
 import { defaultBilling } from './billing';
 import { completionPeriod, decideBilling, giveBack, type BillingDecision } from './billing-capture';
 import {
-  businessMinutesBetween, computeDueAt, extendForPause, loadBusinessCalendar, type BusinessCalendar,
+  addBusinessMinutes, businessMinutesBetween, computeDueAt, extendForPause, loadBusinessCalendar, type BusinessCalendar,
 } from './business-time';
 import { nextTaskReference } from './sequence';
 import { pickServiceLevelTarget, targetSnapshot } from './service-levels';
 import { UNASSIGNED } from './task-filters';
 import { agencyMaySend } from './request-form';
+import { AGENCY_STATUS_LABELS, NEEDS_REASON, STATUS_LABELS, WAITING_STATUSES, agencyStatus, canTransition } from './task-statuses';
 
 type Db = PrismaClient;
 type Tx = Prisma.TransactionClient;
@@ -55,65 +56,9 @@ async function inTransaction<T>(db: Db, fn: (tx: Tx) => Promise<T>): Promise<T> 
 }
 
 // ── Statuses ──
+// Labels and allowed moves live in a pure module so screens offer exactly what this service accepts.
 
-export const STATUS_LABELS: Record<TaskStatus, string> = {
-  NEW: 'New',
-  ASSIGNED: 'Assigned',
-  IN_PROGRESS: 'In progress',
-  WAITING_ON_AGENCY: 'Waiting on agency',
-  WAITING_ON_CARRIER: 'Waiting on carrier',
-  WAITING_ON_INSURED: 'Waiting on insured',
-  QA_REVIEW: 'QA review',
-  COMPLETED: 'Completed',
-  CANCELLED: 'Cancelled',
-};
-
-/** The simplified statuses agencies see (build plan 5.4). */
-export type AgencyStatus = 'RECEIVED' | 'IN_PROGRESS' | 'NEEDS_ATTENTION' | 'COMPLETED' | 'CANCELLED';
-
-export const AGENCY_STATUS_LABELS: Record<AgencyStatus, string> = {
-  RECEIVED: 'Received',
-  IN_PROGRESS: 'In progress',
-  NEEDS_ATTENTION: 'Needs your attention',
-  COMPLETED: 'Completed',
-  CANCELLED: 'Cancelled',
-};
-
-export function agencyStatus(status: TaskStatus): AgencyStatus {
-  switch (status) {
-    case 'NEW': case 'ASSIGNED': return 'RECEIVED';
-    case 'WAITING_ON_AGENCY': return 'NEEDS_ATTENTION';
-    case 'COMPLETED': return 'COMPLETED';
-    case 'CANCELLED': return 'CANCELLED';
-    default: return 'IN_PROGRESS';
-  }
-}
-
-export const WAITING_STATUSES: readonly TaskStatus[] = ['WAITING_ON_AGENCY', 'WAITING_ON_CARRIER', 'WAITING_ON_INSURED'];
-
-/**
- * Allowed status changes. Assigning and unassigning (NEW ⇄ ASSIGNED) go
- * through assignTask, not here. Reopening a completed or cancelled task is
- * for Account Managers and Operations Managers only.
- */
-const TRANSITIONS: Record<TaskStatus, readonly TaskStatus[]> = {
-  NEW: ['WAITING_ON_AGENCY', 'CANCELLED'],
-  ASSIGNED: ['IN_PROGRESS', 'WAITING_ON_AGENCY', 'WAITING_ON_CARRIER', 'WAITING_ON_INSURED', 'CANCELLED'],
-  IN_PROGRESS: ['WAITING_ON_AGENCY', 'WAITING_ON_CARRIER', 'WAITING_ON_INSURED', 'QA_REVIEW', 'COMPLETED', 'CANCELLED'],
-  WAITING_ON_AGENCY: ['IN_PROGRESS', 'WAITING_ON_CARRIER', 'WAITING_ON_INSURED', 'CANCELLED'],
-  WAITING_ON_CARRIER: ['IN_PROGRESS', 'WAITING_ON_AGENCY', 'WAITING_ON_INSURED', 'CANCELLED'],
-  WAITING_ON_INSURED: ['IN_PROGRESS', 'WAITING_ON_AGENCY', 'WAITING_ON_CARRIER', 'CANCELLED'],
-  QA_REVIEW: ['IN_PROGRESS', 'COMPLETED', 'CANCELLED'],
-  COMPLETED: ['IN_PROGRESS'],
-  CANCELLED: ['NEW'],
-};
-
-export function canTransition(from: TaskStatus, to: TaskStatus): boolean {
-  return TRANSITIONS[from].includes(to);
-}
-
-/** Statuses that need a reason: what is being waited for, or why it was cancelled / reopened. */
-const NEEDS_REASON: readonly TaskStatus[] = [...WAITING_STATUSES, 'CANCELLED'];
+export { AGENCY_STATUS_LABELS, STATUS_LABELS, WAITING_STATUSES, agencyStatus, canTransition, type AgencyStatus } from './task-statuses';
 
 /**
  * Runs a role check on a task the user can see. A 403 refusal is written to
@@ -446,6 +391,106 @@ export async function assignTask(
     await recordAudit(tx, {
       actor: actorOf(scope), action: 'task.assigned', entityType: 'Task', entityId: task.id, agencyId: task.agencyId,
       metadata: { reference: task.reference, from: task.assigneeId ?? null, to: assigneeId },
+      ...ctx,
+    });
+    return tx.task.findUniqueOrThrow({ where: { id: task.id } });
+  });
+}
+
+// ── Reclassification and billing review ──
+
+export const MAX_BILLABLE_UNITS = 50;
+
+export interface ReviewInput {
+  complexity?: unknown;
+  priority?: unknown;
+  billableUnits?: unknown;
+  nonBillable?: unknown;
+  reason?: unknown;
+}
+
+/**
+ * An Account or Operations Manager reclassifies open work (complexity,
+ * priority) or reviews how it will bill (units, non-billable). A new
+ * complexity or priority can mean a different service-level target: the due
+ * date is worked out again from when the clock started, and time already
+ * spent waiting still doesn't count. Billing is decided at completion, so a
+ * closed task must be reopened first. Every change needs a reason, kept in
+ * the internal history; the audit entry records the facts, not the reason.
+ */
+export async function reviewTask(db: Db, scope: DeskScope, taskId: string, input: ReviewInput, ctx: Ctx = {}): Promise<Task> {
+  const task = await getTaskForScope(db, scope, taskId, ctx);
+  await checkRules(db, scope, task, { op: 'review' }, ctx, async () => {
+    if (!isManager(scope)) throw forbidden('Only an Account Manager or Operations Manager can reclassify work or change its billing.');
+  });
+  if (task.status === 'COMPLETED' || task.status === 'CANCELLED') {
+    throw conflict('This task is closed. Reopen it to change its classification or billing.');
+  }
+
+  const from: Record<string, string | number | boolean> = {};
+  const to: Record<string, string | number | boolean> = {};
+  if (input.complexity !== undefined) {
+    if (!oneOf(TaskComplexity, input.complexity)) throw bad('Choose standard or complex.');
+    if (input.complexity !== task.complexity) { from.complexity = task.complexity; to.complexity = input.complexity; }
+  }
+  if (input.priority !== undefined) {
+    if (!oneOf(TaskPriority, input.priority)) throw bad('Choose a valid priority.');
+    if (input.priority !== task.priority) { from.priority = task.priority; to.priority = input.priority; }
+  }
+  if (input.billableUnits !== undefined) {
+    const units = input.billableUnits;
+    if (typeof units !== 'number' || !Number.isInteger(units) || units < 1 || units > MAX_BILLABLE_UNITS) {
+      throw bad(`Billable units must be a whole number from 1 to ${MAX_BILLABLE_UNITS}.`);
+    }
+    if (units !== task.billableUnits) { from.billableUnits = task.billableUnits; to.billableUnits = units; }
+  }
+  if (input.nonBillable !== undefined) {
+    if (typeof input.nonBillable !== 'boolean') throw bad('Choose billable or non-billable.');
+    if (input.nonBillable !== task.nonBillable) { from.nonBillable = task.nonBillable; to.nonBillable = input.nonBillable; }
+  }
+  if (!Object.keys(to).length) throw bad('Nothing has changed.');
+  const reason = cleanText(input.reason, 'Reason', 500, true)!;
+
+  const now = new Date();
+  const data: Prisma.TaskUncheckedUpdateManyInput = { ...to, lastActivityAt: now };
+  let due: { from: string | null; to: string | null; targetFrom: string | null; targetTo: string | null } | null = null;
+  if ('complexity' in to || 'priority' in to) {
+    const complexity = (to.complexity ?? task.complexity) as TaskComplexity;
+    const priority = (to.priority ?? task.priority) as TaskPriority;
+    const [targets, policy, calendar] = await Promise.all([
+      db.serviceLevelTarget.findMany({ where: { taskType: task.type, isActive: true } }),
+      task.policyId ? db.policy.findUnique({ where: { id: task.policyId }, select: { expirationDate: true } }) : null,
+      loadBusinessCalendar(db),
+    ]);
+    const target = pickServiceLevelTarget(targets, { type: task.type, complexity, priority, agencyId: task.agencyId });
+    const applied = (task.slaTarget ?? null) as { targetId?: string; appliedAt?: string } | null;
+    const targetFrom = applied?.targetId ?? null;
+    if ((target?.id ?? null) !== targetFrom) {
+      // The clock started when the request arrived (or when a submission was complete), not now.
+      const startAt = applied?.appliedAt ? new Date(applied.appliedAt) : task.createdAt;
+      const computed = target ? computeDueAt(target, { startAt, expirationDate: policy?.expirationDate }, calendar) : null;
+      let dueAt = computed?.dueAt ?? null;
+      const anchored = target?.kind === 'BEFORE_EXPIRATION';
+      if (dueAt && !anchored && task.slaPausedMinutes > 0) dueAt = addBusinessMinutes(dueAt, task.slaPausedMinutes, calendar);
+      data.dueAt = dueAt;
+      data.slaDueAt = computed?.dueAt ?? null;
+      data.slaTarget = target
+        ? { ...targetSnapshot(target), appliedAt: startAt.toISOString(), opensAt: computed?.opensAt?.toISOString() ?? null, dueAt: computed?.dueAt.toISOString() ?? null, reclassifiedAt: now.toISOString() }
+        : null;
+      due = { from: task.dueAt?.toISOString() ?? null, to: dueAt?.toISOString() ?? null, targetFrom, targetTo: target?.id ?? null };
+    }
+  }
+
+  return inTransaction(db, async (tx) => {
+    const { count } = await tx.task.updateMany({ where: { id: task.id, status: task.status, updatedAt: task.updatedAt }, data });
+    if (count !== 1) throw conflict(CHANGED_ELSEWHERE);
+    const details = { from, to, ...(due ? { dueAtFrom: due.from, dueAtTo: due.to } : {}) };
+    await tx.taskEvent.create({
+      data: { taskId: task.id, agencyId: task.agencyId, actorId: scope.userId, kind: 'RECLASSIFIED', body: reason, metadata: details },
+    });
+    await recordAudit(tx, {
+      actor: actorOf(scope), action: 'task.reclassified', entityType: 'Task', entityId: task.id, agencyId: task.agencyId,
+      metadata: { reference: task.reference, ...details, ...(due ? { targetFrom: due.targetFrom, targetTo: due.targetTo } : {}) },
       ...ctx,
     });
     return tx.task.findUniqueOrThrow({ where: { id: task.id } });

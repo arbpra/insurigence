@@ -280,7 +280,7 @@ export function TaskQueue({ mode, userId }: { mode: QueueMode; userId: string })
                 {/* At least ~14rem wide, so on a phone the buttons move below rather than squeezing the title. */}
                 <div className="min-w-[14rem] flex-1" data-testid="desk-queue-row-main">
                   <p className="font-medium text-slate-900 break-words">
-                    <span className="text-slate-500 font-normal mr-1.5">#{task.reference}</span>{task.title}
+                    <span className="text-slate-500 font-normal mr-1.5">#{task.reference}</span><Link href={`/desk-ops/tasks/${task.id}`} className="hover:underline" data-testid="desk-queue-row-open">{task.title}</Link>
                   </p>
                   <p className="text-sm text-slate-600 break-words mt-0.5" data-testid="desk-queue-row-context">
                     {task.typeLabel} · {task.agency.name}{task.insured ? ` · ${task.insured.name}` : ''}
