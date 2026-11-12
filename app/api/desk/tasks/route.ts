@@ -5,8 +5,8 @@ import { deskUserRequest } from '@/lib/desk/admin-api';
 import { listTasks, submitTask } from '@/lib/desk/task-api';
 
 /**
- * ?q= &status= &type= &priority= (comma-separated) &insuredId= &open=1 &mine=1 &page= &pageSize=
- * Staff also: &agencyId= &podId=(id|none) &assignee=(id|me|none) &overdue=1 &sort=(newest|activity|due)
+ * ?q= &status= &type= &priority= (comma-separated) &insuredId= &open=1 &mine=1 &page= &pageSize= &sort=(newest|completed)
+ * Staff also: &agencyId= &podId=(id|none) &assignee=(id|me|none) &overdue=1 &sort=(also activity|due)
  */
 export async function GET(request: NextRequest) {
   try {

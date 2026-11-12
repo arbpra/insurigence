@@ -1571,6 +1571,40 @@ model DeskStaffPermission {
   user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+/// Which side of an agency's conversation a message came from.
+enum DeskMessageSide {
+  /// The agency's owners and admins.
+  AGENCY
+  /// Its Account Managers, or an Operations Manager.
+  DESK
+}
+
+/// One message in an agency's general conversation with its Desk team
+/// (Module 36). Conversations about one request are its shared notes
+/// (TaskEvent), not these. Never holds credentials: lib/desk/messages.ts
+/// refuses anything that looks like one.
+model DeskMessage {
+  id        String          @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId  String          @db.ObjectId
+  authorId  String?         @db.ObjectId
+  side      DeskMessageSide
+  body      String
+  createdAt DateTime        @default(now())
+
+  @@index([agencyId, createdAt])
+}
+
+/// How far one person has read one agency's conversation, for unread counts.
+model DeskMessageRead {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId   String   @db.ObjectId
+  userId     String   @db.ObjectId
+  lastReadAt DateTime
+
+  @@unique([agencyId, userId])
+  @@index([userId])
+}
+
 /// Append-only record of every Desk action: creates, changes, views and
 /// downloads, and refused attempts. Separate from TaskEvent (the task's story,
 /// partly shown to agencies); this is the security trail and is never shown to

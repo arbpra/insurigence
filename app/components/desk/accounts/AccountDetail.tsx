@@ -184,7 +184,7 @@ export function AccountDetail({ accountId, justCreated }: { accountId: string; j
               <tbody>
                 {data.requests.rows.map((t) => (
                   <tr key={t.id} className="border-b border-slate-100 last:border-0" data-testid={`desk-detail-request-${t.id}`}>
-                    <td className="py-2 pr-4 text-slate-800 min-w-[12rem]"><span className="text-slate-500">#{t.reference}</span> {t.title}</td>
+                    <td className="py-2 pr-4 text-slate-800 min-w-[12rem]"><Link href={`/desk/requests/${t.id}`} onClick={leave} className="hover:underline" data-testid="desk-detail-request-open"><span className="text-slate-500">#{t.reference}</span> {t.title}</Link></td>
                     <td className="py-2 pr-4 text-slate-600 whitespace-nowrap">{t.typeLabel}</td>
                     <td className={`py-2 pr-4 whitespace-nowrap ${t.needsAttention ? 'font-medium text-amber-800' : 'text-slate-600'}`}>{t.statusLabel}</td>
                     <td className="py-2 text-slate-600 whitespace-nowrap">{localDayLabel(t.createdAt)}</td>

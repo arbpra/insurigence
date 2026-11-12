@@ -209,7 +209,7 @@ export function RequestForm({ insuredId }: { insuredId: string | null }) {
         <h1 className="text-2xl font-bold tracking-tight mb-5" style={{ color: ACCENT }} data-testid="page-title">Request sent</h1>
         <section className={CARD}>
           <p className="text-sm text-slate-700 mb-3" role="status">
-            Your Desk team has received request <strong data-testid="desk-request-reference">#{sent.reference}</strong>. You can follow it under Requests.
+            Your Desk team has received request <strong data-testid="desk-request-reference">#{sent.reference}</strong>. You can follow it on <Link href={`/desk/requests/${sent.id}`} className="underline" onClick={leave} data-testid="desk-request-sent-view">its own page</Link>, and under Requests.
           </p>
           <dl className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-1 text-sm">
             <dt className="text-slate-500">Type</dt><dd data-testid="desk-request-sent-type">{sent.typeLabel}</dd>
@@ -227,7 +227,7 @@ export function RequestForm({ insuredId }: { insuredId: string | null }) {
           )}
           {attached.some((a) => a.error) && (
             <div className="mt-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3" role="alert" data-testid="desk-request-sent-failed">
-              <p className="font-medium mb-1">The request was sent, but these files weren&apos;t attached:</p>
+              <p className="font-medium mb-1">The request was sent, but these files weren&apos;t attached. You can attach them again on the request&apos;s page:</p>
               <ul className="list-disc pl-5">
                 {attached.filter((a) => a.error).map((a, i) => <li key={i} className="break-words">{a.error!.includes(a.name) ? a.error : `${a.name}: ${a.error}`}</li>)}
               </ul>

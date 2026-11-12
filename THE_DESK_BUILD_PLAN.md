@@ -1430,6 +1430,282 @@ Screenshots were viewed. Nothing was left behind.
 
 Module 1–31 suites re-run: all 30 earlier Desk suites passed, 0 failed (**2,859 in total** with this module), plus the text-matching (11) and user-responses (13) suites. No code changed after this run.
 
+**Module 33 — Agency tracker (✅ complete, 10 Nov 2026)**
+
+**Delivered:**
+
+- **Requests page for agencies** (`/desk/requests`), which replaces the placeholder:
+  - **Summary line:** how many requests are open, how many need the agency's attention, and how many are completed.
+  - **"Needs your attention" box at the top:** every request the Desk team is waiting on, longest waiting first, each with what was asked and when.
+  - **Tabs:** Needs your attention, Open, Completed (latest completed first) and All, each with its count.
+  - **Filters:** search by title, account or #number, request type and "Mine only". The address keeps the view, so it survives a reload and can be bookmarked.
+  - **Each row:** the simplified status (Received, In progress, Needs your attention, Completed, Cancelled) and when it was sent or completed. There are no due dates, pods or staff names (Q5).
+- **The agency's page for one request** (`/desk/requests/{id}`):
+  - **Header:** the status badge and request type.
+  - **When the team is waiting:** the question at the top with a reply box. Replying hands the request straight back to the Desk team (Module 28's rule), and the page says so.
+  - **Facts:** account (linked), policy, priority, complexity, and when it was sent and completed. The details the agency sent are shown too.
+  - **History:** in plain words ("Request sent", "Received → In progress", "Your Desk team needs something from you", "Back with your Desk team", "Reopened"). Colleagues are named; the Desk team is "Your Desk team".
+  - **Notes:** on open requests. Once a request is closed, the page links to a new request for the same account instead.
+  - **Cancelling:** while a request is still "Received", the agency can cancel it, giving a reason the Desk team sees (Module 28's rule).
+  - **Documents:** shared documents can be opened, downloaded and attached (a category is required); files can be removed where Module 30 allows.
+- **Server:**
+  - `GET /api/desk/tracker` (`lib/desk/agency-tracker.ts`): the counts and the "Needs your attention" list. Agency users only; staff get a 404, and the attempt is logged.
+  - **Agency task list** (Module 28's API): counts top-level requests only, and can be listed by completion date.
+  - **Agency history entries:** now say which status a change came from.
+- **Links into the new page:** requests on an account's page and on the "Request sent" screen now open the request's page. When a file fails to attach while sending, the message says it can be attached again there.
+
+**Design decisions:**
+
+- **A subtask is part of its parent's request.** The agency's lists and counts leave subtasks out; staff still see them.
+- **What was asked is the latest move to "waiting on agency" that the agency can see.** Its reason is addressed to them. An internal entry is never shown as the question.
+- **Why a request was reopened stays with the team.** The agency sees "Reopened", not the reason; as before, only reasons addressed to them reach them.
+- **The "Needs your attention" box lists up to 50 requests,** with the true count and a link to the full tab.
+- **Agencies cancel only before work starts, and never reopen.** That was already the service's rule (Module 28); the page now offers it. After that, a note to the team asks for it.
+
+**Issues:**
+
+- The deliberate faults first found three gaps in the tests (an agency sorting by due date, a reopen reason reaching the agency, list rows not linking). The tests were strengthened and all three are now caught.
+- While writing this report I found the service already let an agency cancel a request before work starts, but the page didn't offer it. It now does, and it is tested.
+- The screenshots showed the status and date misaligned on a phone, and the attention box said "Open one" when only one request was waiting. Both are fixed and checked.
+
+**Not done or limited:**
+
+- **No count on the agency's Overview page yet.** "Needs your attention" is on the Requests page; email alerts are Module 37.
+- **The agency can't edit a sent request's title or details,** or change a document's category after upload.
+- **History shows the latest 500 entries,** as on the staff page.
+
+**Verified:**
+
+`npx tsc --noEmit` clean. New `script/verify-desk-agency-tracker.ts`: **66 passed**.
+- **The tabs, filters and address,** including unknown values falling back to the defaults.
+- **How each history entry reads to the agency.**
+- **Counts and the attention list:** subtasks and other agencies left out, a producer limited to their own accounts, longest waiting first, the latest ask, and nothing internal sent.
+- **Staff refused and logged.**
+- **The agency's list:** top-level only and ordered by completion, with internal sorts ignored.
+- **The request view:** the carrier wait and the reopen reason hidden.
+- **A reply handing the request back.**
+- **Cancelling:** a reason required, allowed while received, refused once work has started.
+- **The real routes with signed-in sessions.**
+- **What the screens never show.**
+- **Test data:** run against the shared database with temporary agencies, people and requests, all removed at the end.
+
+Deliberate faults: **28 of 28 caught**. Each fault was judged by a finished run, and the code was confirmed restored afterwards.
+
+Browser run in Chrome: **38 checks passed**, covering:
+- the tracker's counts, attention box, tabs, search, type filter and a reload;
+- replying to a question and the request moving on;
+- cancelling a received request, and no cancel once work has started;
+- a closed request;
+- opening a request from the account page;
+- a producer limited to their accounts and refused another account's request;
+- an Account Manager sent to their own area;
+- a phone width.
+
+Screenshots were viewed. Nothing was left behind. (One browser run failed because the local development server had stalled; on a fresh server every check passed. This was the test machine, not the code.)
+
+Module 1–32 suites re-run: all 31 earlier Desk suites passed, 0 failed (**2,925 in total** with this module), plus the text-matching (11) and user-responses (13) suites. No code changed after this run.
+
+**Module 34 — AM dashboard (✅ complete, 11 Nov 2026)**
+
+**Delivered:**
+
+- **The operations Overview** (`/desk-ops`), which replaces the placeholder. Account Managers see it for their agencies (primary or backup); Operations Managers see it for every Desk agency.
+  - **Six counts at the top:** open requests, overdue, due within 4 hours, waiting on agencies, to review (with how many aren't routed to a pod yet), and renewals in the chosen window. Waiting time is paused, so a request waiting on the agency or carrier is not counted as overdue.
+  - **To review:** escalated requests first (with the escalation reason), then QA reviews and requests no pod has been chosen for, oldest first. Each is labelled with why it is there.
+  - **Most overdue:** the ten latest-running requests, with how late they are and who has them.
+  - **Your agencies:** one row each with open, overdue, waiting on them, to review and renewals, sorted by what needs attention most.
+  - **Upcoming renewals:** active and pending policies on active accounts expiring in the next 30, 60 or 90 days, soonest first. Each shows days left and either its renewal request (with its stage) or "No renewal request yet". The window is kept in the address.
+  - **Links:** every request opens in the task workspace (Module 32).
+- **A VA's Overview:** their open tasks and what is waiting in the Pod queue (with overdue), linking to both. No agency-wide figures.
+- **Server:** `GET /api/desk/dashboard?renewals=30|60|90` (`lib/desk/manager-dashboard.ts`). Managers only; VAs and agency users get a 404, and the attempt is logged.
+
+**Design decisions:**
+
+- **"To review" means work that needs a manager:** QA sign-off, an escalation, or no pod chosen. Escalating a request is Modules 40 and 41.
+- **"Due soon" is within 4 hours,** the same as the Pod queue's warning.
+- **A renewal is a policy expiring from today through the last day of the window.** Policies are calendar days, so this is worked out in whole days, not hours. Expired or cancelled policies, inactive accounts and policies with no expiry date are left out.
+- **A cancelled renewal request doesn't count;** the policy shows "No renewal request yet".
+- **Agencies with The Desk switched off are left out everywhere,** so an Operations Manager's counts match the agency table.
+- **Subtasks count as work here:** they are real pieces of work for the team (unlike the agency's view, where they are part of a request).
+- **The overview isn't logged as a view:** like the queue lists, it shows ids and titles but opens nothing. Opening a request is logged as before.
+
+**Issues:**
+
+- The deliberate faults found two gaps in the tests (a renewal window one day short, and agencies sorted by name looking right by chance). The tests were strengthened and both are now caught.
+
+**Not done or limited:**
+
+- **Agency names aren't links yet;** the per-agency page is Module 35.
+- **Lists are capped** (25 to review, 10 overdue, 50 renewals, 100 agencies), always with the true totals.
+- **No "create a renewal request" button** beside a renewal. Renewal requests are sent like any other request for now.
+- **On a phone, the agency table scrolls sideways inside its card.**
+
+**Verified:**
+
+`npx tsc --noEmit` clean. New `script/verify-desk-am-dashboard.ts`: **42 passed**.
+- **The wording helpers.**
+- **Every count,** with requests that must not count: waiting on a carrier while late, completed late work, another AM's agency, an agency with The Desk off.
+- **The order and contents of each list.**
+- **Each agency's row.**
+- **Renewals:** today and the window's last day included; yesterday, cancelled, inactive accounts, no date and other agencies left out; a renewal request shown and a cancelled one ignored; 30 and 90-day windows; anything else refused.
+- **The other AM and an Operations Manager seeing their own.**
+- **A VA and an agency admin refused and logged.**
+- **The real route.**
+- **Test data:** run against the shared database with temporary agencies, people, accounts, policies and requests, all removed at the end.
+
+Deliberate faults: **26 of 26 caught**. Each fault was judged by a finished run, and the code was confirmed restored afterwards.
+
+Browser run in Chrome: **21 checks passed**, covering:
+- an Account Manager's counts, lists, agency order and renewals;
+- switching to 90 days and reloading;
+- opening requests from the lists;
+- a VA's own overview;
+- a phone width.
+
+Screenshots were viewed. Nothing was left behind.
+
+Module 1–33 suites re-run: all 32 earlier Desk suites passed, 0 failed (**2,967 in total** with this module), plus the text-matching (11) and user-responses (13) suites. No code changed after this run.
+
+**Module 35 — AM per-agency view (✅ complete, 11 Nov 2026)**
+
+**Delivered:**
+
+- **Agencies page** (`/desk-ops/agencies`), which replaces the placeholder. It lists the agencies an Account Manager looks after as primary or backup (every Desk agency for an Operations Manager). Each row shows:
+  - the plan, and whether you are the backup;
+  - both Account Managers;
+  - active accounts against the accounts the plan includes (amber when over);
+  - open, overdue, waiting on the agency and to review.
+- **One agency's page** (`/desk-ops/agencies/{id}`), opened from that list or from the agency names on the Overview (Module 34):
+  - **Header:** your role ("You are the primary / backup Account Manager") and when the agency joined The Desk.
+  - **Counts:** open, overdue, due soon, waiting on them, to review, and renewals in the next 90 days. These match the Overview exactly, because both now use one set of filters (`workFilters` in `lib/desk/manager-dashboard.ts`).
+  - **Work:** tabs for Open (due soonest first), Overdue, Waiting on agency and Completed (latest first), with search and pages. Each request shows its stage, priority, who has it and its due date, and opens in the task workspace. The tab, account, search and page are kept in the address.
+  - **Accounts:** active or inactive, searchable, each with its policies and open requests. "2 open requests" (or "Its work") narrows the work list to that account; a chip shows which account, and × clears it.
+  - **About:** both AMs (marking anyone inactive), the plan and since when, the AMS, the pods that serve the agency (whole pod, or how many named people), and contact details.
+  - **Instructions for Desk staff,** with line breaks kept.
+  - **Where the agency's logins are kept** in the password manager. A pointer only: "Logins are never kept in The Desk" (Q4).
+  - **Renewals in the next 90 days,** with any renewal request and its stage.
+- **Server:**
+  - `GET /api/desk/agencies` and `GET /api/desk/agencies/{id}` (`lib/desk/agency-view.ts`).
+  - The work and accounts lists reuse the existing task and accounts APIs with `?agencyId=`, under the same access rules.
+  - New audit action `agency.viewed`.
+
+**Design decisions:**
+
+- **Managers only.** An Account Manager sees only agencies they are the primary or backup AM for, and only while The Desk is on for that agency. Anything else (another AM's agency, an agency with The Desk off, an id that doesn't exist) gets the same "not found" and is logged as refused. VAs and agency users are refused the same way. The Agencies menu item is for managers only, and both pages check that on the server too.
+- **Opening an agency is logged.** The page shows staff instructions and where logins are kept. The log records who opened which agency, not what was on the page.
+- **No prices.** The plan's name, start date and included accounts are shown; what the agency pays stays in Desk setup (Insurigence admins only).
+- **The renewal window here is fixed at 90 days,** the Overview's longest, so an AM sees what is coming up for this agency.
+
+**Issues:**
+
+- The deliberate faults found three gaps in the tests: an Operations Manager opening an agency with The Desk off, another agency's renewals appearing on this page, and the plan override on this page. All three are now tested and caught.
+- One planned fault (adding prices to the database query) could not fail any test: the page lists chosen fields, so the price never reached it. It was replaced with a real fault.
+
+**Not done or limited:**
+
+- **Account names aren't links.** A staff page for one account isn't built; for now an account narrows the work list.
+- **No this-month usage against plan allowances here;** that is Module 43.
+- **Nothing on this page is editable.** Desk setup stays with Insurigence admins.
+- **Messages with the agency** come in Module 36.
+
+**Verified:**
+
+`npx tsc --noEmit` clean. New `script/verify-desk-agency-view.ts`: **64 passed**.
+- **The work tabs and address.**
+- **The agency list:** primary and backup, roles, AM names, plan and included accounts (with an override), and the same figures as the Overview. An Operations Manager sees every Desk agency, and no prices are sent.
+- **One agency's summary:** setup, pods, counts, its own renewals and override, contact. The view is logged without the instructions or the vault pointer.
+- **Refusals,** each logged: another AM's agency, The Desk off (for an AM and for an Operations Manager), no such agency, a malformed id, a VA, an agency admin.
+- **The work and accounts lists the page reads,** through the real routes, including nothing from another AM's agency.
+- **The real routes.**
+- **Test data:** run against the shared database with temporary agencies, people, a plan, pods, accounts, policies and requests, all removed at the end.
+
+Deliberate faults: **24 of 24 caught**. Each fault was judged by a finished run, and the code was confirmed restored afterwards.
+
+Browser run in Chrome: **27 checks passed**, covering:
+- the agency list;
+- one agency's counts, About, instructions, logins pointer and renewals;
+- the work tabs and a reload;
+- narrowing to one account and clearing it;
+- finding active and inactive accounts;
+- opening a request;
+- opening an agency from the Overview;
+- another AM's agency refused;
+- a VA sent back to their Overview;
+- a phone width.
+
+Screenshots were viewed. Nothing was left behind. After the browser run, one colour was changed (the account count turns amber when over the plan, as on the list); the full regression below includes it.
+
+Module 1–34 suites re-run: all 33 earlier Desk suites passed, 0 failed (**3,031 in total** with this module), plus the text-matching (11) and user-responses (13) suites. No code changed after this run.
+
+**Module 36 — Messaging (✅ complete, 12 Nov 2026)**
+
+**Delivered:**
+
+- **The agency's Messages page** (`/desk/messages`), which replaces the placeholder:
+  - **Its conversation with its Desk team** opens on arrival, oldest first. The agency's own messages are on the right; its Account Manager's on the left, by name.
+  - **Writing:** a box to write in (Ctrl+Enter sends), with the reminder never to send passwords or carrier logins.
+  - **Producers** (own accounts only) are told the conversation is for the agency's owners and admins, and to add a note on a request's page instead.
+- **The Desk managers' Messages page** (`/desk-ops/messages`):
+  - **Agency list:** one conversation per agency they look after, with unread conversations first (with a count), then the most recent, each with its latest message.
+  - **Opening a conversation** marks it read, and the address names the agency.
+  - **"Message this agency"** on the agency page (Module 35) opens its conversation.
+- **Conversations on requests,** beside the conversation on both pages: the latest shared note on each request the person can open, newest first.
+  - **Each shows** who wrote it (to the agency, the Desk is "Your Desk team"; staff see the person) and links to the request (the agency's request page, or the staff workspace).
+  - **A request's conversation is its shared notes** (Module 28). This only gathers them in one place.
+- **Data:** new `DeskMessage` and `DeskMessageRead` collections (`prisma db push` created both, with their indexes), so each person has their own unread count.
+- **Server:** `GET /api/desk/messages` (the inbox) and `GET` / `POST /api/desk/messages/{agencyId}` (`lib/desk/messages.ts`). New audit actions: `message.sent` and `message.viewed`.
+
+**Design decisions:**
+
+- **Who takes part** in an agency's conversation:
+  - **On the agency side:** its owners, admins and anyone with its whole book.
+  - **On the Desk side:** its primary and backup Account Managers, and Operations Managers.
+  - **Not:** producers limited to their own accounts (the conversation can be about any account: need-to-know, Q4), or VAs, who work from requests.
+  - **Anyone else** (another agency, another AM, an agency with The Desk off) gets "not found", and the attempt is logged.
+- **Credentials are refused.** A message that looks like it holds a password, PIN or API key is refused with the reason and isn't stored, for the agency and for staff alike (Q4). The same check guards agency instructions (Module 5).
+- **Logged without the text.** Sending is logged with its length and side; opening a conversation is logged with how many messages were shown. A message and its log entry are saved together, so a message that can't be logged isn't sent.
+- **Unread means messages from the other side** since you last opened the conversation. Sending a message counts as having read it. A colleague's message on your own side isn't "unread" for you.
+
+**Issues:**
+
+- The deliberate faults found two gaps in the tests: an Operations Manager reaching an agency with The Desk off, and internal notes on the request list for staff (who can read them elsewhere). Both are now tested and caught.
+- The screenshots showed the password warning staying after the draft was cleared. It now clears as soon as the draft is edited.
+- One deliberate-fault run was interrupted when the session ended. It had finished all faults and restored the code; no test data was left.
+
+**Not done or limited:**
+
+- **No email or live alerts for new messages.** Emails are Module 37; the page shows new messages when opened or after sending.
+- **No unread count in the sidebar yet.**
+- **Messages can't be edited, deleted or carry attachments.** Files belong on a request.
+- **A conversation shows the latest 200 messages,** with the total.
+- **Conversations on requests list the latest 15 requests.**
+
+**Verified:**
+
+`npx tsc --noEmit` clean. New `script/verify-desk-messages.ts`: **58 passed**.
+- **Wording:** snippets and times.
+- **Who takes part:** the owner, primary and backup AMs and an Operations Manager. Refused and logged: a producer, another agency's owner, another AM, a VA, and an agency with The Desk off (for its AM and for an Operations Manager).
+- **Sending:** trimming, empty and length limits, and passwords refused for both sides and not stored. The log has no text.
+- **Unread:** counts, read marks per person, and the inbox order (unread first, even when another conversation is newer).
+- **Conversations on requests:** one per request, shared notes only (including for staff), the Desk as one team to the agency, a producer limited to their accounts, and nothing for another AM.
+- **The real routes.**
+- **Test data:** run against the shared database with temporary agencies, people, requests and messages, all removed at the end.
+
+Deliberate faults: **28 of 28 caught**. Each fault was judged by a finished run, and the code was confirmed restored afterwards.
+
+Browser run in Chrome: **24 checks passed**, covering:
+- an AM's inbox order and unread count, opening and reading a conversation, replying, and a password refused with the draft kept to fix;
+- conversations on requests;
+- "Message this agency";
+- the owner's conversation opening by itself, replying, and the Desk shown as one team;
+- a producer told where to ask, and seeing only their own request;
+- the owner's reply showing as unread for the AM;
+- phone widths.
+
+Screenshots were viewed. Nothing was left behind.
+
+Module 1–35 suites re-run: all 34 earlier Desk suites passed, 0 failed (**3,089 in total** with this module), plus the text-matching (11) and user-responses (13) suites. No code changed after this run.
+
 ### Phase 3 — Task System Core (17 h)
 
 | # | Module | Hours | Change | Status |
@@ -1439,15 +1715,15 @@ Module 1–31 suites re-run: all 30 earlier Desk suites passed, 0 failed (**2,85
 | 30 | Task documents: upload / download / remove on R2, internal vs agency-visible, sensitivity category, every view and download logged | 2.5 | ✏️ Q4 | ✅ Done |
 | 31 | Pod queue for VAs: queue, filters, pick up / assign, "My tasks" | 3.0 | | ✅ Done |
 | 32 | Internal task workspace: status and waiting reason, internal and agency notes, history timeline, documents, reassign, complexity and billing review | 3.0 | | ✅ Done |
-| 33 | Agency tracker: simplified statuses, "Needs your attention", completed work, agency task view | 3.0 | | ⬜ |
+| 33 | Agency tracker: simplified statuses, "Needs your attention", completed work, agency task view | 3.0 | | ✅ Done |
 
 ### Phase 4 — Account Manager Portal & Communication (11 h)
 
 | # | Module | Hours | Change | Status |
 |---|---|---:|---|---|
-| 34 | AM dashboard: assigned agencies, open requests, overdue, items to review, upcoming renewals from policy expirations | 3.0 | | ⬜ |
-| 35 | AM per-agency view: drill-down into one agency's accounts and work | 2.5 | | ⬜ |
-| 36 | Messaging: agency ↔ AM general thread, plus per-task conversation | 3.0 | | ⬜ |
+| 34 | AM dashboard: assigned agencies, open requests, overdue, items to review, upcoming renewals from policy expirations | 3.0 | | ✅ Done |
+| 35 | AM per-agency view: drill-down into one agency's accounts and work | 2.5 | | ✅ Done |
+| 36 | Messaging: agency ↔ AM general thread, plus per-task conversation | 3.0 | | ✅ Done |
 | 37 | Email notifications: new request, assigned, needs attention, completed | 2.5 | | ⬜ |
 
 ### Phase 5 — Subtasks, Service Levels & Oversight (17 h)
@@ -1484,7 +1760,7 @@ Module 1–31 suites re-run: all 30 earlier Desk suites passed, 0 failed (**2,85
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–32 complete (87.0 h). **38.5 h remaining.**
+**Progress:** Modules 1–36 complete (98.5 h). **27.0 h remaining.**
 
 The client's answers added **33 hours** (see Section 9), approximately:
 

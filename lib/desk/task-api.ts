@@ -18,7 +18,7 @@ import { literal } from './literal-match';
 import { TASK_TYPE_LABELS } from './service-levels';
 import { AGENCY_STATUS_LABELS, STATUS_LABELS, addTaskNote, agencyStatus, agencyTaskView, assignTask, changeTaskStatus, createTask, reviewTask, type AgencyStatus } from './tasks';
 import { statusMoves } from './task-statuses';
-import { CLOSED_STATUSES, UNASSIGNED, UNROUTED } from './task-filters';
+import { CLOSED_STATUSES, TOP_LEVEL, UNASSIGNED, UNROUTED } from './task-filters';
 import { taskDocumentsFor } from './task-documents';
 
 type Db = PrismaClient;
@@ -105,6 +105,7 @@ const REASON_FOR_AGENCY: readonly AgencyStatus[] = ['NEEDS_ATTENTION', 'CANCELLE
 function agencyEventView(event: TaskEvent, agencyId: string, actors: Map<string, Actor>) {
   const actor = event.actorId ? actors.get(event.actorId) : undefined;
   const status = event.toStatus ? agencyStatus(event.toStatus) : null;
+  const fromStatus = event.fromStatus ? agencyStatus(event.fromStatus) : null;
   const isStatusChange = event.kind === 'STATUS_CHANGED';
   return {
     id: event.id,
@@ -114,6 +115,8 @@ function agencyEventView(event: TaskEvent, agencyId: string, actors: Map<string,
     body: isStatusChange && !(status && REASON_FOR_AGENCY.includes(status)) ? null : event.body,
     status,
     statusLabel: status ? AGENCY_STATUS_LABELS[status] : null,
+    fromStatus,
+    fromStatusLabel: fromStatus ? AGENCY_STATUS_LABELS[fromStatus] : null,
     createdAt: event.createdAt,
   };
 }
@@ -196,6 +199,8 @@ export function listWhere(scope: DeskScope, opts: TaskListOptions, now: Date): P
   const priorities = listOf<TaskPriority>(opts.priority, TaskPriority, 'priority');
   const insuredId = idFilter(opts.insuredId, 'account');
   const parts: Prisma.TaskWhereInput[] = [taskWhere(scope)];
+  // To an agency a subtask is part of its parent's request, not a request of its own.
+  if (agency) parts.push(TOP_LEVEL);
   if (statuses.length) parts.push({ status: { in: statuses } });
   if (types.length) parts.push({ type: { in: types } });
   if (priorities.length) parts.push({ priority: { in: priorities } });
@@ -259,15 +264,21 @@ export async function listTasks(db: Db, scope: DeskScope, opts: TaskListOptions 
   const page = Math.max(1, Math.trunc(opts.page ?? 1) || 1);
   const skip = (page - 1) * pageSize;
   // Due dates and activity times are internal, so an agency's list can't be ordered by them.
-  const sort = scope.kind === 'AGENCY' ? 'newest' : opts.sort ?? 'newest';
-  if (!['newest', 'activity', 'due'].includes(sort)) throw bad('Choose a valid sort order.');
+  const sort = scope.kind === 'AGENCY' ? (opts.sort === 'completed' ? 'completed' : 'newest') : opts.sort ?? 'newest';
+  if (!['newest', 'activity', 'due', 'completed'].includes(sort)) throw bad('Choose a valid sort order.');
+  const ORDER: Record<string, Prisma.TaskOrderByWithRelationInput[]> = {
+    newest: [{ createdAt: 'desc' }, { id: 'desc' }],
+    activity: [{ lastActivityAt: 'desc' }, { id: 'desc' }],
+    // Never-completed requests sort last (missing values are lowest in MongoDB).
+    completed: [{ completedAt: 'desc' }, { id: 'desc' }],
+  };
   const [total, rows] = await Promise.all([
     db.task.count({ where }),
     sort === 'due'
       ? pageByDueDate(db, where, skip, pageSize)
       : db.task.findMany({
           where, include: RELATED, skip, take: pageSize,
-          orderBy: sort === 'activity' ? [{ lastActivityAt: 'desc' }, { id: 'desc' }] : [{ createdAt: 'desc' }, { id: 'desc' }],
+          orderBy: ORDER[sort],
         }),
   ]);
   return {
