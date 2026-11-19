@@ -311,6 +311,7 @@ const MAP = { name: 'Client Name', externalRef: 'Client Code', addressLine1: 'Ad
     const inA = { agencyId: A.id };
     const countsA = async () => [await prisma.insuredAccount.count({ where: inA }), await prisma.policy.count({ where: inA }), await prisma.insuredAssignment.count({ where: inA })].join();
     const wipeBook = async (agencyId = A.id) => {
+      await prisma.task.updateMany({ where: { agencyId }, data: { parentTaskId: null } });
       await prisma.task.deleteMany({ where: { agencyId } });
       await prisma.insuredAssignment.deleteMany({ where: { agencyId } });
       await prisma.policy.deleteMany({ where: { agencyId } });

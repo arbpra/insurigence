@@ -1,6 +1,21 @@
 /**
- * Messaging limits and wording. Pure — safe for server and browser.
+ * Messaging limits, wording and who takes part. Pure — safe for server and browser.
  */
+import type { DeskScope } from './access';
+
+/**
+ * Which side of an agency's general conversation this person is on, or null
+ * if they don't take part: the agency's owners, admins and anyone with its
+ * whole book; its Account Managers; Operations Managers (lib/desk/messages.ts).
+ */
+export function sideFor(scope: DeskScope, agencyId: string): 'AGENCY' | 'DESK' | null {
+  switch (scope.kind) {
+    case 'AGENCY': return scope.agencyId === agencyId && scope.book === 'ALL' ? 'AGENCY' : null;
+    case 'ACCOUNT_MANAGER': return scope.agencyIds.includes(agencyId) ? 'DESK' : null;
+    case 'PLATFORM': return 'DESK';
+    default: return null;
+  }
+}
 
 export const MESSAGE_MAX = 4_000;
 /** The latest messages shown in a conversation; the total is always given. */

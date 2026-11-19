@@ -31,6 +31,7 @@ async function wipe() {
   const agencyId = { in: cleanup.agencyIds };
   const podId = { in: cleanup.podIds };
   await prisma.taskEvent.deleteMany({ where: { agencyId } });
+  await prisma.task.updateMany({ where: { agencyId }, data: { parentTaskId: null } });
   await prisma.task.deleteMany({ where: { agencyId } });
   await prisma.insuredAccount.deleteMany({ where: { agencyId } });
   await prisma.taskRoutingRule.deleteMany({ where: { id: { in: cleanup.ruleIds } } });

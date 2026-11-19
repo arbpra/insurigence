@@ -26,6 +26,7 @@ let ref = 940_000_000 + Math.floor(Math.random() * 1_000_000);
 async function wipe() {
   if (cleanup.agencyId) {
     await prisma.taskDocument.deleteMany({ where: { agencyId: cleanup.agencyId } });
+    await prisma.task.updateMany({ where: { agencyId: cleanup.agencyId }, data: { parentTaskId: null } });
     await prisma.task.deleteMany({ where: { agencyId: cleanup.agencyId } });
     await prisma.deskAuditLog.deleteMany({ where: { agencyId: cleanup.agencyId } });
     await prisma.agency.deleteMany({ where: { id: cleanup.agencyId } });

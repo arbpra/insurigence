@@ -1,5 +1,5 @@
-import { DeskPage } from '@/components/desk/DeskAreaLayout';
+import { FollowUpEditor } from '@/components/desk/admin/FollowUpEditor';
 
 export default function Page() {
-  return <DeskPage area="ADMIN" href="/super-admin/desk/follow-ups" />;
+  return <FollowUpEditor />;
 }

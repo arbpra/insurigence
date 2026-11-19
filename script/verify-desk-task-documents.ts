@@ -40,6 +40,7 @@ async function wipe() {
   const agencyId = { in: cleanup.agencyIds };
   await prisma.taskDocument.deleteMany({ where: { agencyId } });
   await prisma.taskEvent.deleteMany({ where: { agencyId } });
+  await prisma.task.updateMany({ where: { agencyId }, data: { parentTaskId: null } });
   await prisma.task.deleteMany({ where: { agencyId } });
   await prisma.insuredAssignment.deleteMany({ where: { agencyId } });
   await prisma.insuredAccount.deleteMany({ where: { agencyId } });

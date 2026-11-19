@@ -26,6 +26,7 @@ async function wipe() {
   const plans = await prisma.agencyDeskPlan.findMany({ where: { agencyId }, select: { id: true } });
   await prisma.agencyAllowanceOverride.deleteMany({ where: { agencyDeskPlanId: { in: plans.map((p) => p.id) } } });
   await prisma.agencyDeskPlan.deleteMany({ where: { agencyId } });
+  await prisma.task.updateMany({ where: { agencyId }, data: { parentTaskId: null } });
   await prisma.task.deleteMany({ where: { agencyId } });
   await prisma.insuredAccount.deleteMany({ where: { agencyId } });
   await prisma.agencyDeskAssignment.deleteMany({ where: { agencyId } });

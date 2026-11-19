@@ -11,5 +11,7 @@ export default async function Page({ params }: Props) {
   const access = await deskPageAccess('OPS', '/desk-ops/my-tasks');
   if (!access) return null;
   const { id } = await params;
-  return <TaskWorkspace taskId={id} userId={access.user.id} />;
+  // Keyed by request, so following a link between a request and its subtask
+  // starts fresh: no notice, open form or old detail carried across.
+  return <TaskWorkspace key={id} taskId={id} userId={access.user.id} />;
 }

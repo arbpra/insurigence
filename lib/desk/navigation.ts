@@ -74,7 +74,7 @@ export const DESK_NAV: Record<DeskArea, readonly DeskNavItem[]> = {
     { label: 'Pods', href: '/super-admin/desk/pods', icon: 'layers', module: 17, summary: 'Pods, their members, agency authorization and VA permissions.' },
     { label: 'Routing & targets', href: '/super-admin/desk/routing', icon: 'route', module: 18, summary: 'Where each request type goes and its service-level targets.' },
     { label: 'Business calendar', href: '/super-admin/desk/calendar', icon: 'calendar', module: 19, summary: 'Business hours, time zone and holidays.' },
-    { label: 'Follow-up rules', href: '/super-admin/desk/follow-ups', icon: 'repeat', module: 39, summary: 'Work created automatically when a task completes.' },
+    { label: 'Follow-up rules', href: '/super-admin/desk/follow-ups', icon: 'repeat', module: 39, summary: 'Follow-up work created automatically when a request is completed.' },
   ],
 };
 

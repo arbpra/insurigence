@@ -34,6 +34,7 @@ const read = (p: string) => readFileSync(p, 'utf8');
 
 async function wipe() {
   const agencyId = { in: cleanup.agencyIds };
+  await prisma.task.updateMany({ where: { agencyId }, data: { parentTaskId: null } });
   await prisma.task.deleteMany({ where: { agencyId } });
   await prisma.insuredAssignment.deleteMany({ where: { agencyId } });
   await prisma.insuredAccount.deleteMany({ where: { agencyId } });

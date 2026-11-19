@@ -39,6 +39,7 @@ async function wipe() {
   const agencyId = { in: cleanup.agencyIds };
   await prisma.serviceLevelTarget.deleteMany({ where: { agencyId } });
   await prisma.taskEvent.deleteMany({ where: { agencyId } });
+  await prisma.task.updateMany({ where: { agencyId }, data: { parentTaskId: null } });
   await prisma.task.deleteMany({ where: { agencyId } });
   await prisma.agencyPodAccess.deleteMany({ where: { OR: [{ agencyId }, { podId: { in: cleanup.podIds } }] } });
   await prisma.agencyDeskAssignment.deleteMany({ where: { agencyId } });
@@ -208,7 +209,7 @@ function rules() {
     console.log('The screens');
     const page = read('app/(desk)/desk-ops/tasks/[id]/page.tsx');
     const screen = read('app/components/desk/workspace/TaskWorkspace.tsx');
-    ok('a page of the operations area, checked on the server', page.includes("deskPageAccess('OPS', '/desk-ops/my-tasks')") && page.includes('<TaskWorkspace taskId={id} userId={access.user.id} />'));
+    ok('a page of the operations area, checked on the server', page.includes("deskPageAccess('OPS', '/desk-ops/my-tasks')") && page.includes('<TaskWorkspace key={id} taskId={id} userId={access.user.id} />'));
     ok('queue and My tasks link to it', read('app/components/desk/queue/TaskQueue.tsx').includes('href={`/desk-ops/tasks/${task.id}`}'));
     ok('only the moves the server allows are offered', screen.includes('p.statusMoves.map((to)'));
     ok('notes are internal unless shared', screen.includes("note.shared ? 'AGENCY' : 'INTERNAL'") && screen.includes("useState({ body: '', shared: false })"));

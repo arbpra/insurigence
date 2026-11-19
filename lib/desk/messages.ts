@@ -21,7 +21,8 @@ import type { DeskMessageSide, PrismaClient } from '@prisma/client';
 import { DeskAccessError, isObjectId, taskEventWhere, type DeskScope, type GuardContext } from './access';
 import { recordAudit } from './audit';
 import { looksLikeCredential } from './profile';
-import { MESSAGE_MAX, THREAD_LIMIT, CONVERSATIONS_LIMIT, snippet } from './message-view';
+import { MESSAGE_MAX, THREAD_LIMIT, CONVERSATIONS_LIMIT, sideFor, snippet } from './message-view';
+import { notifyMessage } from './notifications';
 
 type Db = PrismaClient;
 const TX_OPTIONS = { timeout: 20_000, maxWait: 10_000 };
@@ -29,16 +30,6 @@ const TX_OPTIONS = { timeout: 20_000, maxWait: 10_000 };
 const PERSON = { id: true, firstName: true, lastName: true, email: true, agencyId: true } as const;
 type Person = { id: string; firstName: string | null; lastName: string | null; email: string; agencyId: string | null };
 const nameOf = (p: Person) => [p.firstName, p.lastName].filter(Boolean).join(' ') || p.email;
-
-/** May this person take part in this agency's general conversation? */
-function sideFor(scope: DeskScope, agencyId: string): DeskMessageSide | null {
-  switch (scope.kind) {
-    case 'AGENCY': return scope.agencyId === agencyId && scope.book === 'ALL' ? 'AGENCY' : null;
-    case 'ACCOUNT_MANAGER': return scope.agencyIds.includes(agencyId) ? 'DESK' : null;
-    case 'PLATFORM': return 'DESK';
-    default: return null;
-  }
-}
 
 async function refuse(db: Db, scope: DeskScope, agencyId: string | null, op: string, ctx: GuardContext): Promise<never> {
   await recordAudit(db, {
@@ -200,5 +191,7 @@ export async function sendMessage(db: Db, scope: DeskScope, agencyId: string, in
     });
     return created;
   }, TX_OPTIONS);
+  // The other side is emailed, once until they open the conversation; this never fails the send.
+  await notifyMessage(db, { id: message.id, agencyId: agency.id, side, authorId: scope.userId });
   return { id: message.id, side, mine: true, body, at: message.createdAt };
 }

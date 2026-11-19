@@ -16,7 +16,7 @@ import {
   type PrismaClient, type Task, type TaskStatus, type DeskVisibility,
 } from '@prisma/client';
 import { recordAudit } from './audit';
-import { DeskAccessError, getTaskForScope, resolveDeskScope, resolveSubmission, taskWhere, type DeskScope } from './access';
+import { DeskAccessError, getTaskForScope, isObjectId, resolveDeskScope, resolveSubmission, taskWhere, type DeskScope } from './access';
 import { defaultBilling } from './billing';
 import { completionPeriod, decideBilling, giveBack, type BillingDecision } from './billing-capture';
 import {
@@ -24,7 +24,9 @@ import {
 } from './business-time';
 import { nextTaskReference } from './sequence';
 import { pickServiceLevelTarget, targetSnapshot } from './service-levels';
-import { UNASSIGNED } from './task-filters';
+import { NOT_FOLLOW_UP, UNASSIGNED, UNROUTED } from './task-filters';
+import { returnToQueue } from './task-release';
+import { followUpTitle } from './follow-ups';
 import { agencyMaySend } from './request-form';
 import { AGENCY_STATUS_LABELS, NEEDS_REASON, STATUS_LABELS, WAITING_STATUSES, agencyStatus, canTransition } from './task-statuses';
 
@@ -40,6 +42,9 @@ const conflict = (message: string) => new DeskAccessError(409, message);
 const forbidden = (message: string) => new DeskAccessError(403, message);
 
 const CHANGED_ELSEWHERE = 'The task was changed by someone else. Refresh and try again.';
+/** The parent completion rule: a request is complete only when all its subtasks are closed. */
+const openSubtasksError = (n: number) =>
+  new DeskAccessError(409, `Finish or cancel ${n === 1 ? 'its open subtask' : `its ${n} open subtasks`} first.`, 'OPEN_SUBTASKS');
 
 /**
  * Runs the change, its timeline event and its audit entry atomically. When
@@ -139,8 +144,45 @@ export async function createTask(db: Db, scope: DeskScope, input: CreateTaskInpu
   const complexity = (input.complexity ?? 'STANDARD') as TaskComplexity;
 
   const { agencyId, insuredId, policyId } = await resolveSubmission(db, scope, input, ctx);
+  return insertTask(db, scope, {
+    agencyId, insuredId, policyId, type, title, description, complexity,
+    priority: (input.priority ?? null) as TaskPriority | null, parent: null,
+  }, ctx);
+}
 
-  const [rule, desk, targets, policy, calendar] = await Promise.all([
+interface NewTask {
+  agencyId: string; insuredId: string | null; policyId: string | null;
+  type: TaskType; title: string; description: string | null; complexity: TaskComplexity;
+  priority: TaskPriority | null;
+  /** Set for a subtask: it is worked within its parent's request. */
+  parent: Task | null;
+  /** Set for a follow-up (a subtask made by a rule when its request was completed). */
+  followUp?: { ruleId: string; podId: string | null; billable: boolean } | null;
+}
+
+type PreparedTask = Awaited<ReturnType<typeof prepareTask>>;
+
+/**
+ * Routes, targets and saves a new task (or subtask), with its history and
+ * audit entry. A subtask goes to the pod for its type, else its parent's;
+ * keeps its parent's need-to-know restriction; and is
+ * non-billable unless a manager decides otherwise, being part of the parent's
+ * service. The parent's history records it, and the parent is touched in the
+ * same transaction, so a subtask can't slip in while the parent is closing.
+ */
+async function insertTask(db: Db, scope: DeskScope, input: NewTask, ctx: Ctx): Promise<Task> {
+  const prepared = await prepareTask(db, input);
+  return inTransaction(db, (tx) => writeTask(tx, scope, prepared, ctx));
+}
+
+/**
+ * Everything read before a new task is saved: its routing, target, Account
+ * Manager and reference number. Kept apart from the save so a completion can
+ * write its follow-ups in its own transaction.
+ */
+async function prepareTask(db: Db, input: NewTask) {
+  const { agencyId, policyId, type, complexity, parent, followUp } = input;
+  const [rule, desk, targets, policy, calendar, rulePod] = await Promise.all([
     db.taskRoutingRule.findFirst({ where: { taskType: type, isActive: true, pod: { isActive: true } }, select: { podId: true, defaultPriority: true } }),
     db.agencyDeskAssignment.findUnique({
       where: { agencyId },
@@ -149,8 +191,9 @@ export async function createTask(db: Db, scope: DeskScope, input: CreateTaskInpu
     db.serviceLevelTarget.findMany({ where: { taskType: type, isActive: true } }),
     policyId ? db.policy.findUnique({ where: { id: policyId }, select: { expirationDate: true } }) : null,
     loadBusinessCalendar(db),
+    followUp?.podId ? db.pod.findUnique({ where: { id: followUp.podId }, select: { isActive: true } }) : null,
   ]);
-  const priority = (input.priority ?? rule?.defaultPriority ?? 'NORMAL') as TaskPriority;
+  const priority = (input.priority ?? parent?.priority ?? rule?.defaultPriority ?? 'NORMAL') as TaskPriority;
 
   const now = new Date();
   const target = pickServiceLevelTarget(targets, { type, complexity, priority, agencyId });
@@ -160,40 +203,135 @@ export async function createTask(db: Db, scope: DeskScope, input: CreateTaskInpu
     : null;
 
   const reference = await nextTaskReference(db);
-  const podId = rule?.podId ?? null;
+  // A follow-up goes to its rule's pod while that pod is on; otherwise like any task of its type.
+  const podId = (rulePod?.isActive ? followUp!.podId : null) ?? rule?.podId ?? parent?.podId ?? null;
   // New work never goes to someone who has left.
-  const amId = [desk?.primaryAm, desk?.backupAm].find((am) => am?.isActive)?.id ?? null;
+  const amId = [desk?.primaryAm, desk?.backupAm].find((am) => am?.isActive)?.id ?? parent?.amId ?? null;
+  return { ...input, priority, now, target, due, slaTarget, reference, podId, amId };
+}
 
-  return inTransaction(db, async (tx) => {
-    const task = await tx.task.create({
+async function writeTask(tx: Prisma.TransactionClient, scope: DeskScope, p: PreparedTask, ctx: Ctx): Promise<Task> {
+  const { agencyId, insuredId, policyId, type, title, description, complexity, parent, followUp, priority, now, target, due, slaTarget, reference, podId, amId } = p;
+  // A follow-up is made as its request completes, inside that save. Any other subtask needs an open request.
+  if (parent && !followUp) {
+    // Only while the parent is still open; this write also makes a simultaneous completion conflict.
+    const { count } = await tx.task.updateMany({
+      where: { id: parent.id, status: { notIn: ['COMPLETED', 'CANCELLED'] } },
+      data: { lastActivityAt: now },
+    });
+    if (count !== 1) throw conflict('The request is closed. Reopen it to add a subtask.');
+  }
+  // A subtask is part of its request's service, so non-billable; a follow-up is unless its rule says billable.
+  const billing = followUp ? (followUp.billable ? {} : { nonBillable: true }) : parent ? { nonBillable: true } : {};
+  const automatic = followUp ? { automatic: 'follow_up', followUpRuleId: followUp.ruleId } : null;
+  const task = await tx.task.create({
+    data: {
+      reference, agencyId, insuredId, policyId, type, title, description, priority, complexity,
+      podId, amId,
+      parentTaskId: parent?.id ?? null,
+      followUpRuleId: followUp?.ruleId ?? null,
+      dueAt: due?.dueAt ?? null,
+      slaDueAt: due?.dueAt ?? null,
+      slaTarget: slaTarget ?? undefined,
+      source: scope.kind === 'AGENCY' ? 'AGENCY' : 'INTERNAL',
+      createdById: scope.userId,
+      restrictedToUserIds: parent?.restrictedToUserIds ?? [],
+      restrictionReason: parent?.restrictionReason ?? null,
+      ...defaultBilling(type),
+      ...billing,
+      lastActivityAt: now,
+    },
+  });
+  await tx.taskEvent.create({
+    // A subtask is the team's own work: its history is internal. A follow-up is made by its rule, not a person.
+    data: {
+      taskId: task.id, agencyId, actorId: followUp ? null : scope.userId, kind: 'CREATED', visibility: parent ? 'INTERNAL' : 'AGENCY', body: title, toStatus: 'NEW',
+      ...(automatic ? { metadata: automatic } : {}),
+    },
+  });
+  if (parent) {
+    await tx.taskEvent.create({
       data: {
-        reference, agencyId, insuredId, policyId, type, title, description, priority, complexity,
-        podId, amId,
-        dueAt: due?.dueAt ?? null,
-        slaDueAt: due?.dueAt ?? null,
-        slaTarget: slaTarget ?? undefined,
-        source: scope.kind === 'AGENCY' ? 'AGENCY' : 'INTERNAL',
-        createdById: scope.userId,
-        restrictedToUserIds: [],
-        ...defaultBilling(type),
-        lastActivityAt: now,
+        taskId: parent.id, agencyId, actorId: followUp ? null : scope.userId, kind: 'SUBTASK_CREATED', body: title,
+        metadata: { subtaskId: task.id, reference, ...(followUp ? { followUp: true } : {}) },
       },
     });
+  }
+  if (podId) {
     await tx.taskEvent.create({
-      data: { taskId: task.id, agencyId, actorId: scope.userId, kind: 'CREATED', visibility: 'AGENCY', body: title, toStatus: 'NEW' },
+      data: { taskId: task.id, agencyId, actorId: null, kind: 'ROUTED', metadata: { podId, automatic: true } },
     });
-    if (podId) {
-      await tx.taskEvent.create({
-        data: { taskId: task.id, agencyId, actorId: null, kind: 'ROUTED', metadata: { podId, automatic: true } },
-      });
-    }
-    await recordAudit(tx, {
-      actor: actorOf(scope), action: 'task.created', entityType: 'Task', entityId: task.id, agencyId,
-      metadata: { reference, type, priority, complexity, podId, amId, insuredId, policyId, targetId: target?.id ?? null, dueAt: due?.dueAt.toISOString() ?? null },
-      ...ctx,
-    });
-    return task;
+  }
+  await recordAudit(tx, {
+    actor: actorOf(scope), action: 'task.created', entityType: 'Task', entityId: task.id, agencyId,
+    metadata: {
+      reference, type, priority, complexity, podId, amId, insuredId, policyId, targetId: target?.id ?? null, dueAt: due?.dueAt.toISOString() ?? null,
+      ...(parent ? { parentTaskId: parent.id, parentReference: parent.reference } : {}),
+      ...(automatic ?? {}),
+    },
+    ...ctx,
   });
+  return task;
+}
+
+/**
+ * The follow-ups a request's completion creates: one per active rule for its
+ * type, unless that rule already made one for this request (it was completed
+ * before, then reopened). Read before the completion is saved; written in its
+ * transaction. Subtasks never trigger rules, so a follow-up can't start a chain.
+ */
+async function prepareFollowUps(db: Db, task: Task): Promise<PreparedTask[]> {
+  if (task.parentTaskId) return [];
+  const rules = await db.taskFollowUpRule.findMany({ where: { triggerType: task.type, triggerStatus: 'COMPLETED', isActive: true }, orderBy: { createdAt: 'asc' } });
+  if (!rules.length) return [];
+  const made = new Set((await db.task.findMany({
+    where: { parentTaskId: task.id, followUpRuleId: { in: rules.map((r) => r.id) } }, select: { followUpRuleId: true },
+  })).map((t) => t.followUpRuleId));
+  const due = rules.filter((r) => !made.has(r.id));
+  if (!due.length) return [];
+  const insuredName = task.insuredId && due.some((r) => r.titleTemplate.includes('{insured}'))
+    ? (await db.insuredAccount.findUnique({ where: { id: task.insuredId }, select: { name: true } }))?.name ?? null
+    : null;
+  return Promise.all(due.map((rule) => prepareTask(db, {
+    agencyId: task.agencyId, insuredId: task.insuredId, policyId: task.policyId,
+    type: rule.createType, title: followUpTitle(rule.titleTemplate, { reference: task.reference, insuredName }),
+    description: null, complexity: 'STANDARD', priority: null, parent: task,
+    followUp: { ruleId: rule.id, podId: rule.podId, billable: rule.billable },
+  })));
+}
+
+// ── Subtasks ──
+
+export interface SubtaskInput {
+  type: string;
+  title: string;
+  description?: string | null;
+  priority?: string | null;
+}
+
+/**
+ * Adds a subtask to an open request: a piece of the work, done by the team
+ * (for example the AMS update after a renewal). Desk staff only: a manager on
+ * any request they can see, a VA on one they hold. One level only. The agency
+ * never sees subtasks; to them it's all one request.
+ */
+export async function createSubtask(db: Db, scope: DeskScope, parentId: string, input: SubtaskInput, ctx: Ctx = {}): Promise<Task> {
+  const parent = await getTaskForScope(db, scope, parentId, ctx);
+  await checkRules(db, scope, parent, { op: 'subtask' }, ctx, async () => {
+    if (!isStaff(scope)) throw forbidden('Subtasks are added by the Desk team.');
+    if (scope.kind === 'VA' && parent.assigneeId !== scope.userId) throw forbidden('Pick up the request before adding a subtask to it.');
+  });
+  if (parent.parentTaskId) throw bad("A subtask can't have subtasks of its own. Add it to the request instead.");
+  if (parent.status === 'COMPLETED' || parent.status === 'CANCELLED') throw conflict('The request is closed. Reopen it to add a subtask.');
+  if (!oneOf(TaskType, input.type)) throw bad('Choose a valid task type.');
+  if (input.priority != null && !oneOf(TaskPriority, input.priority)) throw bad('Choose a valid priority.');
+  const title = cleanText(input.title, 'Title', 200, true)!;
+  const description = cleanText(input.description, 'Details', 10_000, false);
+  return insertTask(db, scope, {
+    agencyId: parent.agencyId, insuredId: parent.insuredId, policyId: parent.policyId,
+    type: input.type as TaskType, title, description, complexity: 'STANDARD',
+    priority: (input.priority ?? null) as TaskPriority | null, parent,
+  }, ctx);
 }
 
 // ── Status ──
@@ -235,6 +373,15 @@ export async function changeTaskStatus(
   if (from === 'COMPLETED' && task.billingStatus === 'BILLED') {
     throw conflict('This work has been invoiced and cannot be reopened. File a new request instead.');
   }
+  if (toStatus === 'COMPLETED') {
+    const open = await db.task.count({ where: { AND: [{ parentTaskId: task.id, status: { notIn: ['COMPLETED', 'CANCELLED'] } }, NOT_FOLLOW_UP] } });
+    if (open) throw openSubtasksError(open);
+  }
+  // A subtask is reopened only within an open request. A follow-up comes after its request, so it may be.
+  if ((from === 'COMPLETED' || from === 'CANCELLED') && task.parentTaskId && !task.followUpRuleId) {
+    const parent = await db.task.findUnique({ where: { id: task.parentTaskId }, select: { reference: true, status: true } });
+    if (parent && (parent.status === 'COMPLETED' || parent.status === 'CANCELLED')) throw conflict(`Request #${parent.reference} is closed. Reopen it first.`);
+  }
   const reason = cleanText(opts.reason, 'Reason', 2_000, NEEDS_REASON.includes(toStatus) || from === 'COMPLETED' || from === 'CANCELLED');
 
   const now = new Date();
@@ -257,6 +404,8 @@ export async function changeTaskStatus(
     Object.assign(data, { billingClass: billing.billingClass, billingStatus: billing.billingStatus, billingPeriod: billing.billingPeriod });
   }
   const reopened = from === 'COMPLETED' && task.billingPeriod ? task : null;
+  // Completing a request starts its follow-ups (Module 39), saved with the completion.
+  const followUps = toStatus === 'COMPLETED' ? await prepareFollowUps(db, task) : [];
   if (reopened) Object.assign(data, { billingClass: null, billingStatus: null, billingPeriod: null });
 
   const agencyFacing = agencyStatus(from) !== agencyStatus(toStatus);
@@ -271,6 +420,29 @@ export async function changeTaskStatus(
       // Only applies if nobody changed the status since it was read.
       const { count } = await tx.task.updateMany({ where: { id: task.id, status: from }, data });
       if (count !== 1) throw conflict(CHANGED_ELSEWHERE);
+      // Counted inside the transaction: a subtask added meanwhile touches this task and conflicts.
+      // Follow-ups aren't part of the request: they don't hold it open and aren't cancelled with it.
+      const openSubtasks = await tx.task.findMany({
+        where: { AND: [{ parentTaskId: task.id, status: { notIn: ['COMPLETED', 'CANCELLED'] } }, NOT_FOLLOW_UP] }, select: { id: true, status: true },
+      });
+      if (toStatus === 'COMPLETED' && openSubtasks.length) {
+        throw openSubtasksError(openSubtasks.length);
+      }
+      if (toStatus === 'CANCELLED') {
+        // Cancelling a request cancels the work left on it.
+        for (const sub of openSubtasks) {
+          const moved = await tx.task.updateMany({ where: { id: sub.id, status: sub.status }, data: { status: 'CANCELLED', cancelledAt: now, lastActivityAt: now } });
+          if (moved.count !== 1) throw conflict(CHANGED_ELSEWHERE);
+          await tx.taskEvent.create({
+            data: {
+              taskId: sub.id, agencyId: task.agencyId, actorId: scope.userId, kind: 'STATUS_CHANGED', visibility: 'INTERNAL',
+              fromStatus: sub.status, toStatus: 'CANCELLED', body: `Request #${task.reference} was cancelled.`, metadata: { automatic: 'parent_cancelled' },
+            },
+          });
+        }
+      }
+      const created: Task[] = [];
+      for (const followUp of followUps) created.push(await writeTask(tx, scope, followUp, ctx));
       await tx.taskEvent.create({
         data: {
           taskId: task.id, agencyId: task.agencyId, actorId: scope.userId, kind: 'STATUS_CHANGED',
@@ -281,7 +453,11 @@ export async function changeTaskStatus(
       });
       await recordAudit(tx, {
         actor: actorOf(scope), action: 'task.status_changed', entityType: 'Task', entityId: task.id, agencyId: task.agencyId,
-        metadata: { reference: task.reference, from, to: toStatus, hasReason: !!reason, ...metadata },
+        metadata: {
+          reference: task.reference, from, to: toStatus, hasReason: !!reason, ...metadata,
+          ...(toStatus === 'CANCELLED' && openSubtasks.length ? { subtasksCancelled: openSubtasks.map((t) => t.id) } : {}),
+          ...(created.length ? { followUpsCreated: created.map((t) => t.id) } : {}),
+        },
         ...ctx,
       });
       return tx.task.findUniqueOrThrow({ where: { id: task.id } });
@@ -392,6 +568,101 @@ export async function assignTask(
       actor: actorOf(scope), action: 'task.assigned', entityType: 'Task', entityId: task.id, agencyId: task.agencyId,
       metadata: { reference: task.reference, from: task.assigneeId ?? null, to: assigneeId },
       ...ctx,
+    });
+    return tx.task.findUniqueOrThrow({ where: { id: task.id } });
+  });
+}
+
+// ── Escalation and moving between pods (Module 40) ──
+
+export const ESCALATION_REASON_MAX = 500;
+
+/**
+ * An Account Manager or Operations Manager flags open work that needs a
+ * manager's attention, with a reason, or clears the flag. The reason is kept
+ * in the internal history's details, which VAs aren't shown (Q4); the audit
+ * entry records the fact, not the reason. The automatic ladder for overdue
+ * work is Module 41.
+ */
+export async function escalateTask(
+  db: Db, scope: DeskScope, taskId: string, input: { escalate: unknown; reason?: unknown }, ctx: Ctx = {}
+): Promise<Task> {
+  const task = await getTaskForScope(db, scope, taskId, ctx);
+  await checkRules(db, scope, task, { op: input.escalate === false ? 'deescalate' : 'escalate' }, ctx, async () => {
+    if (!isManager(scope)) throw forbidden('Only an Account Manager or Operations Manager can escalate work.');
+  });
+  if (typeof input.escalate !== 'boolean') throw bad('Choose to escalate or to clear the escalation.');
+  if (task.status === 'COMPLETED' || task.status === 'CANCELLED') throw conflict('This task is closed.');
+  const escalate = input.escalate;
+  if (escalate && task.escalated) throw conflict('This task is already escalated.');
+  if (!escalate && !task.escalated) throw conflict('This task is not escalated.');
+  const reason = cleanText(input.reason, 'Reason', ESCALATION_REASON_MAX, escalate);
+  const now = new Date();
+
+  return inTransaction(db, async (tx) => {
+    const { count } = await tx.task.updateMany({
+      where: { id: task.id, status: task.status, escalated: task.escalated },
+      data: escalate
+        ? { escalated: true, escalatedAt: now, escalationReason: reason, lastActivityAt: now }
+        : { escalated: false, escalatedAt: null, escalationReason: null, lastActivityAt: now },
+    });
+    if (count !== 1) throw conflict(CHANGED_ELSEWHERE);
+    await tx.taskEvent.create({
+      data: {
+        taskId: task.id, agencyId: task.agencyId, actorId: scope.userId, kind: escalate ? 'ESCALATED' : 'DEESCALATED',
+        metadata: reason ? { reason } : {},
+      },
+    });
+    await recordAudit(tx, {
+      actor: actorOf(scope), action: 'task.escalated', entityType: 'Task', entityId: task.id, agencyId: task.agencyId,
+      metadata: { reference: task.reference, escalated: escalate }, ...ctx,
+    });
+    return tx.task.findUniqueOrThrow({ where: { id: task.id } });
+  });
+}
+
+/**
+ * An Account Manager or Operations Manager moves open work to another pod:
+ * to triage a request no routing rule placed, or to balance the load. If the
+ * person holding it can't see it in its new pod (they aren't authorised for
+ * the agency there), it goes back to that pod's queue, as when someone loses
+ * access. The history records the move.
+ */
+export async function moveTaskToPod(db: Db, scope: DeskScope, taskId: string, podId: unknown, ctx: Ctx = {}): Promise<Task> {
+  const task = await getTaskForScope(db, scope, taskId, ctx);
+  await checkRules(db, scope, task, { op: 'move_pod', from: task.podId ?? null, to: typeof podId === 'string' ? podId : null }, ctx, async () => {
+    if (!isManager(scope)) throw forbidden('Only an Account Manager or Operations Manager can move work to another pod.');
+  });
+  if (!isObjectId(podId)) throw bad('Choose a pod.');
+  if (task.status === 'COMPLETED' || task.status === 'CANCELLED') throw conflict('This task is closed.');
+  if (task.podId === podId) throw conflict('The task is already in this pod.');
+  const [pod, before] = await Promise.all([
+    db.pod.findUnique({ where: { id: podId }, select: { id: true, name: true, isActive: true } }),
+    task.podId ? db.pod.findUnique({ where: { id: task.podId }, select: { name: true } }) : null,
+  ]);
+  if (!pod) throw bad('Choose a pod.');
+  if (!pod.isActive) throw conflict('That pod is switched off.');
+  const holder = task.assigneeId ? await resolveDeskScope(db, task.assigneeId) : null;
+  const now = new Date();
+
+  return inTransaction(db, async (tx) => {
+    const { count } = await tx.task.updateMany({
+      where: { AND: [{ id: task.id, status: task.status, updatedAt: task.updatedAt }, task.podId ? { podId: task.podId } : UNROUTED] },
+      data: { podId, lastActivityAt: now },
+    });
+    if (count !== 1) throw conflict(CHANGED_ELSEWHERE);
+    await tx.taskEvent.create({
+      data: {
+        taskId: task.id, agencyId: task.agencyId, actorId: scope.userId, kind: 'ROUTED',
+        metadata: { podId, from: task.podId ?? null, fromName: before?.name ?? null, toName: pod.name },
+      },
+    });
+    // Checked after the move, inside the save: what the holder could see in the new pod.
+    const keeps = !holder || (await tx.task.count({ where: { AND: [{ id: task.id }, taskWhere(holder)] } })) > 0;
+    if (!keeps) await returnToQueue(tx, [{ id: task.id, agencyId: task.agencyId, status: task.status, assigneeId: task.assigneeId }], scope.userId, 'moved_pod');
+    await recordAudit(tx, {
+      actor: actorOf(scope), action: 'task.routed', entityType: 'Task', entityId: task.id, agencyId: task.agencyId,
+      metadata: { reference: task.reference, from: task.podId ?? null, to: podId, ...(keeps ? {} : { released: task.assigneeId }) }, ...ctx,
     });
     return tx.task.findUniqueOrThrow({ where: { id: task.id } });
   });

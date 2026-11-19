@@ -1196,6 +1196,9 @@ model Task {
   insuredId        String?       @db.ObjectId
   policyId         String?       @db.ObjectId
   parentTaskId     String?       @db.ObjectId
+  /// Set on a follow-up: the rule that created it when its request was completed (Module 39).
+  /// A follow-up comes after its request, so it doesn't hold the request open.
+  followUpRuleId   String?       @db.ObjectId
 
   type             TaskType
   title            String
@@ -1603,6 +1606,43 @@ model DeskMessageRead {
 
   @@unique([agencyId, userId])
   @@index([userId])
+}
+
+/// What a Desk notification email was about (lib/desk/notifications.ts).
+enum DeskNotificationEvent {
+  REQUEST_RECEIVED
+  TASK_ASSIGNED
+  NEEDS_ATTENTION
+  REQUEST_COMPLETED
+  AGENCY_REPLIED
+  MESSAGE_RECEIVED
+}
+
+/// SKIPPED: email isn't configured, so nothing was sent.
+enum DeskNotificationStatus {
+  SENT
+  FAILED
+  SKIPPED
+}
+
+/// One notification email to one person, and whether it went. Holds no
+/// address or request text: the person, what it was about, and the outcome.
+model DeskNotification {
+  id          String                 @id @default(auto()) @map("_id") @db.ObjectId
+  event       DeskNotificationEvent
+  recipientId String                 @db.ObjectId
+  agencyId    String                 @db.ObjectId
+  taskId      String?                @db.ObjectId
+  messageId   String?                @db.ObjectId
+  status      DeskNotificationStatus
+  /// The email provider's reason, when sending failed (no content).
+  error       String?
+  providerId  String?
+  createdAt   DateTime               @default(now())
+
+  @@index([recipientId, createdAt])
+  @@index([taskId])
+  @@index([agencyId, createdAt])
 }
 
 /// Append-only record of every Desk action: creates, changes, views and

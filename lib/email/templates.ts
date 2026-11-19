@@ -366,3 +366,40 @@ ${params.proposalUrl}`;
 
   return { subject: headline, html, text };
 }
+
+/**
+ * A Desk notification (lib/desk/notifications.ts). Deliberately thin: it says
+ * what happened and links to The Desk, where the person signs in to see the
+ * details. No request text, account names, notes or messages are put in an
+ * email (Q4 need-to-know).
+ */
+export function deskNotificationEmail(params: {
+  recipientName?: string | null;
+  headline: string;
+  detail: string;
+  actionUrl: string;
+  actionLabel: string;
+}): { subject: string; html: string; text: string } {
+  const html = layout({
+    title: params.headline,
+    preheader: params.detail,
+    body: `
+    ${params.recipientName ? `<p style="margin:0 0 14px;font-family:${FONT};font-size:15px;color:#334155;line-height:1.65;">Hi ${escapeHtml(params.recipientName)},</p>` : ''}
+    <p style="margin:0 0 22px;font-family:${FONT};font-size:15px;color:#334155;line-height:1.65;">${escapeHtml(params.detail)}</p>
+    ${button(params.actionUrl, params.actionLabel)}
+    <p style="margin:22px 0 0;font-family:${FONT};font-size:13px;color:#64748b;line-height:1.6;">
+      Sign in to The Desk to see the details. For your security, they aren't included in this email.
+    </p>
+  `,
+  });
+
+  const text = `${params.recipientName ? `Hi ${params.recipientName},\n\n` : ''}${params.headline}
+
+${params.detail}
+
+${params.actionLabel}: ${params.actionUrl}
+
+Sign in to The Desk to see the details. For your security, they aren't included in this email.`;
+
+  return { subject: params.headline, html, text };
+}

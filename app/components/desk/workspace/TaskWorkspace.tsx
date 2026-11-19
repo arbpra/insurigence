@@ -3,12 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { DocumentSensitivity, TaskComplexity, TaskPriority, TaskStatus } from '@prisma/client';
-import { COMPLEXITY_LABELS, PRIORITY_LABELS } from '@/lib/desk/service-levels';
+import { COMPLEXITY_LABELS, PRIORITY_LABELS, TASK_TYPE_LABELS } from '@/lib/desk/service-levels';
 import { SERVICE_CATEGORY_LABELS } from '@/lib/desk/billing';
 import { SENSITIVITY_LABELS } from '@/lib/desk/need-to-know';
 import { CATEGORY_HINTS, DOCUMENT_ACCEPT, DOCUMENT_KINDS_TEXT, formatBytes, precheckDocument } from '@/lib/desk/document-files';
 import { STATUS_LABELS, moveLabel, needsReason, reasonPrompt } from '@/lib/desk/task-statuses';
-import { MAX_UNITS, NOTE_MAX, REVIEW_REASON_MAX, eventTitle, reclassifiedLines, reviewBody, type ReviewState, type StaffEvent } from '@/lib/desk/task-workspace';
+import { MAX_UNITS, NOTE_MAX, REVIEW_REASON_MAX, SUBTASK_TITLE_MAX, eventLines, eventTitle, reviewBody, type ReviewState, type StaffEvent } from '@/lib/desk/task-workspace';
 import { PRIORITY_BADGE, dueLabel } from '@/lib/desk/queue-view';
 import { ApiError, api } from '@/components/desk/accounts/account-api';
 
@@ -27,11 +27,18 @@ interface Detail {
   createdAt: string; startedAt: string | null; completedAt: string | null;
   restrictedToUserIds?: string[]; restrictionReason?: string | null;
   billing?: { serviceCategory: keyof typeof SERVICE_CATEGORY_LABELS | null; units: number; nonBillable: boolean; class: string | null; status: string | null; period: string | null };
-  permissions: { statusMoves: TaskStatus[]; pickUp: boolean; release: boolean; assign: boolean; review: boolean; addDocuments: boolean };
+  permissions: { statusMoves: TaskStatus[]; pickUp: boolean; release: boolean; assign: boolean; review: boolean; addDocuments: boolean; addSubtask: boolean; escalate?: boolean; movePod?: boolean };
+  /** For managers: the pods it can be moved to (Module 40). */
+  pods?: { id: string; name: string }[];
+  /** On a request: its subtasks this person can see, and how many are open in all. */
+  subtasks?: Subtask[]; openSubtasks?: number; hiddenSubtasks?: number;
+  /** On a subtask: its request (the title only if this person can open it). */
+  parentRequest?: { id: string | null; reference: number | null; title: string | null; statusLabel: string | null; canOpen: boolean; followUp: boolean };
   documents: Doc[];
   events: StaffEvent[];
   eventsTotal: number;
 }
+interface Subtask { id: string; reference: number; typeLabel: string; title: string; status: TaskStatus; statusLabel: string; assignee: Person; pod: { id: string; name: string } | null; followUp: boolean }
 interface Candidate { id: string; name: string; kind: 'VA' | 'ACCOUNT_MANAGER'; lead: boolean; openTasks: number }
 
 const ACCENT = 'var(--brand-primary, #05314c)';
@@ -42,6 +49,7 @@ const PRIMARY = `${BUTTON} text-white`;
 const SECONDARY = `${BUTTON} border border-slate-300 bg-white text-slate-700`;
 const H2 = 'text-base font-semibold text-slate-900 mb-3';
 const CATEGORIES = Object.keys(SENSITIVITY_LABELS) as DocumentSensitivity[];
+const TYPES = Object.entries(TASK_TYPE_LABELS) as [string, string][];
 
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—');
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' }) : null);
@@ -57,10 +65,13 @@ export function TaskWorkspace({ taskId, userId }: { taskId: string; userId: stri
 
   const [move, setMove] = useState<{ to: TaskStatus; reason: string } | null>(null);
   const [picker, setPicker] = useState<Candidate[] | 'loading' | null>(null);
+  const [escalation, setEscalation] = useState<{ reason: string } | null>(null);
+  const [podPicker, setPodPicker] = useState(false);
   const [note, setNote] = useState({ body: '', shared: false });
   const [upload, setUpload] = useState<{ file: File | null; sensitivity: DocumentSensitivity | ''; shared: boolean }>({ file: null, sensitivity: '', shared: false });
   const fileInput = useRef<HTMLInputElement>(null);
   const [review, setReview] = useState<ReviewState | null>(null);
+  const [subtask, setSubtask] = useState<{ type: string; title: string; description: string } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -100,6 +111,8 @@ export function TaskWorkspace({ taskId, userId }: { taskId: string; userId: stri
     if (saved) {
       setMove(null);
       setPicker(null);
+      setEscalation(null);
+      setPodPicker(false);
       setNotice(done);
     } else {
       setProblem(failure);
@@ -159,6 +172,12 @@ export function TaskWorkspace({ taskId, userId }: { taskId: string; userId: stri
     void act(() => api(`/api/desk/documents/${doc.id}`, { method: 'DELETE' }), `${doc.fileName} removed.`);
   }
 
+  async function addSubtask() {
+    if (!task || !subtask || !subtask.type || !subtask.title.trim()) return;
+    const ok = await act(() => post('subtasks', { type: subtask.type, title: subtask.title, description: subtask.description || null }), `Subtask added to #${task.reference}.`);
+    if (ok) setSubtask(null);
+  }
+
   const reviewCheck = task && review ? reviewBody(task, review) : null;
 
   if (loadError && !task) {
@@ -192,8 +211,22 @@ export function TaskWorkspace({ taskId, userId }: { taskId: string; userId: stri
           <span className="text-slate-600">{COMPLEXITY_LABELS[task.complexity]}</span>
           {/* A closed request's stage already says it all. */}
           {due.tone !== 'closed' && <span className={due.tone === 'overdue' ? 'text-red-700 font-medium' : due.tone === 'soon' ? 'text-amber-700 font-medium' : 'text-slate-600'} data-testid="desk-task-due">{due.text}</span>}
-          {task.escalated && <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 font-medium">Escalated</span>}
+          {task.escalated && <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 font-medium" data-testid="desk-task-escalated">Escalated</span>}
         </div>
+        {task.escalated && task.escalationReason && <p className="text-sm text-red-800 mt-2" data-testid="desk-task-escalation-reason">Escalated: {task.escalationReason}</p>}
+        {task.parentRequest && (
+          <p className="text-sm text-slate-600 mt-2" data-testid="desk-task-parent">
+            {task.parentRequest.followUp ? 'Follow-up to' : 'Subtask of'}{' '}
+            {task.parentRequest.canOpen && task.parentRequest.id ? (
+              <Link href={`/desk-ops/tasks/${task.parentRequest.id}`} className="font-medium hover:underline" style={{ color: ACCENT }} data-testid="desk-task-parent-open">
+                #{task.parentRequest.reference} {task.parentRequest.title}
+              </Link>
+            ) : (
+              <span>request #{task.parentRequest.reference}, handled by another team</span>
+            )}
+            {task.parentRequest.statusLabel && <span className="text-slate-500"> · {task.parentRequest.statusLabel}</span>}
+          </p>
+        )}
       </div>
 
       {notice && <p className="text-sm text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 mb-4" role="status" data-testid="desk-task-notice">{notice}</p>}
@@ -227,6 +260,48 @@ export function TaskWorkspace({ taskId, userId }: { taskId: string; userId: stri
             )}
           </section>
 
+          {task.subtasks && (
+            <section className={CARD} data-testid="desk-task-subtasks">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <h2 className="text-base font-semibold text-slate-900">Subtasks</h2>
+                {p.addSubtask && !subtask && <button type="button" className={SECONDARY} disabled={busy} onClick={() => setSubtask({ type: '', title: '', description: '' })} data-testid="desk-task-subtask-add">Add subtask</button>}
+              </div>
+              {task.subtasks.length === 0 && !task.hiddenSubtasks && <p className="text-sm text-slate-500">None. Add one for a separate piece of the work, such as the AMS update.</p>}
+              {task.subtasks.length > 0 && (
+                <ul className="grid gap-2 list-none p-0">
+                  {task.subtasks.map((st) => (
+                    <li key={st.id} className="border border-slate-200 rounded-lg px-3 py-2 text-sm min-w-0" data-testid="desk-task-subtask" data-status={st.status}>
+                      <Link href={`/desk-ops/tasks/${st.id}`} className="font-medium hover:underline break-words" style={{ color: ACCENT }} data-testid="desk-task-subtask-open">
+                        <span className="text-slate-400 mr-1">#{st.reference}</span>{st.title}
+                      </Link>
+                      {st.followUp && <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-slate-100 text-slate-600" data-testid="desk-task-subtask-followup">Follow-up</span>}
+                      <p className="text-slate-500">{st.typeLabel} · {st.statusLabel} · {st.assignee ? st.assignee.name : 'Nobody yet'}{st.pod ? ` · ${st.pod.name}` : ''}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {!!task.hiddenSubtasks && <p className="text-xs text-slate-500 mt-2" data-testid="desk-task-subtasks-hidden">{task.hiddenSubtasks === 1 ? '1 more subtask is' : `${task.hiddenSubtasks} more subtasks are`} with another team.</p>}
+              {!!task.openSubtasks && task.status !== 'COMPLETED' && task.status !== 'CANCELLED' && (
+                <p className="text-xs text-slate-500 mt-2" data-testid="desk-task-subtasks-rule">The request can be completed once {task.openSubtasks === 1 ? 'its open subtask is' : `its ${task.openSubtasks} open subtasks are`} finished or cancelled.</p>
+              )}
+              {subtask && (
+                <div className="grid gap-2 border-t border-slate-100 pt-3 mt-3" data-testid="desk-task-subtask-form">
+                  <select aria-label="Type" className={INPUT} value={subtask.type} onChange={(e) => setSubtask({ ...subtask, type: e.target.value })} data-testid="desk-task-subtask-type">
+                    <option value="">Choose a type…</option>
+                    {TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                  </select>
+                  <input aria-label="Title" maxLength={SUBTASK_TITLE_MAX} className={INPUT} placeholder="What needs doing" value={subtask.title} onChange={(e) => setSubtask({ ...subtask, title: e.target.value })} data-testid="desk-task-subtask-title" />
+                  <textarea aria-label="Details" rows={2} maxLength={NOTE_MAX} className={INPUT} placeholder="Details (optional)" value={subtask.description} onChange={(e) => setSubtask({ ...subtask, description: e.target.value })} data-testid="desk-task-subtask-details" />
+                  <div className="flex gap-2">
+                    <button type="button" className={PRIMARY} style={{ backgroundColor: ACCENT }} disabled={busy || !subtask.type || !subtask.title.trim()} onClick={() => void addSubtask()} data-testid="desk-task-subtask-save">Add</button>
+                    <button type="button" className={SECONDARY} onClick={() => setSubtask(null)}>Cancel</button>
+                  </div>
+                  <p className="text-xs text-slate-500">Goes to the pod for its type and is non-billable, as part of this request. The agency sees only the request.</p>
+                </div>
+              )}
+            </section>
+          )}
+
           <section className={CARD} data-testid="desk-task-note">
             <h2 className={H2}>Add a note</h2>
             <textarea
@@ -250,7 +325,7 @@ export function TaskWorkspace({ taskId, userId }: { taskId: string; userId: stri
             {task.eventsTotal > task.events.length && <p className="text-xs text-slate-500 mb-2">Showing the latest {task.events.length} of {task.eventsTotal} entries.</p>}
             <ol className="grid gap-3 list-none p-0">
               {events.map((e) => {
-                const lines = e.kind === 'RECLASSIFIED' ? reclassifiedLines(e.details) : [];
+                const lines = eventLines(e);
                 return (
                   <li key={e.id} className={`border-l-2 pl-3 ${e.visibility === 'AGENCY' ? 'border-sky-300' : 'border-slate-200'}`} data-testid="desk-task-event" data-kind={e.kind}>
                     <p className="text-sm text-slate-900 font-medium break-words">{eventTitle(e)}</p>
@@ -276,6 +351,10 @@ export function TaskWorkspace({ taskId, userId }: { taskId: string; userId: stri
               ))}
               {p.assign && <button type="button" className={SECONDARY} disabled={busy} aria-expanded={!!picker} onClick={() => void openPicker()} data-testid="desk-task-assign">{task.assignee ? 'Reassign' : 'Assign'}</button>}
               {p.release && <button type="button" className={SECONDARY} disabled={busy} onClick={() => { if (window.confirm(`Return #${task.reference} to the Pod queue?`)) void act(() => post('assign', { assigneeId: null }), `#${task.reference} is back in the Pod queue.`); }} data-testid="desk-task-release">Release</button>}
+              {p.movePod && <button type="button" className={SECONDARY} disabled={busy} aria-expanded={podPicker} onClick={() => setPodPicker(!podPicker)} data-testid="desk-task-move-pod">Move to another pod</button>}
+              {p.escalate && (task.escalated
+                ? <button type="button" className={SECONDARY} disabled={busy} onClick={() => void act(() => post('escalation', { escalate: false }), `#${task.reference}: escalation cleared.`)} data-testid="desk-task-deescalate">Clear escalation</button>
+                : <button type="button" className={SECONDARY} disabled={busy} aria-expanded={!!escalation} onClick={() => setEscalation(escalation ? null : { reason: '' })} data-testid="desk-task-escalate">Escalate</button>)}
             </div>
             {!p.pickUp && !p.statusMoves.length && !p.assign && !p.release && (
               <p className="text-sm text-slate-500" data-testid="desk-task-no-actions">{task.status === 'COMPLETED' || task.status === 'CANCELLED' ? 'This request is closed.' : 'Someone else is working on this.'}</p>
@@ -285,10 +364,37 @@ export function TaskWorkspace({ taskId, userId }: { taskId: string; userId: stri
               <div className="mt-3 pt-3 border-t border-slate-100" data-testid="desk-task-move-form">
                 <label className="block text-sm text-slate-700 mb-1" htmlFor="desk-task-reason">{reasonPrompt(task.status, move.to)}</label>
                 <textarea id="desk-task-reason" rows={3} maxLength={2000} className={`${INPUT} w-full`} value={move.reason} onChange={(e) => setMove({ ...move, reason: e.target.value })} data-testid="desk-task-move-reason" />
+                {move.to === 'CANCELLED' && !!task.openSubtasks && <p className="text-xs text-amber-800 mt-1" data-testid="desk-task-move-cascade">Its {task.openSubtasks === 1 ? 'open subtask' : `${task.openSubtasks} open subtasks`} will be cancelled too.</p>}
                 <div className="flex gap-2 mt-2">
                   <button type="button" className={PRIMARY} style={{ backgroundColor: ACCENT }} disabled={busy || !move.reason.trim()} onClick={() => void act(() => post('status', { status: move.to, reason: move.reason }), `#${task.reference} is now ${STATUS_LABELS[move.to].toLowerCase()}.`)} data-testid="desk-task-move-confirm">{moveLabel(task.status, move.to)}</button>
                   <button type="button" className={SECONDARY} onClick={() => setMove(null)}>Cancel</button>
                 </div>
+              </div>
+            )}
+
+            {escalation && (
+              <div className="mt-3 pt-3 border-t border-slate-100" data-testid="desk-task-escalate-form">
+                <label className="block text-sm text-slate-700 mb-1" htmlFor="desk-task-escalation-reason">Why does it need a manager&apos;s attention?</label>
+                <textarea id="desk-task-escalation-reason" rows={3} maxLength={500} className={`${INPUT} w-full`} value={escalation.reason} onChange={(e) => setEscalation({ reason: e.target.value })} data-testid="desk-task-escalate-reason" />
+                <p className="text-xs text-slate-500 mt-1">Internal: the agency and VAs don&apos;t see the reason.</p>
+                <div className="flex gap-2 mt-2">
+                  <button type="button" className={PRIMARY} style={{ backgroundColor: ACCENT }} disabled={busy || !escalation.reason.trim()} onClick={() => void act(() => post('escalation', { escalate: true, reason: escalation.reason }), `#${task.reference} escalated.`)} data-testid="desk-task-escalate-confirm">Escalate</button>
+                  <button type="button" className={SECONDARY} onClick={() => setEscalation(null)}>Cancel</button>
+                </div>
+              </div>
+            )}
+
+            {podPicker && (
+              <div className="mt-3 pt-3 border-t border-slate-100" data-testid="desk-task-pod-picker">
+                <ul className="grid gap-2 list-none p-0">
+                  {(task.pods ?? []).filter((pod) => pod.id !== task.pod?.id).map((pod) => (
+                    <li key={pod.id}>
+                      <button type="button" disabled={busy} className="w-full text-left border border-slate-200 rounded-lg px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-60"
+                        onClick={() => void act(() => post('pod', { podId: pod.id }), `#${task.reference} moved to ${pod.name}.`)} data-testid="desk-task-pod-choice">{pod.name}</button>
+                    </li>
+                  ))}
+                </ul>
+                {task.assignee && <p className="text-xs text-slate-500 mt-2">If {task.assignee.name} can&apos;t work it in the new pod, it goes back to that pod&apos;s queue.</p>}
               </div>
             )}
 

@@ -28,7 +28,7 @@ import { recordAudit } from './audit';
 import { DEFAULT_STAFF_SENSITIVITIES } from './need-to-know';
 import { WHOLE_POD_ACCESS } from './pods';
 import { DESK_NOT_ENABLED } from './scope-reasons';
-import { CLOSED_STATUSES, passesRestriction } from './task-filters';
+import { CLOSED_STATUSES, TOP_LEVEL, passesRestriction } from './task-filters';
 
 type Db = PrismaClient;
 
@@ -195,14 +195,17 @@ export function taskWhere(scope: DeskScope): Prisma.TaskWhereInput {
   switch (scope.kind) {
     case 'PLATFORM': return {};
     case 'AGENCY':
+      // Subtasks are the Desk team's own pieces of a request (Module 38): an agency sees the request only.
       return scope.book === 'ALL'
-        ? { agencyId: scope.agencyId }
+        ? { AND: [{ agencyId: scope.agencyId }, TOP_LEVEL] }
         : {
-            agencyId: scope.agencyId,
-            OR: [
-              { insured: { is: { assignments: { some: { userId: scope.userId } } } } },
-              { createdById: scope.userId },
-            ],
+            AND: [{
+              agencyId: scope.agencyId,
+              OR: [
+                { insured: { is: { assignments: { some: { userId: scope.userId } } } } },
+                { createdById: scope.userId },
+              ],
+            }, TOP_LEVEL],
           };
     case 'ACCOUNT_MANAGER': return { agencyId: { in: scope.agencyIds } };
     case 'VA':

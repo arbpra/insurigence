@@ -25,6 +25,7 @@ let ref = 910_000_000 + Math.floor(Math.random() * 1_000_000);
 
 async function wipe() {
   if (cleanup.agencyId) {
+    await prisma.task.updateMany({ where: { agencyId: cleanup.agencyId }, data: { parentTaskId: null } });
     await prisma.task.deleteMany({ where: { agencyId: cleanup.agencyId } });
     const ap = await prisma.agencyDeskPlan.findMany({ where: { agencyId: cleanup.agencyId }, select: { id: true } });
     await prisma.agencyAllowanceOverride.deleteMany({ where: { agencyDeskPlanId: { in: ap.map((a) => a.id) } } });
@@ -144,6 +145,7 @@ async function wipe() {
     (await prisma.task.count({ where: { agencyId: agency.id, billingPeriod: '2026-11', billingClass: 'OVERAGE' } })) === 1);
 
   console.log('\n━━ Delete behaviour ━━');
+  await prisma.task.updateMany({ where: { agencyId: agency.id }, data: { parentTaskId: null } });
   await prisma.task.deleteMany({ where: { agencyId: agency.id } });
   await prisma.agency.delete({ where: { id: agency.id } });
   ok('deleting an agency removes its plan assignment and overrides',

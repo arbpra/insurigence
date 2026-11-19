@@ -38,6 +38,7 @@ async function seededSnapshot() {
 async function wipe() {
   const agencyId = { in: cleanup.agencyIds };
   await prisma.taskEvent.deleteMany({ where: { agencyId } });
+  await prisma.task.updateMany({ where: { agencyId }, data: { parentTaskId: null } });
   await prisma.task.deleteMany({ where: { agencyId } });
   await prisma.insuredAccount.deleteMany({ where: { agencyId } });
   await prisma.serviceLevelTarget.deleteMany({ where: { OR: [{ agencyId }, { taskType: { in: [FREE, FREE_TARGET] } }] } });

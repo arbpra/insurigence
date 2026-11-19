@@ -22,6 +22,15 @@ export const TOP_LEVEL: Prisma.TaskWhereInput = {
   OR: [{ parentTaskId: null }, { parentTaskId: { isSet: false } }],
 };
 
+/**
+ * Not a follow-up (Module 39). A request's own subtasks are part of it: they
+ * hold it open and are cancelled with it. A follow-up comes after it, so it
+ * does neither.
+ */
+export const NOT_FOLLOW_UP: Prisma.TaskWhereInput = {
+  OR: [{ followUpRuleId: null }, { followUpRuleId: { isSet: false } }],
+};
+
 /** Not yet classified for billing (included / overage / non-billable). */
 export const BILLING_UNCLASSIFIED: Prisma.TaskWhereInput = {
   OR: [{ billingClass: null }, { billingClass: { isSet: false } }],

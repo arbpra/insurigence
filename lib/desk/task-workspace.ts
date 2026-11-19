@@ -9,6 +9,8 @@ import { STATUS_LABELS } from './task-statuses';
 export const NOTE_MAX = 5_000;
 export const REVIEW_REASON_MAX = 500;
 export const MAX_UNITS = 50;
+/** A subtask's title, as for any request (lib/desk/tasks.ts). */
+export const SUBTASK_TITLE_MAX = 200;
 
 export interface StaffEvent {
   id: string;
@@ -39,16 +41,26 @@ export function reclassifiedLines(details: Record<string, unknown>): string[] {
   return lines;
 }
 
+/** The lines under a history entry's headline, from its details (managers see them all; VAs only a few). */
+export function eventLines(e: StaffEvent): string[] {
+  if (e.kind === 'RECLASSIFIED') return reclassifiedLines(e.details);
+  if ((e.kind === 'ESCALATED' || e.kind === 'DEESCALATED') && typeof e.details.reason === 'string') return [`Reason: ${e.details.reason}`];
+  if (e.kind === 'ROUTED' && typeof e.details.toName === 'string') return [`From ${typeof e.details.fromName === 'string' ? e.details.fromName : 'no pod'}`];
+  return [];
+}
+
 /** The headline of a history entry. The body (a note, a reason, a file name) is shown under it. */
 export function eventTitle(e: StaffEvent): string {
   switch (e.kind) {
-    case 'CREATED': return 'Request filed';
+    case 'CREATED': return e.details.automatic === 'follow_up' ? 'Created by a follow-up rule' : 'Request filed';
     case 'STATUS_CHANGED':
       return e.fromStatus && e.toStatus ? `${STATUS_LABELS[e.fromStatus]} → ${STATUS_LABELS[e.toStatus]}` : 'Status changed';
     case 'ASSIGNED':
       return e.assignedFrom ? `Reassigned from ${e.assignedFrom} to ${e.assignedTo ?? 'someone'}` : `Assigned to ${e.assignedTo ?? 'someone'}`;
     case 'UNASSIGNED': return e.assignedFrom ? `Released by ${e.assignedFrom}, back to the queue` : 'Back to the queue';
-    case 'ROUTED': return 'Routed to a pod';
+    case 'ROUTED':
+      if (typeof e.details.toName === 'string') return `Moved to ${e.details.toName}`;
+      return e.details.automatic ? 'Routed to a pod' : 'Moved to another pod';
     case 'PRIORITY_CHANGED': return 'Priority changed';
     case 'DUE_DATE_CHANGED': return 'Due date changed';
     case 'NOTE': return e.visibility === 'AGENCY' ? 'Note shared with the agency' : 'Internal note';
@@ -56,7 +68,11 @@ export function eventTitle(e: StaffEvent): string {
     case 'DOCUMENT_REMOVED': return 'Document removed';
     case 'ESCALATED': return 'Escalated';
     case 'DEESCALATED': return 'Escalation cleared';
-    case 'SUBTASK_CREATED': return 'Subtask created';
+    case 'SUBTASK_CREATED': {
+      const what = e.details.followUp === true ? 'Follow-up' : 'Subtask';
+      const verb = e.details.followUp === true ? 'created' : 'added';
+      return typeof e.details.reference === 'number' ? `${what} #${e.details.reference} ${verb}` : `${what} ${verb}`;
+    }
     case 'RECLASSIFIED': return 'Reclassified';
     default: return 'Updated';
   }

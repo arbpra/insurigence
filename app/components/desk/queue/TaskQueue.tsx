@@ -27,6 +27,8 @@ interface Row {
   dueAt: string | null;
   waitingSince: string | null;
   completedAt: string | null;
+  parent: { id: string; reference: number } | null;
+  followUp: boolean;
 }
 interface ListResult { total: number; page: number; rows: Row[] }
 interface Options {
@@ -283,6 +285,7 @@ export function TaskQueue({ mode, userId }: { mode: QueueMode; userId: string })
                     <span className="text-slate-500 font-normal mr-1.5">#{task.reference}</span><Link href={`/desk-ops/tasks/${task.id}`} className="hover:underline" data-testid="desk-queue-row-open">{task.title}</Link>
                   </p>
                   <p className="text-sm text-slate-600 break-words mt-0.5" data-testid="desk-queue-row-context">
+                    {task.parent && <span className="text-slate-500" data-testid="desk-queue-row-parent">{task.followUp ? 'Follow-up to' : 'Subtask of'} #{task.parent.reference} · </span>}
                     {task.typeLabel} · {task.agency.name}{task.insured ? ` · ${task.insured.name}` : ''}
                   </p>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs">

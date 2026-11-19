@@ -1706,6 +1706,281 @@ Screenshots were viewed. Nothing was left behind.
 
 Module 1–35 suites re-run: all 34 earlier Desk suites passed, 0 failed (**3,089 in total** with this module), plus the text-matching (11) and user-responses (13) suites. No code changed after this run.
 
+**Module 37 — Email notifications (✅ complete, 12 Nov 2026)**
+
+**Delivered:**
+
+- **Six emails** (`lib/desk/notifications.ts`), sent once a change is saved:
+  - **New request** from an agency → its Account Manager.
+  - **Assigned** → the VA or Account Manager it was given to (not when they picked it up themselves).
+  - **Needs your attention** (the Desk is waiting on the agency) → the agency.
+  - **Completed** → the agency.
+  - **The agency replied** on a request → whoever has it, otherwise its Account Manager. It says when the request is back in progress.
+  - **New message** in an agency's conversation (Module 36) → the other side.
+- **Who on the agency side:** whoever filed the request. When they can't be told (staff filed it, or they have left), the agency's owners and admins.
+- **When no Account Manager can be reached** (none assigned, or they have left), the Operations Managers are told instead.
+- **The email** (`lib/email/templates.ts`) uses the existing Insurigence design, with a button to the right page: the agency's request page, the staff workspace, or the conversation. Every email also has a plain-text version.
+- **A record of every email:** new `DeskNotification` collection (`prisma db push` created it, with its indexes). It holds who, about what, and whether it was sent, failed (with the provider's reason) or skipped. It holds no address and no content.
+- **An off switch:** `DESK_EMAIL_NOTIFICATIONS=off` turns them off entirely, for a test or staging copy that shares real data.
+
+**Design decisions:**
+
+- **Nothing private in an email (Q4).** No request title, details, account names, notes, reasons or message text. An email says what happened and links to The Desk, where the person signs in. Email is less safe than The Desk, and a request title often names the insured.
+- **No due dates or targets** in what agencies are sent (Q5).
+- **Need-to-know is checked again at sending time.** An email goes only to an active person who could open that request or conversation themselves, under the same rules as everything else. Examples: a VA a request is no longer restricted to, a producer for the agency's general conversation, another agency's Account Manager. The person who made the change is never emailed.
+- **One email per unread conversation.** A new message emails the other side only if they have nothing unread from that side yet; once they open the conversation, the next message emails them again. A busy conversation doesn't flood an inbox.
+- **An email never stops the work.** The change is saved first; a failed or refused email is recorded and the change still succeeds.
+- **Not emailed:** requests that staff file themselves, statuses the agency doesn't act on (such as waiting on the carrier), notes from staff, and a request's subtasks.
+
+**Issues:**
+
+- The deliberate faults found two places where one layer of a two-layer safeguard could be removed without a test failing. Never emailing the person who made the change now has its own test and is caught. Never emailing someone who has left is also enforced by the access check, which refuses them, so removing either layer alone changes nothing; removing the access check is caught.
+- Real email is set up on this machine and the existing tests create agency requests. So every test run now turns notifications off (the new suite turns them on with a stand-in sender). No email was sent to anyone while building or testing this module.
+- The first run's clean-up stopped at a subtask (a parent can't be removed before its subtasks). The order was fixed and that run's records removed by their tag.
+
+**Not done or limited:**
+
+- **No real email was seen in an inbox.** Sending goes through the same service as the existing invites, but this module never sent a real one. One test email to an address you choose is worth doing before go-live.
+- **No personal email settings** (turn some off, or a daily digest).
+- **No retry of a failed email.** It is recorded, and the change it was about is in The Desk.
+- **Emails are sent during the request,** so a slow email provider makes that action slower. A background queue can come later if needed.
+- **No email when staff share a note with the agency,** only when they ask the agency for something (Needs your attention).
+- **Overdue and escalation alerts are Module 41.** Viewing the email record is with the audit views (Module 43).
+
+**Verified:**
+
+`npx tsc --noEmit` clean. New `script/verify-desk-notifications.ts`: **52 passed**, with no email sent (a stand-in sender takes them):
+- **The email:** subject, escaped names, link and security note in both versions.
+- **Each event's recipients:** the AM for a new request (the Operations Managers when the agency has none); the assignee (not when they picked it up themselves, nor when the AM takes it); the filer, else the owners and admins (not a former admin, and not an AM who filed it); whoever has a request, else its AM, else the Operations Managers when the AM has left.
+- **Not emailed:** the person who made the change (whatever the event), staff-filed requests, waiting on the carrier, staff notes, subtasks, a VA the request is no longer restricted to, another AM.
+- **Messages:** the primary and backup AMs; the agency's owners, admins and whole-book users (not a producer); once until read, then again; never the sender.
+- **Nothing private:** none of the emails holds a request title, details, a note, a reason or a message; no due date or target to the agency; no address in the records.
+- **Failures:** a refused email and a provider that fails both leave the request saved and are recorded as failed with the reason; email not set up is recorded as skipped.
+- **The off switch, and the real route.**
+- **Test data:** run against the shared database with temporary agencies, people and requests, all removed at the end.
+
+Deliberate faults: **29 of 30 caught**; the one not caught is the redundant layer described under Issues. Each fault was judged by a finished run, and the code was confirmed restored afterwards.
+
+Against the running app (started with a deliberately invalid email key, so nothing could be delivered): **9 checks passed**. An agency filed a request, its AM assigned it, the VA started it and asked the agency, the agency replied and sent a message. Every change succeeded, every email was recorded with the right person, and the email provider refused each one as "API key is invalid", so nothing was delivered.
+
+Module 1–36 suites re-run: all 35 earlier Desk suites passed, 0 failed (**3,141 in total** with this module), plus the text-matching (11) and user-responses (13) suites. No code changed after this run.
+
+**Module 38 — Subtasks (✅ complete, 13 Nov 2026)**
+
+**Delivered:**
+
+- **Adding a subtask** (`createSubtask` in `lib/desk/tasks.ts`, `POST /api/desk/tasks/{id}/subtasks`): a type, a title and optional details, for a separate piece of a request's work, such as the AMS update on a renewal.
+- **Who may add one:** the request's Account Manager, an Operations Manager, or the VA who holds the request. A VA must pick a request up first. Agencies can't add subtasks. Every refusal is logged.
+- **What a subtask takes from its request:** the agency, account and policy; the request's need-to-know restriction (Q4), so it is never more open than the request; its priority, unless one is chosen. It goes to the pod for its own type, or the request's pod when the type has no routing rule. Subtasks are always **non-billable**: the agency is billed once, for the request.
+- **One level only.** A subtask can't have subtasks of its own.
+- **In the workspace** (`TaskWorkspace.tsx`):
+  - A request has a **Subtasks** panel. It lists each subtask with its number, type, status, who has it and its pod, and has an **Add subtask** form.
+  - A subtask names its request under its title, with a link back.
+  - The queue and My tasks show "Subtask of #N" on a subtask's row.
+- **History and audit:** the request's history records each subtask added ("Subtask #N added"), internally. The audit log records the subtask with its request.
+- **The completion rule:**
+  - A request can't be completed while any subtask is open. **Complete** isn't offered, and the panel says why ("The request can be completed once its 2 open subtasks are finished or cancelled."). The server refuses it too, with the same reason.
+  - **Cancelling a request cancels its open subtasks,** each with an internal note saying why. The cancel form warns of this first, and the audit lists them.
+  - A request that is completed or cancelled takes no new subtasks. A subtask can't be reopened inside a closed request: the request is reopened first.
+
+**Design decisions:**
+
+- **Agencies never see subtasks (Q4, Q5).** They aren't in an agency's list, can't be opened by their address, and leave nothing in the agency's history. The agency sees one request with one status. Their own timings are internal and never shown.
+- **Need-to-know across a request and its subtasks:**
+  - A VA sees the subtasks in their own pods; the rest appear only as a count ("1 more subtask is with another team").
+  - A VA who can open a subtask but not its request sees only the request's number, not its title.
+  - The open count that controls completion covers every subtask, including those the viewer can't see.
+- **Subtasks are internal work,** so they never email anyone (as set in Module 37), and their history is internal from the start.
+- **The completion check runs twice:** before the request is billed, and again inside the save. A subtask added at the same moment can't slip past it. The same applies to adding a subtask while someone closes the request.
+
+**Issues:**
+
+- The deliberate faults found two tests that passed for the wrong reason, and one that could leave records behind:
+  - The check that Complete isn't offered ran while the request was still New, when Complete is never offered. It now checks a request that is in progress.
+  - The second "request is closed" check, inside the save, only matters if the request is closed while a subtask is being added. A new test closes the request at that moment, so only that check can refuse it.
+  - With subtasks of subtasks allowed (one of the faults), the suite's clean-up could not remove them. That run's records were removed by their tag. The clean-up now removes the innermost tasks first.
+- Following a link between a request and its subtask kept the first page's notice and open forms until the new one loaded. The workspace now starts fresh for each request.
+
+**Not done or limited:**
+
+- **Subtasks are added by hand.** Automatic ones (for example, from a follow-up rule) can come with Module 39.
+- **No reordering, and no editing of a subtask's title** after it is added. A wrong subtask is cancelled and added again.
+- **A subtask can't be moved to another request.**
+- **The completion rule has no override.** Every subtask has to be finished or cancelled first.
+- **The browser check was cut short.** This machine (6 GB of memory) ran out of room while the dev server compiled: it started hundreds of stylesheet workers and stopped answering for long stretches. After three attempts, the first 7 browser checks passed (adding a subtask, the rule shown, Complete hidden, the history). The rest are covered by the suite's screen checks but weren't seen in a browser:
+  - the parent link;
+  - the cancel warning;
+  - the VA's view;
+  - the agency's list;
+  - phone widths.
+
+  The browser check (`m38browser.ts`) is ready to run on a faster machine.
+
+**Verified:**
+
+`npx tsc --noEmit` clean. New `script/verify-desk-subtasks.ts`: **54 passed**:
+- **Adding:** by the AM, an Operations Manager and the VA holding it. Each subtask is New, in the right pod, with the request's priority and restriction, non-billable, internal history and audited with its request.
+- **Who may:** the agency, a VA who doesn't hold the request, and another agency's AM are refused (logged). Subtasks of subtasks, bad types, empty titles and closed requests are refused, and nothing is added.
+- **Display:** the AM's view of a request and its subtasks; the VA's partial view and hidden count; the number-only view of a request someone can't open; the queue and list labels.
+- **Never to the agency:** not in its list, not by address, not in the request's history.
+- **The completion rule:** Complete is withheld while subtasks are open and offered again once all are closed. Completing is refused with the count. A completed subtask is non-billable. A subtask can't reopen inside a closed request.
+- **The cancel cascade:** open subtasks are cancelled, internally and audited, including when the agency cancels.
+- **Races:** the request is closed while a subtask is being added; a subtask is added while the request is being completed.
+- **The real route, and the screens.**
+- **Test data:** run against the shared database with temporary agencies, people and requests, all removed at the end.
+
+Deliberate faults: **28 of 28 caught**, each judged by a finished run, and the code was confirmed restored afterwards.
+
+Module 1–37 suites re-run: all 36 earlier Desk suites passed, 0 failed (**3,195 in total** with this module), plus the text-matching (11) and user-responses (13) suites. One earlier check (Module 32) read the task page's exact text and was updated for the fresh start between requests. No code changed after this run.
+
+**Module 39 — Follow-up rules (✅ complete, 18 Nov 2026)**
+
+**Delivered:**
+
+- **Follow-ups are created automatically when a request is completed** (`changeTaskStatus` and `prepareFollowUps` in `lib/desk/tasks.ts`). Each active rule for the request's type creates one follow-up task, for example "Renewal completed → Update AMS". The Desk's two rules are Renewal → AMS entry and New business → AMS entry.
+- **What a follow-up is:**
+  - a subtask of the request it follows, marked with the rule that made it;
+  - New and unassigned, of the type the rule names;
+  - titled from the rule, with the request number and account filled in;
+  - in the rule's pod, or wherever its type is routed when the rule names no pod;
+  - billable or not, as the rule says. The Desk's own rules are non-billable.
+
+  It also takes the request's agency, account, policy, priority and need-to-know restriction (Q4).
+- **All or nothing.** The completion and its follow-ups are saved together. If a follow-up can't be saved, the request stays in progress and nothing is billed or made.
+- **Follow-ups come after the request.**
+  - They don't hold it open: a reopened request can be completed again while its follow-ups are still open.
+  - Cancelling the request leaves them alone.
+  - Completing the request again doesn't make a second follow-up from the same rule.
+  - A follow-up can be reopened while its request stays completed.
+  - Completing a subtask (or a follow-up) never triggers rules.
+- **The editor** (Super Admin → The Desk → Follow-ups; `FollowUpEditor.tsx`, `lib/desk/follow-up-admin.ts`, `/api/desk/admin/follow-ups`):
+  - It lists each rule: when what is completed, what it creates, where it goes, an example title, billable or not, and on or off.
+  - Rules can be added, edited, and switched off or on. Nothing is ever deleted.
+  - The title can include `{reference}` and `{insured}`. A live preview shows the result, and unknown placeholders are refused.
+  - It refuses a second active rule for the same pair, a pod that is switched off, and switching a rule on while its pod is off.
+  - Every change is audited (`follow_up_rule.changed`, with before and after). A save with no change records nothing.
+- **For staff:** the request's Subtasks panel marks each follow-up. A follow-up says "Follow-up to #N" under its title and in the queue. The history says "Created by a follow-up rule" and "Follow-up #N created".
+
+**Design decisions:**
+
+- **Only Operations Managers and the Super Admin can change rules.** Account Managers, VAs and agencies are refused, and the refusal is logged.
+- **Agencies never see follow-ups (Q4, Q5).** They aren't in the agency's list, can't be opened by their address, and leave nothing in the agency's history. They send no email: the agency gets one "completed" email, for the request.
+- **A follow-up is made by the rule, not a person.** Its history and audit name the rule and record no actor. The request's completion audit lists the follow-ups it made.
+- **A rule whose pod is switched off still works.** Its follow-ups go where their type is routed. The editor shows this, and won't switch the rule back on until it has another pod.
+- **The rules are read before the save,** and the follow-ups are written inside it, so a slow rule lookup doesn't hold the save open.
+
+**Issues:**
+
+- The deliberate faults found three weak spots in the suite:
+  - **A fault left records behind.** With "anyone may save rules", the suite's own Account Manager check created a real rule, which then spoiled every later run. The rule was removed by its exact id. The clean-up now removes every Certificates rule (a type no Desk rule uses, which the suite checks is free first). The fault runs now stop if a run leaves anything behind.
+  - **"Where it goes" passed for the wrong reason.** The check used a type with no routing, where a broken lookup and the right one both say "nowhere". It now also checks the Desk's own rules, which go where AMS entries are routed (Pod 1).
+  - **The badge check only looked for its label.** It now checks that the badge is shown only for follow-ups.
+- **Earlier suites now get real follow-ups.** The Module 13 suite completes renewal requests, so the Desk's own "Renewal → AMS entry" rule now makes follow-ups during that test. Its clean-up then deleted the requests before their follow-ups, which the database refuses, and it left its records behind. That run's records, and one interrupted by the session ending, were removed by their tags. The clean-up in 24 earlier suites now unlinks subtasks before deleting tasks.
+- One Module 38 check read the queue's exact text and was updated for "Follow-up to".
+
+**Not done or limited:**
+
+- **Only "completed" can trigger a rule.** Other statuses (for example "Waiting on carrier") could be added later.
+- **One follow-up per rule.** A rule can't create a chain, and a follow-up's own completion triggers nothing.
+- **Follow-ups start unassigned,** in their pod's queue. Rules can't name a person.
+- **No browser check for this module.** This machine's memory stalls the dev server (see Module 38). The editor and the workspace labels are covered by the suite's screen checks.
+
+**Verified:**
+
+`npx tsc --noEmit` clean. New `script/verify-desk-follow-ups.ts`: **73 passed**:
+- **Titles and history wording:** placeholders filled in, a missing account, long names clipped, unknown placeholders and stray braces refused.
+- **The editor:** who may, adding, refusals (same pair twice, bad titles, a pod that is off, unknown pods, bad billable values), editing, switching off and on, auditing, and no record for an unchanged save.
+- **The engine:** one follow-up per rule, with the right type, title, pod, billing, restriction and internal history, and audited.
+- **Never shown to the agency.**
+- **Shown to staff:** the panel, the parent line and the queue.
+- **After the request:** follow-ups don't hold it open, cancelling leaves them, no second one, and they can be reopened.
+- **When none are made:** a rule that is off, or a subtask completed.
+- **A pod that is switched off; the need-to-know restriction.**
+- **All or nothing:** a failed follow-up save leaves the request in progress.
+- **The Desk's own rules:** left untouched, and the Renewal → AMS entry rule run once for real.
+- **The real route, and the screens.**
+- **Test data:** run against the shared database with temporary agencies, people, pods and rules, all removed at the end.
+
+Deliberate faults: **36 of 36 caught**, each judged by a finished run, and the code was confirmed restored afterwards.
+
+Module 1–38 suites re-run: all 37 earlier Desk suites passed, 0 failed (**3,268 in total** with this module), plus the text-matching (11) and user-responses (13) suites. Two earlier checks were updated: the Module 38 queue label, and the clean-up in 24 earlier suites (see Issues). No product code changed after this run.
+
+**Module 40 — Workload view, reassigning and escalating (✅ complete, 19 Nov 2026)**
+
+**Delivered:**
+
+- **The Workload page** (Desk Operations → Workload; `WorkloadView.tsx`, `lib/desk/workload.ts`, `GET /api/desk/workload`), for Operations Managers and the Super Admin:
+  - **Totals** for all open work: open, nobody has it, overdue, waiting and escalated. Choosing a figure shows the tasks behind it.
+  - **By pod, by person and by agency,** with the same counts.
+    - Work no pod has yet gets its own row, and a switched-off pod is listed while it still holds open work.
+    - People are listed busiest first, including idle VAs and Account Managers and anyone deactivated who still holds work.
+    - Choosing a row filters the list.
+  - **The task list:** every agency's work, with filters for pod, person, agency, status, overdue, escalated and closed work, plus search and three sort orders. The filters are kept in the page address.
+- **Reassigning:**
+  - Each task can be reassigned to anyone authorised for it (the existing picker and checks), or returned to the queue.
+  - **Moving to another pod** (`moveTaskToPod`, `POST /api/desk/tasks/{id}/pod`) is new. It lets a manager place work no routing rule placed (the triage the plan expected but nothing yet offered) or balance the load between pods.
+- **Changing several tasks at once** (`POST /api/desk/workload/bulk`): choose up to 50 and assign them to one person, return them to the queue, or move them to a pod. Each task is changed on its own, with every check, so one that can't be changed doesn't stop the rest. The page then says which weren't changed and why, by number ("#1042: This task is closed.").
+- **Escalating** (`escalateTask`, `POST /api/desk/tasks/{id}/escalation`): flags open work for a manager's attention, with a reason, and clears the flag again. Escalated work is marked in the list with its reason, and already appears first in the Account Manager dashboard's "To review" (Module 34).
+- **In the task workspace,** Account Managers and Operations Managers also get **Escalate / Clear escalation** and **Move to another pod**, and the escalation reason is shown under the title. This way, Account Managers, who don't have the Workload page, can escalate their own agencies' work.
+- **History:** "Moved to Pod 2" (with where it came from), "Escalated" and "Escalation cleared" (with the reason).
+
+**Design decisions:**
+
+- **Who may:**
+  - The Workload page and changing several tasks at once: Operations Managers and the Super Admin only. Anyone else is refused, and the refusal is logged.
+  - Escalating and moving one task: also the task's Account Manager.
+  - VAs and agencies can do neither, and their refusals are logged.
+- **Need-to-know (Q4):**
+  - A VA sees that a task is escalated, but never why.
+  - A VA reads "Moved to another pod", not which pods.
+  - The agency sees nothing of either.
+  - The reason is kept in the history's details, which only managers are shown. The audit records the fact of the escalation, not the reason.
+- **Moving follows authorisation.** A pod's VAs are authorised per agency. If the person holding a task can't work it in its new pod, it goes back to that pod's queue as New, the same rule as when someone loses access. An Account Manager holding it keeps it. The history and the audit record who lost it.
+- **Changed by someone else meanwhile:** a move or an escalation made from an out-of-date page is refused with "changed by someone else", and the other change stands.
+- **The counts cover every agency's open work,** including agencies with The Desk switched off, so nothing still open is hidden. Waiting work is counted as waiting, never as overdue, since its clock is stopped (as in the queue).
+- **Escalation is manual here.** The automatic ladder for work nearing or past its target, and the alert emails, are Module 41.
+
+**Issues:**
+
+- **The workload page first used the Super Admin check,** which refused others with a message about Desk setup. It now has its own check and message ("Only Operations Managers can see and change the workload across the Desk."), and its refusals are still logged.
+- **Three suite checks were too weak before the first run:** one that could never fail, the people's counts, and one screen check. All were fixed before the faults were planted.
+- **One deliberate fault was missed at first:** the workload route ignoring the "escalated" filter. No route check asked for escalated work. A check was added ("GET escalated work only"), and the fault is now caught.
+
+**Not done or limited:**
+
+- **No email when work is escalated,** and no automatic escalation: Module 41.
+- **Changing several tasks at once is limited to 50 per change,** and to one page of the list (50 tasks).
+- **The assign menu for several tasks lists every active VA and Account Manager.** Whoever isn't authorised for a task is refused for that task, with the reason shown. The single-task picker only offers those who are authorised.
+- **No workload history or charts.** Turnaround by pod, VA and agency is Module 42.
+- **No browser check,** for the same reason as Modules 38 and 39 (this machine's memory). The screens are covered by the suite's screen checks.
+
+**Verified:**
+
+`npx tsc --noEmit` clean. New `script/verify-desk-workload.ts`: **91 passed**:
+- **Filters and wording:** the page address, the API query, and the history lines for managers and VAs.
+- **Moving to a pod:**
+  - triage and the AM's own agency;
+  - refusals: the same pod, a pod that is off, an unknown pod, closed work, a VA, the agency, another agency's AM, all logged;
+  - the holder who can't follow it, and those who keep it;
+  - a move made from an out-of-date read.
+- **Escalating and clearing:**
+  - the reason is kept, hidden from VAs and the agency, and audited without its text;
+  - refusals: twice, no reason, a reason that's too long, a VA, the agency, closed work;
+  - an escalation made from an out-of-date read;
+  - escalated again after clearing.
+- **The workload:**
+  - counts by pod, person and agency, against what is open;
+  - switched-off pods, work with no pod, idle and deactivated people, busiest first;
+  - the list's filters;
+  - only Operations Managers may see it.
+- **Several at once:** done and not done with reasons, duplicates, every check, each audited, back to the queue, moving, and bad input.
+- **The workspace's offers; the real routes; the screens.**
+- **Test data:** run against the shared database with temporary agencies, people, pods and tasks, all removed at the end.
+
+Deliberate faults: **40 of 40 caught (39 on the first run; the missed one is described under Issues), each run to the end and the code confirmed restored after each**.
+
+Module 1–39 suites re-run: all 38 earlier Desk suites passed, 0 failed (**3,359 in total** with this module), plus the text-matching (11) and user-responses (13) suites. No earlier check needed changing. The run was interrupted once, inside the import-commit suite; its two leftover test agencies were removed by their tag, and the run was resumed from that suite. No product code changed after this run.
+
 ### Phase 3 — Task System Core (17 h)
 
 | # | Module | Hours | Change | Status |
@@ -1724,15 +1999,15 @@ Module 1–35 suites re-run: all 34 earlier Desk suites passed, 0 failed (**3,08
 | 34 | AM dashboard: assigned agencies, open requests, overdue, items to review, upcoming renewals from policy expirations | 3.0 | | ✅ Done |
 | 35 | AM per-agency view: drill-down into one agency's accounts and work | 2.5 | | ✅ Done |
 | 36 | Messaging: agency ↔ AM general thread, plus per-task conversation | 3.0 | | ✅ Done |
-| 37 | Email notifications: new request, assigned, needs attention, completed | 2.5 | | ⬜ |
+| 37 | Email notifications: new request, assigned, needs attention, completed | 2.5 | | ✅ Done |
 
 ### Phase 5 — Subtasks, Service Levels & Oversight (17 h)
 
 | # | Module | Hours | Change | Status |
 |---|---|---:|---|---|
-| 38 | Subtasks: manual creation, parent / child display, parent completion rule | 2.5 | | ⬜ |
-| 39 | Follow-up rules engine + admin editor (e.g. Renewal completed → AMS update in Pod 1) | 2.5 | | ⬜ |
-| 40 | Admin workload view: all tasks across agencies and pods, reassign, escalate | 3.0 | | ⬜ |
+| 38 | Subtasks: manual creation, parent / child display, parent completion rule | 2.5 | | ✅ Done |
+| 39 | Follow-up rules engine + admin editor (e.g. Renewal completed → AMS update in Pod 1) | 2.5 | | ✅ Done |
+| 40 | Admin workload view: all tasks across agencies and pods, reassign, escalate | 3.0 | | ✅ Done |
 | 41 | Overdue alerts and escalation ladder: approaching / overdue tasks go to the assigned AM, then to the Operations Manager; scheduled check | 3.0 | 🆕 Q5 | ⬜ |
 | 42 | Turnaround metrics per pod, VA and agency, in business time excluding waiting periods | 3.0 | ✏️ Q5 | ⬜ |
 | 43 | Service usage and audit views: each agency's monthly usage against its plan allowances (included / overage / non-billable), audit log viewer | 3.0 | 🆕 Q4, Q6 | ⬜ |
@@ -1760,7 +2035,7 @@ Module 1–35 suites re-run: all 34 earlier Desk suites passed, 0 failed (**3,08
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–36 complete (98.5 h). **27.0 h remaining.**
+**Progress:** Modules 1–40 complete (109.0 h). **16.5 h remaining.**
 
 The client's answers added **33 hours** (see Section 9), approximately:
 

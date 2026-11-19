@@ -16,10 +16,11 @@ import { DeskAccessError, getTaskForScope, isObjectId, taskEventWhere, taskWhere
 import { recordAudit } from './audit';
 import { literal } from './literal-match';
 import { TASK_TYPE_LABELS } from './service-levels';
-import { AGENCY_STATUS_LABELS, STATUS_LABELS, addTaskNote, agencyStatus, agencyTaskView, assignTask, changeTaskStatus, createTask, reviewTask, type AgencyStatus } from './tasks';
+import { AGENCY_STATUS_LABELS, STATUS_LABELS, addTaskNote, agencyStatus, agencyTaskView, assignTask, changeTaskStatus, createSubtask, createTask, escalateTask, moveTaskToPod, reviewTask, type AgencyStatus } from './tasks';
 import { statusMoves } from './task-statuses';
-import { CLOSED_STATUSES, TOP_LEVEL, UNASSIGNED, UNROUTED } from './task-filters';
+import { CLOSED_STATUSES, NOT_FOLLOW_UP, TOP_LEVEL, UNASSIGNED, UNROUTED } from './task-filters';
 import { taskDocumentsFor } from './task-documents';
+import { notifyAgencyNote, notifyStatusChanged, notifyTaskAssigned, notifyTaskCreated } from './notifications';
 
 type Db = PrismaClient;
 
@@ -36,6 +37,7 @@ const RELATED = {
   pod: { select: { id: true, name: true } },
   am: PERSON,
   assignee: PERSON,
+  parent: { select: { id: true, reference: true } },
 } satisfies Prisma.TaskInclude;
 type TaskRow = Prisma.TaskGetPayload<{ include: typeof RELATED }>;
 type Person = { id: string; firstName: string | null; lastName: string | null; email: string };
@@ -61,6 +63,10 @@ function viewFor(scope: DeskScope, task: TaskRow, now: Date) {
     status: task.status,
     statusLabel: STATUS_LABELS[task.status],
     source: task.source,
+    // A subtask names its request by number; its title comes only with the detail, to those who can open it.
+    parent: task.parent ? { id: task.parent.id, reference: task.parent.reference } : null,
+    /** A follow-up: made by a rule when its request was completed (Module 39). */
+    followUp: !!task.followUpRuleId,
     ...account,
     agency: task.agency,
     pod: task.pod,
@@ -122,7 +128,7 @@ function agencyEventView(event: TaskEvent, agencyId: string, actors: Map<string,
 }
 
 /** Listed, not removed: anything added to an event's details later stays from VAs until it's chosen here. */
-const VA_EVENT_DETAILS = ['clock', 'automatic'];
+const VA_EVENT_DETAILS = ['clock', 'automatic', 'reference', 'followUp'];
 
 function staffEventView(scope: DeskScope, event: TaskEvent, actors: Map<string, Actor>) {
   const metadata = (event.metadata ?? {}) as Record<string, unknown>;
@@ -161,6 +167,8 @@ export interface TaskListOptions {
   podId?: string | null;
   assignee?: string | null;
   overdue?: boolean;
+  /** Escalated work only (Module 40). */
+  escalated?: boolean;
   sort?: string | null;
   page?: number;
   pageSize?: number;
@@ -238,6 +246,7 @@ export function listWhere(scope: DeskScope, opts: TaskListOptions, now: Date): P
       if (assigneeId) parts.push({ assigneeId });
     }
     if (opts.overdue) parts.push(OPEN, NOT_WAITING, { dueAt: { lt: now } });
+    if (opts.escalated) parts.push({ escalated: true });
   }
   return { AND: parts };
 }
@@ -315,6 +324,7 @@ export async function getTaskDetail(db: Db, scope: DeskScope, taskId: string, ct
     : [];
   const actors = new Map<string, Actor>(people.map((p) => [p.id, p]));
   const documents = await taskDocumentsFor(db, scope, task);
+  const family = scope.kind === 'AGENCY' ? null : await subtaskFamily(db, scope, task);
   await recordAudit(db, {
     actor: { id: scope.userId, role: scope.role }, action: 'task.viewed', entityType: 'Task', entityId: task.id, agencyId: task.agencyId,
     // Which files were listed, so a later question about who saw a file can be answered.
@@ -322,10 +332,49 @@ export async function getTaskDetail(db: Db, scope: DeskScope, taskId: string, ct
   });
   return {
     ...viewFor(scope, task, new Date()),
-    ...(scope.kind === 'AGENCY' ? {} : { permissions: staffPermissions(scope, task) }),
+    ...(scope.kind === 'AGENCY' ? {} : { permissions: staffPermissions(scope, task, (family && 'openSubtasks' in family ? family.openSubtasks : 0) ?? 0) }),
     documents,
+    ...(family ?? {}),
+    // The pods a manager can move it to.
+    ...(isManager(scope) ? { pods: await db.pod.findMany({ where: { isActive: true }, select: { id: true, name: true }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }) } : {}),
     eventsTotal,
     events: events.map((e) => (scope.kind === 'AGENCY' ? agencyEventView(e, task.agencyId, actors) : staffEventView(scope, e, actors))),
+  };
+}
+
+/**
+ * A request's subtasks this person can see, and how many are still open in
+ * all (the completion rule counts every one); for a subtask, its request,
+ * with the title only if they could open it.
+ */
+async function subtaskFamily(db: Db, scope: DeskScope, task: TaskRow) {
+  if (task.parentTaskId) {
+    const parent = await db.task.findFirst({
+      where: { AND: [{ id: task.parentTaskId }, taskWhere(scope)] },
+      select: { id: true, reference: true, title: true, status: true },
+    });
+    return {
+      parentRequest: parent
+        ? { id: parent.id, reference: parent.reference, title: parent.title, status: parent.status, statusLabel: STATUS_LABELS[parent.status], canOpen: true, followUp: !!task.followUpRuleId }
+        : { id: null, reference: task.parent?.reference ?? null, title: null, status: null, statusLabel: null, canOpen: false, followUp: !!task.followUpRuleId },
+    };
+  }
+  const [rows, openTotal] = await Promise.all([
+    db.task.findMany({
+      where: { AND: [{ parentTaskId: task.id }, taskWhere(scope)] },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { id: true, reference: true, type: true, title: true, status: true, followUpRuleId: true, assignee: { select: PERSON.select }, pod: { select: { id: true, name: true } } },
+    }),
+    // Every open one, seen or not, except follow-ups: they come after the request and don't hold it open.
+    db.task.count({ where: { AND: [{ parentTaskId: task.id, status: { notIn: [...CLOSED_STATUSES] } }, NOT_FOLLOW_UP] } }),
+  ]);
+  return {
+    subtasks: rows.map((r) => ({
+      id: r.id, reference: r.reference, typeLabel: TASK_TYPE_LABELS[r.type], title: r.title,
+      status: r.status, statusLabel: STATUS_LABELS[r.status], assignee: personView(r.assignee), pod: r.pod, followUp: !!r.followUpRuleId,
+    })),
+    openSubtasks: openTotal,
+    hiddenSubtasks: Math.max(0, (await db.task.count({ where: { parentTaskId: task.id } })) - rows.length),
   };
 }
 
@@ -333,21 +382,29 @@ export async function getTaskDetail(db: Db, scope: DeskScope, taskId: string, ct
  * What the workspace offers this person on this task. Only a guide for the
  * screen: the task service checks every change again.
  */
-function staffPermissions(scope: DeskScope, task: TaskRow) {
+function staffPermissions(scope: DeskScope, task: TaskRow, openSubtasks: number) {
   const manager = isManager(scope);
   const holdsIt = task.assigneeId === scope.userId;
   const open = !isClosed(task.status);
   return {
-    statusMoves: statusMoves(task.status, { manager, holdsIt, assigned: !!task.assigneeId }),
+    // Not completed while a subtask is open (the parent completion rule).
+    statusMoves: statusMoves(task.status, { manager, holdsIt, assigned: !!task.assigneeId }).filter((to) => to !== 'COMPLETED' || !openSubtasks),
     pickUp: scope.kind === 'VA' && open && !task.assigneeId,
     release: open && holdsIt,
     assign: manager && open,
     review: manager && open,
     addDocuments: open,
+    // One level only; a VA on a request they hold.
+    addSubtask: open && !task.parentTaskId && (manager || holdsIt),
+    // Module 40: flag for a manager's attention, or move to another pod.
+    escalate: manager && open,
+    movePod: manager && open,
   };
 }
 
 // ── Changes: the service makes them, and the answer is the person's own view ──
+// Once a change is saved, the people it concerns are emailed (lib/desk/notifications.ts);
+// that never fails the change.
 
 async function viewById(db: Db, scope: DeskScope, taskId: string) {
   return viewFor(scope, await db.task.findUniqueOrThrow({ where: { id: taskId }, include: RELATED }), new Date());
@@ -359,11 +416,22 @@ export async function submitTask(db: Db, scope: DeskScope, body: Record<string, 
     description: body.description as string | null, priority: body.priority as string | null, complexity: body.complexity as string | null,
     insuredId: body.insuredId as string | null, policyId: body.policyId as string | null, agencyId: body.agencyId as string | null,
   }, ctx);
+  await notifyTaskCreated(db, task, scope.userId);
+  return viewById(db, scope, task.id);
+}
+
+/** Body: { type, title, description?, priority? }. Desk staff only; answers with the subtask, as this person sees it. */
+export async function submitSubtask(db: Db, scope: DeskScope, parentId: string, body: Record<string, unknown>, ctx: GuardContext = {}) {
+  const task = await createSubtask(db, scope, parentId, {
+    type: body.type as string, title: body.title as string,
+    description: body.description as string | null, priority: body.priority as string | null,
+  }, ctx);
   return viewById(db, scope, task.id);
 }
 
 export async function setTaskStatus(db: Db, scope: DeskScope, taskId: string, body: Record<string, unknown>, ctx: GuardContext = {}) {
   const task = await changeTaskStatus(db, scope, taskId, body.status as string, { reason: body.reason as string | null }, ctx);
+  await notifyStatusChanged(db, task, scope.userId);
   return viewById(db, scope, task.id);
 }
 
@@ -371,6 +439,19 @@ export async function setTaskAssignee(db: Db, scope: DeskScope, taskId: string, 
   // Null means unassign, so a missing or malformed person mustn't be read as that.
   if (body.assigneeId !== null && !isObjectId(body.assigneeId)) throw bad('Choose who to assign, or null to unassign.');
   const task = await assignTask(db, scope, taskId, body.assigneeId, ctx);
+  await notifyTaskAssigned(db, task, scope.userId);
+  return viewById(db, scope, task.id);
+}
+
+/** Body: { escalate: true, reason } or { escalate: false, reason? }. Managers only (Module 40). */
+export async function setTaskEscalation(db: Db, scope: DeskScope, taskId: string, body: Record<string, unknown>, ctx: GuardContext = {}) {
+  const task = await escalateTask(db, scope, taskId, { escalate: body.escalate, reason: body.reason }, ctx);
+  return viewById(db, scope, task.id);
+}
+
+/** Body: { podId }. Managers only (Module 40). */
+export async function setTaskPod(db: Db, scope: DeskScope, taskId: string, body: Record<string, unknown>, ctx: GuardContext = {}) {
+  const task = await moveTaskToPod(db, scope, taskId, body.podId, ctx);
   return viewById(db, scope, task.id);
 }
 
@@ -382,5 +463,6 @@ export async function reviewTaskFields(db: Db, scope: DeskScope, taskId: string,
 
 export async function postTaskNote(db: Db, scope: DeskScope, taskId: string, body: Record<string, unknown>, ctx: GuardContext = {}) {
   const { task, resumed } = await addTaskNote(db, scope, taskId, { body: body.body as string, visibility: body.visibility as string | null }, ctx);
+  if (scope.kind === 'AGENCY') await notifyAgencyNote(db, task, scope.userId, resumed);
   return { task: await viewById(db, scope, task.id), resumed };
 }
