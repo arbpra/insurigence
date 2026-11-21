@@ -11,6 +11,8 @@ import type { PrismaClient, TaskStatus } from '@prisma/client';
 import { DeskAccessError, isObjectId, type DeskScope, type GuardContext } from './access';
 import { listTasks, setTaskAssignee, setTaskPod, type TaskListOptions } from './task-api';
 import { CLOSED_STATUSES } from './task-filters';
+import { lastAlertRun } from './alerts';
+import { checkIntervalMinutes, cronSecret } from './alert-schedule';
 
 type Db = PrismaClient;
 
@@ -63,7 +65,7 @@ export async function getWorkload(db: Db, scope: DeskScope, opts: TaskListOption
     if (t.assigneeId) add(bucket(byPerson, t.assigneeId), t, now);
   }
 
-  const [pods, staff, agencies, list] = await Promise.all([
+  const [pods, staff, agencies, list, alertRun] = await Promise.all([
     db.pod.findMany({ orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }], select: { id: true, name: true, isActive: true } }),
     // Everyone who works tasks, idle or not, and anyone else still holding open work.
     db.user.findMany({
@@ -72,6 +74,7 @@ export async function getWorkload(db: Db, scope: DeskScope, opts: TaskListOption
     }),
     db.agency.findMany({ where: { id: { in: [...byAgency.keys()] } }, select: { id: true, name: true, deskEnabled: true } }),
     listTasks(db, scope, opts),
+    lastAlertRun(db),
   ]);
   const podName = new Map(pods.map((p) => [p.id, p.name]));
 
@@ -95,6 +98,8 @@ export async function getWorkload(db: Db, scope: DeskScope, opts: TaskListOption
       .map((a) => ({ id: a.id, name: a.name, deskEnabled: a.deskEnabled, ...byAgency.get(a.id)! }))
       .sort((a, b) => b.open - a.open || a.name.localeCompare(b.name)),
     list,
+    /** The overdue-alert check (Module 41): when it last ran, and whether a schedule is set up. */
+    alertCheck: { lastRun: alertRun, scheduled: !!(checkIntervalMinutes() || cronSecret()) },
   };
 }
 

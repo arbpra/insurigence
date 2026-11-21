@@ -21,6 +21,8 @@ const PUBLIC_PATHS = [
   '/api/auth/change-password',
   '/api/intake/public',
   '/api/proposal',
+  // The scheduler's alert check: no session; the route checks its own secret (Module 41).
+  '/api/desk/cron',
   '/pricing',
   '/request-demo',
   '/how-it-works',

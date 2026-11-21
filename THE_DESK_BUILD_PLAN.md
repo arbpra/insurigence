@@ -1981,6 +1981,328 @@ Deliberate faults: **40 of 40 caught (39 on the first run; the missed one is des
 
 Module 1–39 suites re-run: all 38 earlier Desk suites passed, 0 failed (**3,359 in total** with this module), plus the text-matching (11) and user-responses (13) suites. No earlier check needed changing. The run was interrupted once, inside the import-commit suite; its two leftover test agencies were removed by their tag, and the run was resumed from that suite. No product code changed after this run.
 
+**Module 41 — Overdue alerts and the escalation ladder (✅ complete, 20 Nov 2026)**
+
+**Delivered:**
+
+- **The escalation ladder** (`lib/desk/alerts.ts`). A scheduled check moves each open task up three rungs, measured in business time (business hours, weekends and holidays, as everywhere else) against its working due date:
+  1. **Due soon:** two business hours or less left. The task's Account Manager is emailed.
+  2. **Overdue:** past its due time. The Account Manager is emailed.
+  3. **Escalated:** more than four business hours overdue. The Operations Managers are emailed, and the task is escalated automatically with the reason "Overdue by more than 4 business hours". If a manager already escalated it, their escalation and reason are kept.
+- **Who is told:** the task's Account Manager. If they can't be reached (they have left, or can't open the task), the agency's primary or backup Account Manager. If there is none, the Operations Managers. An email goes only to an active person who can open the task, as with every Desk email (Module 37).
+- **Once per rung, per due date.** A task is never alerted twice for the same rung. If its due date moves (a manager changes it, or a wait pushes it out), the ladder starts again for the new date.
+  - **Work waiting on someone else is left alone:** its clock is stopped. So is closed work, and work with no due date.
+  - **A check that finds a task several rungs up** (for example, the schedule was off) sends only the highest rung. At the top rung the Account Manager is also told, since nobody told them it was overdue.
+- **Escalating by hand now emails** (the email Module 40 left out): when an Account Manager escalates, the Operations Managers are told; when an Operations Manager does, the Account Manager and the other Operations Managers are. Clearing an escalation sends nothing.
+- **History and audit:** "Due-soon alert sent", "Overdue alert sent", "Escalation alert sent to the Operations Managers" (managers also see how many people were emailed), and "Escalated automatically: overdue". Each alert is audited as `task.alerted`, and the automatic escalation as `task.escalated`, with no person as the actor. Each email is recorded in the notification record, as in Module 37.
+- **Running the check**, either way or both:
+  - `DESK_ALERT_CHECK_MINUTES=15`: the app runs the check itself every 15 minutes while it is running (`instrumentation.ts`). Suits a server that stays up.
+  - `DESK_CRON_SECRET=<long random text>`: a scheduler (the host's scheduled jobs, a cron service, an uptime pinger) calls `GET` or `POST /api/desk/cron/alerts` with `Authorization: Bearer <that text>`. Suits a host that sleeps or runs several copies.
+  - `npx tsx script/desk-alert-check.ts` runs it once, for a host's own scheduler.
+- **The Workload page says when the check last ran** and how many alerts it sent. It shows a warning when no schedule is set up, or when the last run had a failure, so a stopped schedule is noticed.
+
+**Design decisions:**
+
+- **Business time throughout,** as the plan's Q5 answer asks. A task due at closing time and checked before opening the next morning is overdue, but by no business time, so it isn't escalated overnight. The thresholds (two business hours for due soon, four overdue for escalation) are set in `lib/desk/alerts.ts`. Two hours matches the existing "due soon" in the service-level engine (Module 11).
+- **Nothing is sent twice,** even with the timer, a scheduler and several copies of the app all running. A task moves up a rung only if nothing changed it since it was read, and the email goes out after that.
+- **A failed email is recorded and not retried.** The rung stands, so a provider that is down doesn't produce a burst of repeats later. The failure is seen in the notification record.
+- **A test or staging copy sharing real data uses up no real alerts:** with `DESK_EMAIL_NOTIFICATIONS=off` the check doesn't run at all (it doesn't just skip the email). Neither schedule setting is on by default, so a development copy sends nothing.
+- **The scheduler route has no session.** It is let through the login check and proves itself with the secret, compared in constant time. If no secret (or one shorter than 24 characters) is set up, it answers 503 and does nothing. It answers with counts only.
+- **Need-to-know (Q4) and internal targets (Q5):**
+  - Emails carry no request title, text, account or reason, and no due date. They name the request number, the agency and the type, and link to The Desk.
+  - Agencies see nothing of the ladder.
+  - VAs see that an alert went out and that a task was escalated automatically, but not who was told or why.
+  - The run record holds counts only.
+- **The ladder never clears an escalation.** That stays a manager's decision (Module 40).
+
+**Issues:**
+
+- **Two faults were missed on the first fault run;** both are caught now:
+  - **A check working from an older read.** Suppose another check moved a task up a rung in between. If the claim ignored the rung already sent, the alert would go out again. The "two checks at once" test passed anyway, because the database's own write conflict stopped the second check. A new test runs a check from an older read of the task: it sends nothing.
+  - **The alert's history losing its rung.** The rung written into the history was overwritten afterwards, when the number of people emailed was noted. Losing it would only show if that second write failed, so a new test makes it fail: the history still names the rung, and the run counts the failure.
+- **Test set-up corrected while writing the suite:**
+  - The need-to-know check first failed because emails rightly name the agency. It now checks that no request title or text appears.
+  - The VA could not open tasks outside a pod, so a test pod was added.
+  - One expectation for the check a day later was wrong: the task that had time left rightly climbs straight to the top.
+- **A Workload-page sentence broke** on the apostrophe in "hasn't" during editing. It was reworded to "has not".
+- **The fault run was interrupted once** when the session ended. All code was confirmed back to its original, no test data was left, and the run was resumed from where it stopped.
+
+**Not done or limited:**
+
+- **The thresholds aren't editable on screen.** Changing two business hours or four is a one-line change in `lib/desk/alerts.ts`. An editor could join the business-calendar page if the client wants one.
+- **The schedule has to be switched on where the app is hosted** (one of the two settings above). It is off until then, and the Workload page says so. This goes in the handover notes (Module 46).
+- **Up to 500 tasks per run,** most urgent first; any more are picked up by the next run.
+- **No in-app alert list or bell;** alerts are emails, the history and the Workload page's overdue and escalated figures.
+- **A VA holding overdue work isn't emailed;** the plan sends alerts to the Account Manager and the Operations Managers. The VA sees it in their queue, marked overdue.
+- **No browser check,** for the same reason as Modules 38–40 (this machine's memory).
+
+**Verified:**
+
+`npx tsc --noEmit` clean. New `script/verify-desk-alerts.ts`: **75 passed**:
+- **The rungs** and their edges in business time: exactly two hours left, due this minute, a minute past, four business hours overdue, overnight, and across a night.
+- **The schedule settings:** the interval, the secret's length, and "Bearer <secret>" only.
+- **The first check:**
+  - who is told at each rung: the task's AM, the agency's AM when the task's has left or can't open it, the Operations Managers when there's no AM, both at the top when first seen there;
+  - nothing for work with time left, waiting, closed or undated; nothing to the VA or the agency;
+  - nothing private and no due date in an email;
+  - the automatic escalation, and a manager's kept as it was; last activity untouched;
+  - the history, the audit and the email record.
+- **What each person sees:** managers, VAs (not who was told, not why) and the agency (nothing).
+- **Once per rung:** the same check again; later checks moving each task up; straight to the top after a long gap; nothing more after that.
+- **A new due date starts again;** a wait ended past its date.
+- **Two checks at once:** one alert, sent once. A check working from an older read of a task sends nothing.
+- **A failed email:** recorded, the check carries on, not retried. If noting how many were told fails, the history still names the rung.
+- **Switched off:** nothing runs and no alert is used up; sent once switched on.
+- **The run record:** counts only, under its own name for the test, and the real record untouched.
+- **Escalating by hand:** who is emailed, without the reason; clearing emails nobody.
+- **The scheduler route:** 503 with no secret, 401 with none or the wrong one, 200 with counts by GET or POST.
+- **The code:** the route is reachable without a session, the timer only when set, one check at a time, the screens.
+- **Test data:** run against the shared database with temporary agencies, people, a pod and tasks, all removed at the end. The check was limited to the test agencies, and no email was sent.
+
+Deliberate faults: **39 of 39 caught (37 on the first run; the two missed are described under Issues), each run to the end and the code confirmed restored after each**.
+
+Module 1–40 suites re-run: all 39 earlier Desk suites passed, 0 failed (**3,434 in total** with this module), plus the text-matching (11) and user-responses (13) suites. No earlier check needed changing. No product code changed after this run.
+
+**Module 42 — Turnaround by pod, person and agency (✅ complete, 20 Nov 2026)**
+
+**Delivered:**
+
+- **The Turnaround page** (`/desk-ops/metrics`, built on the placeholder from Module 14). It covers requests completed in the last 7, 30, 90 or 365 days, and can be narrowed to one request type or one agency.
+  - **Figures for all of them:** how many were completed; the typical time (median); the time nine in ten were done within; how many met their target; and the average time spent waiting.
+  - **Four breakdowns, each with the same figures:** by pod, by person (who completed it), by agency and by request type. The busiest come first. Work with no pod or nobody assigned has its own row.
+- **How a request is measured** (`lib/desk/turnaround.ts`):
+  - **In business time:** business hours only, with weekends and holidays left out, using the business calendar (Module 7), as everywhere else.
+  - **From when its clock started to completion.** That is when the request arrived, or, for a submission, when complete information arrived (Module 7).
+  - **Less the time it spent waiting** on the agency, carrier or insured (Module 13). This includes a wait still open when the request was completed.
+- **On target** is judged against the original commitment, which never moves (Module 13), so moving the working due date doesn't turn a miss into a hit.
+  - **A business-hours or business-days target** is met when the time worked, with waiting taken out, is within the time the target allowed. So a request finished after its original due time still counts as met if waiting accounts for the difference.
+  - **A target tied to a policy's expiration** (renewals, remarketing) is met when the work was done by that date, since waiting doesn't move an expiration.
+  - **Requests with no target** are counted in the times, but not for or against the target figure.
+- **Times are shown as people read them:** "45 min", "3 h 20 min", or "2 d 3 h" once a request took a working day or more. A day here is one working day of the Desk calendar, not 24 hours, and the page says so.
+- **API:** `GET /api/desk/turnaround?days=&type=&agencyId=`.
+
+**Design decisions:**
+
+- **Need-to-know (Q4):**
+  - Account Managers see their own agencies' work only, and can choose only their own agencies in the filter. Operations Managers and the Super Admin see every agency.
+  - VAs are refused as if the page weren't there, and the refusal is logged, as on the Account Manager dashboard (Module 34).
+  - The answer holds counts and times only: no request titles, text or numbers.
+- **Internal targets (Q5):** agencies never see this page or its figures.
+- **Only requests count.** Subtasks (Module 38) are pieces of a request, so counting them would count the same work twice. Cancelled and still-open work are left out.
+- **Agencies with The Desk switched off are left out,** as on the dashboard and its agency table.
+- **The median and the nine-in-ten figure come first, not only the average.** One request that sat for a week shouldn't make a pod look slow, and the nine-in-ten figure shows the slow end without it.
+- **By person means who completed the request** (the assignee when it was completed), whether a VA or an Account Manager.
+- **The choices are checked strictly.** A period other than those offered, an unknown request type or a malformed agency is refused with a clear message rather than guessed.
+
+**Issues:**
+
+- **One fault was missed on the first fault run;** it is caught now. If agencies with The Desk switched off were offered in the agency filter, only an Operations Manager would see them, because an Account Manager's list is already limited to their own agencies. The suite had checked only the Account Manager's list. It now checks the Operations Manager's too.
+- **Two suite checks were corrected while writing it:**
+  - The seven-day check would have left out requests finished early on the first day, because the test work started exactly a week back. The test work now starts five days back.
+  - The check of the screen's figures looked for identifiers that the page builds from a template. It now checks the template and its parts.
+
+**Not done or limited:**
+
+- **No trend over time** (week by week) and no chart. The page compares pods, people and agencies over one period. A trend line could be added if the client wants one.
+- **No export** to a spreadsheet.
+- **Up to 20,000 requests per report,** the most recent first. Beyond that the page says the figures are partial and suggests a shorter period or one request type.
+- **The period runs back from now** (the last 7, 30, 90 or 365 days), not by calendar month. Monthly usage against plan allowances is Module 43.
+- **No browser check,** for the same reason as Modules 38–41 (this machine's memory).
+
+**Verified:**
+
+`npx tsc --noEmit` clean. New `script/verify-desk-turnaround.ts`: **59 passed**:
+- **Measuring one request:**
+  - business time, including across a night;
+  - waiting taken out, including a wait still open at completion; it never goes below zero;
+  - the clock starting later than the request arrived; a broken start date;
+  - business-time targets met, missed and exactly met; expiration-tied targets met or missed whatever the waiting; no target.
+- **The figures:** the median of an odd and an even number of requests, the nine-in-ten figure, the on-target share counting only requests with a target, the average waiting, and no figures (not zeros) when nothing was completed.
+- **Showing them:** minutes, hours and working days of the calendar's length; on target as a share and a count.
+- **The choices:** the periods offered, with 30 days by default; anything else refused.
+- **The report for an Account Manager:**
+  - every figure checked by hand against eight requests;
+  - by pod (with work in no pod), by person (with work nobody had), by agency and by type, each with its own figures, the busiest first;
+  - cancelled, open, older, subtask and later work left out, and Basin (another Account Manager's) and Cove (The Desk off) not shown;
+  - the agencies offered in the filter.
+- **Choosing:** 90 days, 7 days, one type, their own agency, and another Account Manager's agency asked for by id (nothing).
+- **Who may see it:** each Account Manager their own agencies; an Operations Manager any agency, and all together, with agencies that have The Desk off neither counted nor offered; a VA and an agency user refused and logged; nothing private in the answer.
+- **The code:** the route, the managers-only check before anything is read, the navigation roles, and the page and screen.
+- **Test data:** run against the shared database with temporary agencies, people, pods and tasks, all removed at the end.
+
+Deliberate faults: **38 of 38 caught (37 on the first run; the missed one is described under Issues), each run to the end and the code confirmed restored after each**.
+
+Module 1–41 suites re-run: all 40 earlier Desk suites passed, 0 failed (**3,493 in total** with this module), plus the text-matching (11) and user-responses (13) suites. No earlier check needed changing. No product code changed after this run.
+
+**Module 43 — Service usage and the audit log (✅ complete, 20 Nov 2026)**
+
+**Delivered:**
+
+- **The Usage & audit page** (`/desk-ops/usage`, built on the placeholder from Module 14), for Operations Managers and the Super Admin. It has two tabs.
+- **Usage: each agency's month against its plan** (`lib/desk/usage.ts`). Choose the month: this one or any of the eleven before it.
+  - **For each agency:** its plan and price, and its managed (active) accounts against the number the plan includes.
+  - **For each allowance category** (COIs, endorsements, renewals, remarketing credits, new business, general service):
+    - units used against the allowance, and what is left;
+    - units over the allowance, and how many of them haven't been invoiced yet;
+    - units of work not yet classified;
+    - non-billable work, shown separately.
+  - **Allowances follow billing (Module 13):** an agency's own allowance replaces the plan's, a plan may make a category unlimited, and a category with no allowance set up is shown as such, never as zero.
+  - **Figures for the month:** how many agencies went over an allowance, overage units not yet invoiced, and work not yet classified.
+  - **Order:** agencies over an allowance come first, then those with work waiting to be classified, then the rest.
+  - **Opening an agency** lists its completed requests for the month, each with how it counted (included, overage and whether invoiced, non-billable, or not yet classified) and a link to the request. Opening it is logged.
+- **The audit log viewer** (`lib/desk/audit-log.ts`): the security trail every Desk action has written since Module 8.
+  - **Filters:** by one action or a whole group ("everything about documents"), by agency, by who did it (part of a name or an email, or "system" for automatic actions such as the overdue alerts), by record type and record, and by dates in the Desk time zone.
+  - **Each entry shows** when, who (name and role), what, which record, the agency and the IP address. Selecting the action opens the details and the browser.
+  - **Newest first,** in pages of 50.
+  - **"Download CSV"** exports the filtered log (up to 5,000 entries).
+- **APIs:** `GET /api/desk/usage?period=YYYY-MM`, `GET /api/desk/usage/{agencyId}?period=`, and `GET /api/desk/audit?action=&agencyId=&actor=&entityType=&entityId=&from=&to=&page=`, with `&format=csv` to download.
+
+**Design decisions:**
+
+- **Usage is read from the billing decision each completed request recorded** (Module 13), in the month it was completed in the Desk time zone. The page therefore matches what will be invoiced, and doesn't recount allowances in a second way. Work completed before an agency had an allowance for it is shown as not yet classified. It is never guessed.
+- **Only Operations Managers and the Super Admin see either tab.** The routes refuse everyone else first and log the refusal, as on the Workload page. Account Managers, VAs and agencies see neither (Q4).
+- **Reading the log is itself logged** ("audit viewed", "audit exported"), with the filters used and where from. So is opening an agency's usage. (Q4: "All actions should be logged.")
+- **The log can only be read:** nothing on the page or in its code changes or removes an entry. Passwords and keys were never kept (redacted when written, Module 8), so neither the page nor the download can show them.
+- **The download can't carry a spreadsheet formula.** A value starting with =, +, -, @ or a tab is exported as plain text, so a crafted record name can't run in someone's spreadsheet. The file is sent as a download and never cached.
+- **The filters are checked strictly.** An unknown action, an impossible date, dates the wrong way round, a malformed agency or page, or an overlong filter is refused with a clear message.
+- **Searching by name or email searches for exactly what was typed.** Punctuation is never treated as a pattern (see Issues).
+- **Managed accounts are the agency's active accounts today.** The Desk keeps no history of how many there were in past months.
+
+**Issues:**
+
+- **Two real bugs found by this module's tests, both from the same cause:** Prisma passes text in `contains` and `startsWith` filters to MongoDB as a pattern without escaping it.
+  - **Searching for who did something:** a name such as "(" stopped the search with a database error. The name is now searched for exactly as typed (`literal()`, as in Module 21).
+  - **Filtering by a group of actions:** the "." in "task." matched any character, so the "task" group would also have taken in any action starting "tasks", "task_" and so on. The prefix is now escaped the same way. A test entry outside every group proves it.
+- **The test's expected order was wrong:** Harbor also has work waiting to be classified. The code was right; the expectation was corrected.
+- **Four deliberate faults were missed at first, and the tests were strengthened:**
+  - work with no billing fields at all (older work), not only empty ones;
+  - an agency's own number of managed accounts;
+  - months when stepping back lands in a short month (March back to February);
+  - an action that starts with a group's name. This is the fault that exposed the group bug above.
+  
+  All four are now caught.
+- **One edit to the code was redone** in the editor because the scripted replacement mangled its escaping. This was caught before anything ran.
+
+**Not done or limited:**
+
+- **No invoicing:** usage is tracked, as Q6 asks ("Track billable activity now; invoicing later"). Overage can't be marked invoiced or waived from this page yet; that belongs to the invoicing phase.
+- **Managed accounts for past months** show today's count (see above).
+- **No usage export;** the audit log has one.
+- **The download holds up to 5,000 entries,** the newest first; narrow the filters for more.
+- **No audit log retention or archiving.** Entries are kept indefinitely.
+- **No browser check,** for the same reason as Modules 38–42 (this machine's memory).
+
+**Verified:**
+
+`npx tsc --noEmit` clean. New `script/verify-desk-usage-audit.ts`: **72 passed**:
+- **Months:** this month by default in the Desk time zone, the twelve offered across a year end, and malformed months refused.
+- **Usage for a month,** every figure checked:
+  - included of the allowance with what is left; overage, and how much of it isn't invoiced yet;
+  - an agency's own allowance over the plan's; unlimited; not set up;
+  - work with no category counted as general service; not yet classified, including older work with no billing fields at all; non-billable never counted as waiting to be classified;
+  - cancelled work and other months left out;
+  - the plan and its price, and "starting at" pricing; managed accounts against the plan, and an agency's own number;
+  - an agency with no plan; The Desk switched off, listed only while it has work;
+  - the order, the month's totals, and another month.
+- **One agency's month:** each task and how it counted, whether overage was invoiced, opening it logged with the month and where from, and unknown agencies.
+- **Who may see it:** Account Managers, VAs and agency users refused both tabs.
+- **The audit log,** against 65 test entries:
+  - pages of 50, newest first, none repeated;
+  - filtering by action, group (and nothing outside it that starts with the same word), agency, "system", name (every word, any case), email, record, and dates with both edges of a day in the Desk time zone;
+  - punctuation searched for, not obeyed;
+  - each entry's names, someone since removed, and redaction;
+  - the filter choices; reading logged each time with the filters.
+- **The CSV:** quoting, every entry, "System", a record named like a formula exported as plain text, redaction kept, and exporting logged.
+- **The display helpers:** allowance cells, month names, action names, the query string.
+- **The code:** the three routes are Operations Managers only; the download is an attachment and never cached; nothing in the code changes or removes a log entry; the navigation roles; the page and screen.
+- **Test data:** run against the shared database with temporary agencies, people, plans, tasks and audit entries, all removed at the end. The usage month (March 2031) is one no real work can be in.
+
+Deliberate faults: **50 of 50 caught** (4 only after the tests above were strengthened), each run to the end and the code confirmed restored after each.
+
+Module 1–42 suites re-run: all 41 earlier Desk suites passed, 0 failed (**3,565 in total** with this module), plus the text-matching (11) and user-responses (13) suites. No earlier check needed changing. No product code changed after this run.
+
+**Module 44 — Permission test suite (✅ complete, 20 Nov 2026)**
+
+**Delivered:**
+
+- **One suite for The Desk's permissions, end to end** (`script/verify-desk-permissions.ts`). It goes through the real API routes with real sessions, as each kind of person, against one shared set of test records. Modules 8–10, 28, 30 and 36 each tested their own part; this checks the whole.
+- **The test world:**
+  - two agencies with The Desk, and one without;
+  - three pods: one each agency authorises, and one no agency authorises;
+  - a person for every kind of access: an Operations Manager, each agency's Owner / Admin, a CSR with the whole book, a Producer on assigned accounts only, an Account Manager for each agency, a VA with a Financial-document grant (also the one named on a restricted task), a VA in the same pod with no grant, a VA working only the other agency, a VA in a pod nobody authorised, and a VA whose agency moves from authorising the whole pod to naming VAs.
+  - **Records:** accounts and policies (one account the Producer isn't assigned to, one with no work for any VA), requests (one in progress with a target and an escalation, one restricted to a named VA, one closed by a VA, a team subtask), internal and shared notes, status reasons, documents of every kind (internal, shared, Financial, Personal, removed), and each agency's conversation with the Desk.
+- **Markers:** every piece of information that only some people may see carries a unique marker. The suite then searches every response for the markers each person must never see.
+- **What it covers:**
+  - **Every route:** the 56 Desk routes are read from disk, so a route added later is included automatically. Each one is checked to go through a Desk access check before touching the database.
+  - **No session, or a made-up one:** 401 from every handler of every route.
+  - **An agency without The Desk:** 403 everywhere.
+  - **The scheduler's door** (Module 41): opens only with its secret, never with a session.
+  - **Operations routes** (setup, usage, audit, workload): refuse agency admins, CSRs, Producers, Account Managers and VAs on every handler, and log every refusal.
+  - **Cross-agency access, and every page each person can reach:** all 23 GET routes open to them, each with the ids of every record of its kind (including the other agency's and the switched-off agency's), and the lists filtered to each agency by name. Each person's pages are searched for what they must not see, and checked for what they must see, so the search can't pass by finding nothing.
+  - **Out of reach is the same as not there:** for six people reaching for records outside their scope, 21 reads and changes (status, assignment, notes, escalation, pod, review, subtasks, documents, account edits, policies, assignments, file removal). Each answer is compared byte for byte with the answer for a record that doesn't exist, nothing changes in the database, and the attempts are logged. People, agencies and conversations are checked the same way.
+  - **Producer scope (Q3):**
+    - only their assigned accounts, their requests and their search results;
+    - they can't give access, widen their own book, import, join the agency's conversation, or file a request or a policy on an account they aren't assigned;
+    - a wider book takes effect at once, on the same session, and is lost at once when taken back.
+  - **Unauthorised VAs:** a pod no agency authorised, an agency that authorised another pod, and an agency that names VAs instead of the whole pod. They see nothing and change nothing.
+  - **VA need-to-know (Q4):**
+    - the pod's open work only;
+    - closed work only if they did it;
+    - an account only through a task they can see;
+    - no filing requests;
+    - a Financial file only with the grant; a Personal file for neither VA.
+    - These take effect on the next request, on the same session: taken out of the pod, the pod switched off, deactivated (and back when reactivated).
+  - **Sensitive documents:** for six files (internal, shared, Financial, Personal, removed, the other agency's), exactly who can open each one. A refused sensitive file is logged with its kind, and an opened one is logged too. The link to the file is never cached.
+  - **Restricted tasks:**
+    - only the named VA, the agency's Account Manager and Operations see them;
+    - the agency sees its own request but not the restriction or its reason;
+    - a restricted task can't be handed to a VA who may not see it;
+    - team subtasks never reach the agency, by list or by id.
+  - **Internal notes never reach the agency:**
+    - a VA's note is internal unless they choose otherwise;
+    - a note shared with the agency reaches the agency's people (admin and the Producer on the account);
+    - the agency can't write a note its own people can't see;
+    - none of it reaches the other agency.
+    - Also kept from the agency: the team's own status reasons (only "what we need from you" and cancellation reasons reach the agency), targets and due times (Q5), who on the Desk did what, and which pod has the work.
+  - **An agency switched off:** its people, its VAs and its Account Manager lose access at once, and get it back when it's switched on again.
+
+**Design decisions:**
+
+- **Through the routes, not the access functions alone.** A route that forgot its check, read the wrong field or answered differently for a hidden record would pass a test of the access layer, but not this one.
+- **Searching every answer for markers, with a check that each expected marker appears.** This catches leaks no one thought to write a check for: a new field added to a response is searched automatically.
+- **"Not found" must be exactly the same** as for a record that doesn't exist (status and body), so nobody can learn that another agency's record exists. That is the access layer's rule since Module 9; here it is checked on every route that takes an id.
+- **Tests only; one product fix** (see Issues). No permission rule changed.
+
+**Issues:**
+
+- **A real bug, found by the suite and fixed:** an assigned-only Producer or CSR searching their request list got a server error whenever their agency had a request with no account. The cause is a MongoDB limitation that Prisma doesn't handle: the search's "account name" condition and the access rule's "accounts assigned to me" condition, in one query, fail on requests with no account. Agency admins and Desk staff weren't affected.
+  - **The fix** (`lib/desk/task-api.ts`): for assigned-only people, the accounts matching the search are found first, within their own accounts, and the requests are matched by those accounts.
+  - **New checks:** search by their account's name, by a colleague's account's name (nothing found), and a search matching nothing.
+- **Three of the suite's first expectations were wrong; the code was right:**
+  - a Personal file shared with the agency was listed as internal;
+  - VAs' work was read from the queue route, which gives counts, not tasks;
+  - this machine has no file storage, so opening a file was checked with stand-in storage settings, as in Module 30 (making a link needs no network).
+- **Three faults weren't caught at first; the suite was strengthened for each:**
+  - *An inactive user keeps access:* the sign-in layer already refuses inactive people, so no request could show it. The one path with no sign-in, handing work to someone, is now checked: a deactivated VA can't be given a request.
+  - *Subtasks listed on the agency view:* the agency would have seen no subtask, but would have been told how many open and hidden subtasks the team had on its request. New check: the agency's and the Producer's request pages carry no subtask fields at all.
+  - *Opening a document not logged:* the check accepted any log entry; it now requires "viewed" or "downloaded".
+- **Speed:** each call goes to the shared database, so the suite runs its calls a few at a time. A full run takes about 15 minutes.
+- **A stopped test run left temporary records,** because stopping the shell on Windows doesn't stop the test process it started. The records were removed by that run's tag, and the leftover check confirmed nothing was left. The same was done when the connection to the database dropped during one fault's run; that fault was run again.
+
+**Not done or limited:**
+
+- **No browser check,** for the same reason as Modules 38–43 (this machine's memory). The pages each person sees are covered by the earlier modules' page checks and by this suite's route answers.
+- **Only API routes are covered.** The pages' own access checks (`deskPageAccess`, Module 14) are covered by the navigation suite.
+- **Password managers (Q4):** The Desk stores no carrier or AMS passwords. Password-like text is refused in account fields, imports and messages, and redacted from the audit log (earlier modules), so there is no password store to test here.
+
+**Verified:**
+
+`npx tsc --noEmit` clean. New `script/verify-desk-permissions.ts`: **123 passed**, against the shared database with temporary agencies, people, pods, accounts, requests, notes, documents and messages, all removed at the end.
+
+Deliberate faults: **36 of 37 caught**, each planted in the access layer, the route guards, the agency views, messages or documents, run until its first failed check, and the code confirmed restored after each. The one not caught is harmless: widening the Producer search's account lookup to the whole agency can't show them anything, because the request list still applies their own scope.
+
+Module 1–43 suites re-run: all 42 earlier Desk suites passed (3,565 checks; 3,688 with this one), plus the text-matching (11) and user-responses (13) suites.
+
 ### Phase 3 — Task System Core (17 h)
 
 | # | Module | Hours | Change | Status |
@@ -2008,15 +2330,15 @@ Module 1–39 suites re-run: all 38 earlier Desk suites passed, 0 failed (**3,35
 | 38 | Subtasks: manual creation, parent / child display, parent completion rule | 2.5 | | ✅ Done |
 | 39 | Follow-up rules engine + admin editor (e.g. Renewal completed → AMS update in Pod 1) | 2.5 | | ✅ Done |
 | 40 | Admin workload view: all tasks across agencies and pods, reassign, escalate | 3.0 | | ✅ Done |
-| 41 | Overdue alerts and escalation ladder: approaching / overdue tasks go to the assigned AM, then to the Operations Manager; scheduled check | 3.0 | 🆕 Q5 | ⬜ |
-| 42 | Turnaround metrics per pod, VA and agency, in business time excluding waiting periods | 3.0 | ✏️ Q5 | ⬜ |
-| 43 | Service usage and audit views: each agency's monthly usage against its plan allowances (included / overage / non-billable), audit log viewer | 3.0 | 🆕 Q4, Q6 | ⬜ |
+| 41 | Overdue alerts and escalation ladder: approaching / overdue tasks go to the assigned AM, then to the Operations Manager; scheduled check | 3.0 | 🆕 Q5 | ✅ Done |
+| 42 | Turnaround metrics per pod, VA and agency, in business time excluding waiting periods | 3.0 | ✏️ Q5 | ✅ Done |
+| 43 | Service usage and audit views: each agency's monthly usage against its plan allowances (included / overage / non-billable), audit log viewer | 3.0 | 🆕 Q4, Q6 | ✅ Done |
 
 ### Phase 6 — Hardening & Acceptance (7.5 h)
 
 | # | Module | Hours | Change | Status |
 |---|---|---:|---|---|
-| 44 | Permission test suite: cross-agency access, producer scope, unauthorized VA, VA need-to-know and sensitive documents, restricted tasks, internal-note leak to agency | 3.0 | ✏️ | ⬜ |
+| 44 | Permission test suite: cross-agency access, producer scope, unauthorized VA, VA need-to-know and sensitive documents, restricted tasks, internal-note leak to agency | 3.0 | ✏️ | ✅ Done |
 | 45 | Demo seed data, end-to-end walkthrough of all four views, bug fixes | 2.5 | | ⬜ |
 | 46 | Client handover report | 2.0 | | ⬜ |
 
@@ -2035,7 +2357,7 @@ Module 1–39 suites re-run: all 38 earlier Desk suites passed, 0 failed (**3,35
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–40 complete (109.0 h). **16.5 h remaining.**
+**Progress:** Modules 1–44 complete (121.0 h). **4.5 h remaining.**
 
 The client's answers added **33 hours** (see Section 9), approximately:
 

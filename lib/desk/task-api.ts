@@ -12,7 +12,7 @@
  * narrow what the person could already see.
  */
 import { Prisma, TaskPriority, TaskType, type PrismaClient, type TaskEvent, type TaskStatus } from '@prisma/client';
-import { DeskAccessError, getTaskForScope, isObjectId, taskEventWhere, taskWhere, type DeskScope, type GuardContext } from './access';
+import { DeskAccessError, getTaskForScope, insuredWhere, isObjectId, taskEventWhere, taskWhere, type DeskScope, type GuardContext } from './access';
 import { recordAudit } from './audit';
 import { literal } from './literal-match';
 import { TASK_TYPE_LABELS } from './service-levels';
@@ -20,7 +20,7 @@ import { AGENCY_STATUS_LABELS, STATUS_LABELS, addTaskNote, agencyStatus, agencyT
 import { statusMoves } from './task-statuses';
 import { CLOSED_STATUSES, NOT_FOLLOW_UP, TOP_LEVEL, UNASSIGNED, UNROUTED } from './task-filters';
 import { taskDocumentsFor } from './task-documents';
-import { notifyAgencyNote, notifyStatusChanged, notifyTaskAssigned, notifyTaskCreated } from './notifications';
+import { notifyAgencyNote, notifyEscalated, notifyStatusChanged, notifyTaskAssigned, notifyTaskCreated } from './notifications';
 
 type Db = PrismaClient;
 
@@ -198,7 +198,14 @@ const OPEN: Prisma.TaskWhereInput = { status: { notIn: [...CLOSED_STATUSES] } };
 const NO_DUE_DATE: Prisma.TaskWhereInput = { OR: [{ dueAt: null }, { dueAt: { isSet: false } }] };
 const NOT_WAITING: Prisma.TaskWhereInput = { OR: [{ slaPausedAt: null }, { slaPausedAt: { isSet: false } }] };
 
-export function listWhere(scope: DeskScope, opts: TaskListOptions, now: Date): Prisma.TaskWhereInput {
+/**
+ * `searchAccounts`: for people who see only their assigned accounts, the
+ * accounts whose name matches the search, looked up first (searchAccountIds).
+ * Their scope already filters on the account's assignments, and MongoDB
+ * refuses a query that also filters on the account's name (it fails on
+ * requests with no account), so the name is matched by id instead.
+ */
+export function listWhere(scope: DeskScope, opts: TaskListOptions, now: Date, searchAccounts?: string[]): Prisma.TaskWhereInput {
   const agency = scope.kind === 'AGENCY';
   const statuses = agency
     ? internalStatuses(listOf<AgencyStatus>(opts.status, AGENCY_STATUS_LABELS, 'status'))
@@ -227,7 +234,7 @@ export function listWhere(scope: DeskScope, opts: TaskListOptions, now: Date): P
     parts.push({
       OR: [
         { title: { contains: text, mode: 'insensitive' } },
-        { insured: { is: { name: { contains: text, mode: 'insensitive' } } } },
+        searchAccounts ? { insuredId: { in: searchAccounts } } : { insured: { is: { name: { contains: text, mode: 'insensitive' } } } },
         ...(reference ? [{ reference: Number(reference[1]) }] : []),
       ],
     });
@@ -266,9 +273,20 @@ async function pageByDueDate(db: Db, where: Prisma.TaskWhereInput, skip: number,
   return [...first, ...rest];
 }
 
+/** The accounts a search names, for people who see only their assigned accounts (see listWhere). */
+async function searchAccountIds(db: Db, scope: DeskScope, q: string | null | undefined): Promise<string[] | undefined> {
+  const text = q?.trim().slice(0, 200);
+  if (!text || scope.kind !== 'AGENCY' || scope.book === 'ALL') return undefined;
+  const found = await db.insuredAccount.findMany({
+    where: { AND: [insuredWhere(scope), { name: { contains: literal(text), mode: 'insensitive' } }] },
+    select: { id: true },
+  });
+  return found.map((a) => a.id);
+}
+
 export async function listTasks(db: Db, scope: DeskScope, opts: TaskListOptions = {}) {
   const now = new Date();
-  const where = listWhere(scope, opts, now);
+  const where = listWhere(scope, opts, now, await searchAccountIds(db, scope, opts.q));
   const pageSize = Math.min(Math.max(1, Math.trunc(opts.pageSize ?? 25) || 25), MAX_PAGE_SIZE);
   const page = Math.max(1, Math.trunc(opts.page ?? 1) || 1);
   const skip = (page - 1) * pageSize;
@@ -446,6 +464,7 @@ export async function setTaskAssignee(db: Db, scope: DeskScope, taskId: string, 
 /** Body: { escalate: true, reason } or { escalate: false, reason? }. Managers only (Module 40). */
 export async function setTaskEscalation(db: Db, scope: DeskScope, taskId: string, body: Record<string, unknown>, ctx: GuardContext = {}) {
   const task = await escalateTask(db, scope, taskId, { escalate: body.escalate, reason: body.reason }, ctx);
+  await notifyEscalated(db, task, scope.userId);
   return viewById(db, scope, task.id);
 }
 

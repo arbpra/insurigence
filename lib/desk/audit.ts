@@ -12,7 +12,7 @@ import type { Prisma, PrismaClient } from '@prisma/client';
 /** Known actions. Kept as strings in the database so new ones need no migration. */
 export const AUDIT_ACTIONS = [
   'task.created', 'task.viewed', 'task.updated', 'task.status_changed', 'task.assigned', 'task.reclassified',
-  'task.routed', 'task.restricted', 'task.escalated', 'task.note_added', 'task.billing_classified',
+  'task.routed', 'task.restricted', 'task.escalated', 'task.alerted', 'task.note_added', 'task.billing_classified',
   'document.uploaded', 'document.viewed', 'document.downloaded', 'document.removed',
   'insured.created', 'insured.viewed', 'insured.updated', 'insured.assigned',
   'policy.created', 'policy.updated', 'policy.removed',
@@ -23,6 +23,7 @@ export const AUDIT_ACTIONS = [
   'pod.created', 'pod.updated', 'pod.member_added', 'pod.member_removed', 'pod.access_changed',
   'routing.changed', 'service_level.changed', 'follow_up_rule.changed',
   'calendar.changed', 'holiday.added', 'holiday.removed',
+  'usage.viewed', 'audit.viewed', 'audit.exported',
   'access.denied',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

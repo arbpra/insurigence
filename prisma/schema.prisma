@@ -1182,6 +1182,8 @@ enum TaskEventKind {
   SUBTASK_CREATED
   /// Complexity, priority or billing changed by an Account or Operations Manager (Module 32).
   RECLASSIFIED
+  /// The scheduled check sent a due-soon, overdue or escalation alert (Module 41). Internal.
+  ALERTED
 }
 
 /// A unit of Desk work, always tied to an agency and, when applicable, an
@@ -1233,6 +1235,13 @@ model Task {
   escalated        Boolean       @default(false)
   escalatedAt      DateTime?
   escalationReason String?
+
+  /// The escalation ladder (Module 41): the highest alert sent for the due date
+  /// in alertDueAt — 1 due soon, 2 overdue, 3 escalated to the Operations
+  /// Managers. When dueAt changes (moved, or pushed out by a wait) the ladder
+  /// starts again for the new date. Unset = nothing sent yet.
+  alertLevel       Int?
+  alertDueAt       DateTime?
 
   /// Need-to-know: when non-empty, only these Desk staff (plus the agency's
   /// Account Managers and Operations Managers) may see the task. Agency users
@@ -1540,6 +1549,17 @@ model DeskCalendar {
   updatedAt      DateTime @updatedAt
 }
 
+/// When a scheduled Desk job last ran and what it did (Module 41), so a
+/// manager can see the schedule is working. One row per job, e.g. "alerts".
+model DeskJobRun {
+  id         String    @id @map("_id")
+  startedAt  DateTime
+  finishedAt DateTime?
+  /// Counts only, never task content.
+  result     Json?
+  error      String?
+}
+
 /// A non-working date in the Desk calendar. Stored as "YYYY-MM-DD" (a calendar
 /// date, not an instant) so it cannot shift with time zones.
 model DeskHoliday {
@@ -1616,6 +1636,10 @@ enum DeskNotificationEvent {
   REQUEST_COMPLETED
   AGENCY_REPLIED
   MESSAGE_RECEIVED
+  /// The escalation ladder (Module 41).
+  TASK_DUE_SOON
+  TASK_OVERDUE
+  TASK_ESCALATED
 }
 
 /// SKIPPED: email isn't configured, so nothing was sent.

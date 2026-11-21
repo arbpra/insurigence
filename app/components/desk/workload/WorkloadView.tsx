@@ -28,6 +28,7 @@ interface Workload {
   people: ({ id: string; name: string; kind: 'VA' | 'ACCOUNT_MANAGER' | 'OTHER'; isActive: boolean; pods: string[] } & Counts)[];
   agencies: ({ id: string; name: string; deskEnabled: boolean } & Counts)[];
   list: { total: number; page: number; pageSize: number; rows: Row[] };
+  alertCheck: { lastRun: { at: string; sent: number; failed: number; error: string | null } | null; scheduled: boolean };
 }
 interface Person { id: string; name: string; kind: 'VA' | 'ACCOUNT_MANAGER'; lead: boolean; openTasks: number }
 type Action =
@@ -152,6 +153,7 @@ export function WorkloadView() {
       <div>
         <h1 className="text-xl font-semibold text-slate-900">Workload</h1>
         <p className="text-sm text-slate-600">All open work across agencies and pods. Choose a figure or a row to see the tasks behind it.</p>
+        {data && <AlertCheckLine check={data.alertCheck} />}
       </div>
 
       {error && (
@@ -383,5 +385,20 @@ function Table({ title, testId, cols, rows }: {
         </table>
       </div>
     </section>
+  );
+}
+
+/** When the overdue-alert check last ran (Module 41), so a stopped schedule is noticed. */
+function AlertCheckLine({ check }: { check: Workload['alertCheck'] }) {
+  const run = check.lastRun;
+  const text = run
+    ? `Overdue alerts: last checked ${new Date(run.at).toLocaleString()}; ${run.sent === 0 ? 'nothing new to send' : `${run.sent} ${run.sent === 1 ? 'alert' : 'alerts'} sent`}.`
+    : 'Overdue alerts: the check has not run yet.';
+  return (
+    <p className={`text-xs mt-1 ${run?.failed || !check.scheduled ? 'text-amber-700' : 'text-slate-500'}`} data-testid="desk-workload-alert-check">
+      {text}
+      {!!run?.failed && ` ${run.failed} could not be checked${run.error ? ` (${run.error})` : ''}.`}
+      {!check.scheduled && ' No schedule is set up, so alerts are not being sent.'}
+    </p>
   );
 }

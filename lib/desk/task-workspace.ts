@@ -45,6 +45,10 @@ export function reclassifiedLines(details: Record<string, unknown>): string[] {
 export function eventLines(e: StaffEvent): string[] {
   if (e.kind === 'RECLASSIFIED') return reclassifiedLines(e.details);
   if ((e.kind === 'ESCALATED' || e.kind === 'DEESCALATED') && typeof e.details.reason === 'string') return [`Reason: ${e.details.reason}`];
+  if (e.kind === 'ALERTED' && typeof e.details.sentTo === 'number') {
+    const n = e.details.sentTo;
+    return [n === 0 ? 'Nobody could be emailed' : `Emailed ${n} ${n === 1 ? 'person' : 'people'}`];
+  }
   if (e.kind === 'ROUTED' && typeof e.details.toName === 'string') return [`From ${typeof e.details.fromName === 'string' ? e.details.fromName : 'no pod'}`];
   return [];
 }
@@ -66,7 +70,11 @@ export function eventTitle(e: StaffEvent): string {
     case 'NOTE': return e.visibility === 'AGENCY' ? 'Note shared with the agency' : 'Internal note';
     case 'DOCUMENT_ADDED': return e.visibility === 'AGENCY' ? 'Document added, shared with the agency' : 'Document added, internal';
     case 'DOCUMENT_REMOVED': return 'Document removed';
-    case 'ESCALATED': return 'Escalated';
+    case 'ESCALATED': return e.details.automatic === 'overdue' ? 'Escalated automatically: overdue' : 'Escalated';
+    case 'ALERTED':
+      return e.details.automatic === 'due_soon' ? 'Due-soon alert sent'
+        : e.details.automatic === 'overdue' ? 'Overdue alert sent'
+          : e.details.automatic === 'escalated' ? 'Escalation alert sent to the Operations Managers' : 'Alert sent';
     case 'DEESCALATED': return 'Escalation cleared';
     case 'SUBTASK_CREATED': {
       const what = e.details.followUp === true ? 'Follow-up' : 'Subtask';

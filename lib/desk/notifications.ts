@@ -9,6 +9,9 @@
  *  - New message in an agency's conversation → the other side, once until
  *    they open the conversation.
  * When no Account Manager can be reached, the Operations Managers are told instead.
+ *  - Escalated by hand → the Operations Managers and the task's Account Manager (Module 41).
+ *  - The escalation ladder (Module 41, lib/desk/alerts.ts): due soon and
+ *    overdue → the Account Manager; long overdue → the Operations Managers.
  *
  * Who is told is worked out again at sending time, through the same access
  * rules as everything else (lib/desk/access.ts): an email goes only to an
@@ -264,4 +267,64 @@ export async function notifyMessage(
           actionUrl: `${APP_URL}/desk-ops/messages?agency=${message.agencyId}`, actionLabel: 'Read the message',
         }));
   });
+}
+
+// ── Escalation (Module 41) ──
+
+/** Escalated by hand: the Operations Managers and the task's Account Manager, other than whoever did it. */
+export async function notifyEscalated(db: Db, task: NotifiableTask & { escalated: boolean }, actorId: string): Promise<void> {
+  if (!task.escalated) return;
+  await safely('escalation', async () => {
+    const people = await eligible(db, [...(await operationsManagerIds(db)), task.amId], actorId, canOpen(db, task.id));
+    if (!people.length) return;
+    const [agency, actor] = await Promise.all([agencyName(db, task.agencyId), db.user.findUnique({ where: { id: actorId }, select: PERSON })]);
+    await deliver(db, { event: 'TASK_ESCALATED', agencyId: task.agencyId, taskId: task.id }, people, () => ({
+      headline: `Request #${task.reference} was escalated`,
+      detail: `${actor ? nameOf(actor) : 'Someone'} escalated a request for ${agency} (${TASK_TYPE_LABELS[task.type]}). The reason is on the request.`,
+      actionUrl: staffTaskUrl(task.id), actionLabel: 'Open the request',
+    }));
+  });
+}
+
+export type AlertRung = 1 | 2 | 3;
+
+/** The task's Account Manager, else the agency's, else the Operations Managers. */
+async function accountManagers(db: Db, task: NotifiableTask, open: (scope: DeskScope) => Promise<boolean>) {
+  const desk = await db.agencyDeskAssignment.findUnique({ where: { agencyId: task.agencyId }, select: { primaryAmId: true, backupAmId: true } });
+  return firstReachable(db, [[task.amId], [desk?.primaryAmId, desk?.backupAmId]], '', open);
+}
+
+/**
+ * One rung of the ladder (lib/desk/alerts.ts). Due soon and overdue go to the
+ * Account Manager; escalated goes to the Operations Managers, and to the
+ * Account Manager too when they weren't told it was overdue. Returns how
+ * many people it was sent to (0 when notifications are off). Never throws.
+ */
+export async function sendAlert(db: Db, task: NotifiableTask, rung: AlertRung, opts: { alsoAccountManager?: boolean; soonHours: number; overdueHours: number }): Promise<number> {
+  if (notificationsOff()) return 0;
+  try {
+    const open = canOpen(db, task.id);
+    let people: Person[];
+    if (rung < 3) people = await accountManagers(db, task, open);
+    else {
+      people = await eligible(db, await operationsManagerIds(db), '', open);
+      if (opts.alsoAccountManager || !people.length) {
+        const seen = new Set(people.map((p) => p.id));
+        people = [...people, ...(await accountManagers(db, task, open)).filter((p) => !seen.has(p.id))];
+      }
+    }
+    if (!people.length) return 0;
+    const agency = await agencyName(db, task.agencyId);
+    const what = `a request for ${agency} (${TASK_TYPE_LABELS[task.type]})`;
+    const event: DeskNotificationEvent = rung === 1 ? 'TASK_DUE_SOON' : rung === 2 ? 'TASK_OVERDUE' : 'TASK_ESCALATED';
+    await deliver(db, { event, agencyId: task.agencyId, taskId: task.id }, people, () => (rung === 1
+      ? { headline: `Request #${task.reference} is due soon`, detail: `${what[0].toUpperCase()}${what.slice(1)} reaches its internal target within ${opts.soonHours} business hours and isn't done yet.`, actionUrl: staffTaskUrl(task.id), actionLabel: 'Open the request' }
+      : rung === 2
+        ? { headline: `Request #${task.reference} is overdue`, detail: `${what[0].toUpperCase()}${what.slice(1)} has passed its internal target and isn't done yet.`, actionUrl: staffTaskUrl(task.id), actionLabel: 'Open the request' }
+        : { headline: `Request #${task.reference} is escalated: overdue`, detail: `${what[0].toUpperCase()}${what.slice(1)} is more than ${opts.overdueHours} business hours past its internal target and isn't done yet, so it has been escalated to the Operations Managers.`, actionUrl: staffTaskUrl(task.id), actionLabel: 'Open the request' }));
+    return people.length;
+  } catch (err) {
+    console.error('[desk/notifications] alert failed', err);
+    return 0;
+  }
 }
