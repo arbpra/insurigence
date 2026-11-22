@@ -2,7 +2,7 @@
 
 **Date:** 22 November 2026
 **Covers:** the 46 modules of the Desk build plan (`THE_DESK_BUILD_PLAN.md`), 125.5 hours in total
-**Code:** branch `feature/proposal-system` (not yet merged into `main`)
+**Code:** merged into `main` and deployed to https://insurigence.ai (22 November 2026)
 
 ---
 
@@ -25,11 +25,9 @@ Everything in the plan's scope is in place:
 - business-hours service levels with alerts and escalation;
 - billable-activity tracking.
 
-A few things must happen before real agencies use it. They are in **Section 4, Going live**:
+It is live on https://insurigence.ai: the code is deployed, the database is updated, the overdue-alert schedule runs and a real email has arrived. Two things remain before real agencies use it (**Section 4, Going live**):
 
-- set up file storage;
-- switch on the overdue-alert schedule;
-- check a real email;
+- set up file storage (R2);
 - confirm the plan allowances.
 
 **Section 5** lists the decisions that are yours to make.
@@ -105,15 +103,15 @@ Each step is recorded in the request's history. Every action by anyone is also r
 
 ## 4. Going live
 
-These steps are for whoever runs the hosting. Steps 1–4 are required before go-live; steps 5 and 6 are needed for the first agency.
+These steps are for whoever runs the hosting. Steps 1–4 are required before go-live; steps 5 and 6 are needed for the first agency. **Status on 22 November 2026:** steps 1, 2, 3 and 5 are done; in step 4 everything but R2 is set; step 6 waits for R2.
 
 | # | Step | Why |
 |---|---|---|
-| 1 | **Merge the branch** `feature/proposal-system` into `main` and deploy. | The Desk exists only on that branch. |
-| 2 | **Update the production database** (the `insurigence` database on Atlas, which development has also been using): `npm run db:push`, then `npm run db:seed:desk`. | The first creates The Desk's collections and indexes. The second creates the defaults: the four pods, routing and follow-up rules, the three plans, your targets, the business calendar and holidays. It only creates what is missing, so running it again is safe. **Don't run `npm run db:seed` on a live database:** it resets the demo users' passwords. |
-| 3 | **Confirm the database runs as a replica set.** MongoDB Atlas does by default. | Requests, subtasks and history are saved together in one transaction, which needs a replica set. |
-| 4 | **Set the server settings** in the table below. **Most important:** set up file storage (R2), and turn on the overdue-alert schedule. | Without R2, documents can't be uploaded. Without the schedule, nobody receives overdue or escalation alerts (the Workload page says so). |
-| 5 | **Send one real email.** Invite a staff member to your own address, and send a test request to see the notification. | Emails go through Resend, as invites already do, but no Desk email has yet been seen arriving in an inbox. |
+| 1 | ✅ **Merge the branch** `feature/proposal-system` into `main` and deploy. Done 22 November 2026. | The Desk existed only on that branch. |
+| 2 | ✅ **Update the production database** (the `insurigence` database on Atlas, which development has also been using): `npm run db:push`, then `npm run db:seed:desk`. Done on the server, 22 November 2026. | The first creates The Desk's collections and indexes. The second creates the defaults: the four pods, routing and follow-up rules, the three plans, your targets, the business calendar and holidays. It only creates what is missing, so running it again is safe. **Don't run `npm run db:seed` on a live database:** it resets the demo users' passwords. |
+| 3 | ✅ **Confirm the database runs as a replica set.** MongoDB Atlas does by default, and the transactions run on it. | Requests, subtasks and history are saved together in one transaction, which needs a replica set. |
+| 4 | **Set the server settings** in the table below. **Most important:** set up file storage (R2), and turn on the overdue-alert schedule. The schedule, `APP_URL` and email are done; **R2 is still to set**. | Without R2, documents can't be uploaded. Without the schedule, nobody receives overdue or escalation alerts (the Workload page says so). |
+| 5 | ✅ **Send one real email.** Done 22 November 2026: a Desk notification email arrived, from `noreply@insurigence.ai`. | Emails go through Resend, as invites already do. |
 | 6 | **Upload one real document** to a request, then open it. | The storage code is tested, but never against your R2 bucket. |
 | 7 | **Set up the team and the first agency**, in Desk setup (`/super-admin/desk`): see the steps below. | |
 
@@ -121,10 +119,10 @@ These steps are for whoever runs the hosting. Steps 1–4 are required before go
 
 | Setting | Required? | What it does |
 |---|---|---|
-| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | **Yes, for documents** | Cloudflare R2 file storage, in the same private bucket model as the existing quote documents. **They are not set in the current `.env`.** |
-| `DESK_CRON_SECRET` | **Yes, for alerts** | A random secret of at least 24 characters. A scheduler then calls `https://insurigence.ai/api/desk/cron/alerts` every 15 minutes with the header `Authorization: Bearer <secret>`. This is the right choice for the current Replit "autoscale" deployment, which sleeps when idle and can run several copies. Any scheduler that can send a header works (for example a Replit scheduled deployment, or an external cron service). |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | **Yes, for documents** | Cloudflare R2 file storage, in the same private bucket model as the existing quote documents. **Not set yet:** waiting for the client's Cloudflare credentials. |
+| `DESK_CRON_SECRET` | **Yes, for alerts** | A random secret of at least 24 characters. A scheduler then calls `https://insurigence.ai/api/desk/cron/alerts` every 15 minutes with the header `Authorization: Bearer <secret>`. This is the right choice for the current Replit "autoscale" deployment, which sleeps when idle and can run several copies. Any scheduler that can send a header works. **Set up:** the secret is set on Replit, and GitHub Actions calls the check every 15 minutes (`.github/workflows/desk-alerts.yml`, using the repository secret `DESK_CRON_SECRET`, which must match Replit's). It can also be run by hand from GitHub → Actions → Desk alert check → Run workflow. A failed call shows as a red run. GitHub can start scheduled runs a few minutes late, which doesn't matter for 2- and 4-hour thresholds. |
 | `DESK_ALERT_CHECK_MINUTES` | Not on autoscale | For example `15`: the app runs the check itself while it is running. Only suits a server that stays up (a reserved VM). Using both settings is safe: no alert is sent twice. |
-| `RESEND_API_KEY`, `EMAIL_FROM`, `APP_URL` | Already set | Email sending, and the links in emails. |
+| `RESEND_API_KEY`, `EMAIL_FROM`, `APP_URL` | Already set | Email sending, and the links in emails. `APP_URL` is `https://insurigence.ai` on the server. |
 | `DESK_EMAIL_NOTIFICATIONS=off` | Only on test copies | Stops Desk emails and alerts. Use it on any staging or test copy that shares real data. |
 
 Two safeguards apply whatever the settings:
@@ -187,7 +185,7 @@ Each one has a working placeholder, and can be changed on screen unless noted.
 - **Removing it:** `npm run db:seed:desk-demo -- --remove` takes it out; `-- --reset` takes it out and creates it again. Removal touches only demo records. It refuses to run if a real person has been added to a demo agency.
 - **Before real agencies go live, remove the demo from that database.** The demo VAs sit in the real pods, so they would see the work of any real agency that authorises a whole pod.
 
-The demo is **not** loaded on the shared database now. Today no agency on that database has The Desk on.
+The demo was loaded on the live database for the owner's click-through on 22 November 2026, every sign-in was checked, and it was then removed (2 agencies, 10 people, 13 requests). It is **not** loaded now.
 
 ---
 
