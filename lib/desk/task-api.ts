@@ -16,7 +16,8 @@ import { DeskAccessError, getTaskForScope, insuredWhere, isObjectId, taskEventWh
 import { recordAudit } from './audit';
 import { literal } from './literal-match';
 import { TASK_TYPE_LABELS } from './service-levels';
-import { AGENCY_STATUS_LABELS, STATUS_LABELS, addTaskNote, agencyStatus, agencyTaskView, assignTask, changeTaskStatus, createSubtask, createTask, escalateTask, moveTaskToPod, reviewTask, type AgencyStatus } from './tasks';
+import { AGENCY_STATUS_LABELS, STATUS_LABELS, addTaskNote, agencyStatus, agencyTaskView, assignTask, changeTaskStatus, createSubtask, createTask, escalateTask, moveTaskToPod, restrictTask, restrictionCandidates, reviewTask, type AgencyStatus } from './tasks';
+import { notForAgencies } from './task-queue';
 import { statusMoves } from './task-statuses';
 import { CLOSED_STATUSES, NOT_FOLLOW_UP, TOP_LEVEL, UNASSIGNED, UNROUTED } from './task-filters';
 import { taskDocumentsFor } from './task-documents';
@@ -417,6 +418,8 @@ function staffPermissions(scope: DeskScope, task: TaskRow, openSubtasks: number)
     // Module 40: flag for a manager's attention, or move to another pod.
     escalate: manager && open,
     movePod: manager && open,
+    // Q4: on the request, at any stage (a dispute can come after the work); subtasks follow it.
+    restrict: manager && !task.parentTaskId,
   };
 }
 
@@ -466,6 +469,19 @@ export async function setTaskEscalation(db: Db, scope: DeskScope, taskId: string
   const task = await escalateTask(db, scope, taskId, { escalate: body.escalate, reason: body.reason }, ctx);
   await notifyEscalated(db, task, scope.userId);
   return viewById(db, scope, task.id);
+}
+
+/** Body: { userIds, reason }; an empty list lifts it. Account and Operations Managers, on a request (Q4). */
+export async function setTaskRestriction(db: Db, scope: DeskScope, taskId: string, body: Record<string, unknown>, ctx: GuardContext = {}) {
+  if (scope.kind === 'AGENCY') await notForAgencies(db, scope, 'restrict', taskId, ctx);
+  const { task, subtasks, released } = await restrictTask(db, scope, taskId, { userIds: body.userIds, reason: body.reason }, ctx);
+  return { task: await viewById(db, scope, task.id), subtasks, released };
+}
+
+/** Who can be named, and who is named now. Account and Operations Managers. */
+export async function getRestrictionCandidates(db: Db, scope: DeskScope, taskId: string, ctx: GuardContext = {}) {
+  if (scope.kind === 'AGENCY') await notForAgencies(db, scope, 'restriction', taskId, ctx);
+  return restrictionCandidates(db, scope, taskId, ctx);
 }
 
 /** Body: { podId }. Managers only (Module 40). */

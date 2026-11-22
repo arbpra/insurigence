@@ -2373,7 +2373,7 @@ Module 1–43 suites re-run: all 42 earlier Desk suites passed (3,565 checks; 3,
 
 **Design decisions:**
 
-- **Built through the service layer, not written into the database.** The demo then shows what the system really does: routing, targets, billing, follow-ups and history aren't hand-made. Two things have no service function, so they are set directly: the restriction on one request, and one request's target moved into the past so that overdue and escalation show.
+- **Built through the service layer, not written into the database.** The demo then shows what the system really does: routing, targets, billing, follow-ups and history aren't hand-made. One thing has no service function, so it is set directly: one request's target moved into the past so that overdue and escalation show. (The restriction on one request was also set directly at first; since the follow-up below it goes through the new service.)
 - **Marked by one reserved email domain,** which is also what makes it impossible to email. Removal deletes only the agencies and people on that domain and what is tied to them. It refuses if a demo agency holds anyone not on the domain, so a real person added to a demo agency is never deleted with it.
 - **The demo agencies authorise their VAs by name, not whole pods.** So no one outside the demo is let into its work.
 - **The tests use their own domain** (`m45test…`, `m45walk…`), so a demo being shown is never touched.
@@ -2428,7 +2428,7 @@ Module 1–44 suites re-run: all 43 earlier Desk suites passed (3,688 checks; 3,
 
 **Issues:** checking the claims found two things the module reports didn't make plain:
 
-- **A request can't be restricted to named people from the app.** The restriction is enforced, and subtasks inherit it, but nothing in the app sets it; only the database can. This is part of Q4 ("restrict certain agencies or tasks to specific employees"). Agencies can be restricted to named VAs on screen; requests can't. The handover says so in the Q4 row and in the limits, with an estimate of about 1 hour.
+- **A request can't be restricted to named people from the app.** The restriction is enforced, and subtasks inherit it, but nothing in the app sets it; only the database can. This is part of Q4 ("restrict certain agencies or tasks to specific employees"). Agencies can be restricted to named VAs on screen; requests can't. The handover said so in the Q4 row and in the limits, with an estimate of about 1 hour. **Since built:** see the follow-up below.
 - **The R2 settings aren't in the current `.env`,** so documents can't be uploaded on this setup. The handover lists them as required.
 
 **Not done or limited:**
@@ -2437,6 +2437,29 @@ Module 1–44 suites re-run: all 43 earlier Desk suites passed (3,688 checks; 3,
 - **The branch isn't merged into `main`.** That is step 1 of going live.
 
 **Verified:** every file path, setting name, threshold (2 and 4 business hours) and test count in the handover was checked against the code and the last regression: 46 suites, 3,795 checks, all passing.
+
+### Follow-up after Module 46 — restricting a request on screen, and the upload limit (owner approved)
+
+**Built:**
+
+- **Restricting a request to named people (Q4: "restrict certain agencies or tasks to specific employees").** In the request workspace, Account Managers and Operations Managers can now restrict a request, change who is named, or lift the restriction:
+  - **who can be named:** active VAs that the agency has authorised for the request's pod, or the pod of one of its subtasks. Account Managers of the agency and Operations Managers always keep access, so they aren't listed;
+  - **a reason is required** (up to 500 characters); at most 20 people;
+  - **set on the request only.** Its subtasks follow it, so a subtask is never more open than its request;
+  - **anyone holding the work who isn't named goes back to the queue,** on the request and its subtasks, with "Back to the queue: X no longer has access" in the history;
+  - **allowed on a closed request** (a dispute can come after the work); nobody is released then;
+  - **internal:** VAs see "Access restriction changed" without names or the reason; the agency sees nothing about it and is told "not found" by the new routes;
+  - **logged:** a `RESTRICTED` history entry on the request and each subtask, and the audit entry `task.restricted` with who, to whom and who was released.
+
+  New: `restrictTask` and `restrictionCandidates` (`lib/desk/tasks.ts`), the route `/api/desk/tasks/[id]/restriction` (GET who can be named, POST to restrict or lift), and the panel in the workspace. The demo now restricts its request through this service.
+- **Upload limit 15 MB → 9 MB** in the older parts of the app: quote documents (`lib/storage/r2.ts`) and the AI document summary upload. Next.js refuses request bodies over 10 MB, so a 12 MB file used to fail with an unclear error; now the limit is checked and explained. Desk documents and imports were already 9 MB.
+
+**Issues found and solved:**
+
+- **Two earlier test runs had left records in the database** after being interrupted: a `m23test…` pod with 2 agencies and 12 people, and one `m45test…` person. They were removed by exact tag. The demo suite's removal check now deletes its outsider whatever happens, so a faulty removal can't leave it behind.
+- **The permission suite counts the routes,** so it now expects 57 and attacks the restriction route from the other agency too.
+
+**Verified:** `tsc --noEmit` exit 0 · **57 tests passed** (`script/verify-desk-restriction.ts`) · 7 of 7 deliberate faults caught (VA may restrict, subtasks not restricted, holders not released, anyone can be named, no reason needed, VAs see the names, the agency learns it exists) and the code restored · full regression: **47 suites, 3,852 checks, all passing** (handover Section 3 updated).
 
 ### Phase 3 — Task System Core (17 h)
 

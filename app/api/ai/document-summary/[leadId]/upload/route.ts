@@ -12,7 +12,8 @@ import { runDocumentSummary } from '@/lib/ai/runDocumentSummary';
  * extracted text then runs through the same Document Summary extraction.
  */
 
-const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
+// 9 MB: Next keeps only the first 10 MB of a body passing through middleware.
+const MAX_FILE_BYTES = 9 * 1024 * 1024; // 9 MB
 const MAX_TEXT_CHARS = 50000;
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
 
@@ -48,7 +49,7 @@ export async function POST(
     return NextResponse.json({ error: 'Only PDF or image files are supported' }, { status: 400 });
   }
   if (file.size > MAX_FILE_BYTES) {
-    return NextResponse.json({ error: 'File too large (max 10 MB)' }, { status: 400 });
+    return NextResponse.json({ error: 'File too large (max 9 MB)' }, { status: 400 });
   }
 
   const buffer = new Uint8Array(await file.arrayBuffer());

@@ -266,9 +266,14 @@ async function snapshot() {
     section('Removal');
     {
       const outsider = await prisma.user.create({ data: { email: `${DOMAIN.replace('.invalid', '')}-outsider@insurigence.test`, role: 'CSR', agencyId: harbor.id } });
-      const refused = await removeDemo(prisma, DOMAIN).then(() => 'removed', (e: Error) => e.message);
-      ok('an agency holding someone outside the demo isn\'t removed', /aren't part of the demo/.test(refused) && (await prisma.agency.count({ where: { id: harbor.id } })) === 1, refused);
-      await prisma.user.delete({ where: { id: outsider.id } });
+      try {
+        const refused = await removeDemo(prisma, DOMAIN).then(() => 'removed', (e: Error) => e.message);
+        ok('an agency holding someone outside the demo isn\'t removed', /aren't part of the demo/.test(refused) && (await prisma.agency.count({ where: { id: harbor.id } })) === 1, refused);
+      } finally {
+        // Deleted whatever happened above, so a faulty removal can't leave the outsider behind.
+        await prisma.session.deleteMany({ where: { userId: outsider.id } });
+        await prisma.user.deleteMany({ where: { id: outsider.id } });
+      }
       const other = await removeDemo(prisma, `m45other${Date.now()}.invalid`);
       ok('removing another domain\'s demo removes nothing of this one', other.agencies === 0 && other.users === 0 && (await findDemo(prisma, DOMAIN)).users.length === 10);
       // The domain's dots are matched literally: "x" in place of the dot is someone else.

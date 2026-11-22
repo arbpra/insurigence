@@ -41,6 +41,16 @@ export function reclassifiedLines(details: Record<string, unknown>): string[] {
   return lines;
 }
 
+/** Managers only: who is named, why, and what followed. */
+export function restrictedLines(details: Record<string, unknown>): string[] {
+  const lines: string[] = [];
+  if (Array.isArray(details.names) && details.names.length) lines.push(`Only: ${details.names.join(', ')}, with the Account Managers and Operations Managers`);
+  if (typeof details.reason === 'string') lines.push(`Reason: ${details.reason}`);
+  if (typeof details.subtasks === 'number' && details.subtasks > 0 && typeof details.onRequest !== 'number') lines.push(`Applied to ${details.subtasks} ${details.subtasks === 1 ? 'subtask' : 'subtasks'} too`);
+  if (typeof details.released === 'number' && details.released > 0) lines.push(`${details.released} ${details.released === 1 ? 'piece of work' : 'pieces of work'} went back to the queue: the person holding it isn't named`);
+  return lines;
+}
+
 /** The lines under a history entry's headline, from its details (managers see them all; VAs only a few). */
 export function eventLines(e: StaffEvent): string[] {
   if (e.kind === 'RECLASSIFIED') return reclassifiedLines(e.details);
@@ -49,6 +59,7 @@ export function eventLines(e: StaffEvent): string[] {
     const n = e.details.sentTo;
     return [n === 0 ? 'Nobody could be emailed' : `Emailed ${n} ${n === 1 ? 'person' : 'people'}`];
   }
+  if (e.kind === 'RESTRICTED') return restrictedLines(e.details);
   if (e.kind === 'ROUTED' && typeof e.details.toName === 'string') return [`From ${typeof e.details.fromName === 'string' ? e.details.fromName : 'no pod'}`];
   return [];
 }
@@ -61,7 +72,10 @@ export function eventTitle(e: StaffEvent): string {
       return e.fromStatus && e.toStatus ? `${STATUS_LABELS[e.fromStatus]} → ${STATUS_LABELS[e.toStatus]}` : 'Status changed';
     case 'ASSIGNED':
       return e.assignedFrom ? `Reassigned from ${e.assignedFrom} to ${e.assignedTo ?? 'someone'}` : `Assigned to ${e.assignedTo ?? 'someone'}`;
-    case 'UNASSIGNED': return e.assignedFrom ? `Released by ${e.assignedFrom}, back to the queue` : 'Back to the queue';
+    case 'UNASSIGNED':
+      // Automatic: the holder lost access (moved pod, a restriction, an agency's authorisation); they didn't release it.
+      if (e.details.automatic && e.assignedFrom) return `Back to the queue: ${e.assignedFrom} no longer has access`;
+      return e.assignedFrom ? `Released by ${e.assignedFrom}, back to the queue` : 'Back to the queue';
     case 'ROUTED':
       if (typeof e.details.toName === 'string') return `Moved to ${e.details.toName}`;
       return e.details.automatic ? 'Routed to a pod' : 'Moved to another pod';
@@ -82,6 +96,13 @@ export function eventTitle(e: StaffEvent): string {
       return typeof e.details.reference === 'number' ? `${what} #${e.details.reference} ${verb}` : `${what} ${verb}`;
     }
     case 'RECLASSIFIED': return 'Reclassified';
+    case 'RESTRICTED': {
+      // VAs get no details: they learn access changed, not who is named or why.
+      if (!Array.isArray(e.details.to)) return 'Access restriction changed';
+      const where = typeof e.details.onRequest === 'number' ? ` (set on request #${e.details.onRequest})` : '';
+      if (!e.details.to.length) return `Restriction lifted${where}`;
+      return `${Array.isArray(e.details.from) && e.details.from.length ? 'Restriction changed' : 'Restricted to named people'}${where}`;
+    }
     default: return 'Updated';
   }
 }

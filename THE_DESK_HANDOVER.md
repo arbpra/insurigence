@@ -69,7 +69,7 @@ Each step is recorded in the request's history. Every action by anyone is also r
 | **Q1. Any AMS; AMS work is manual for now** | Each agency's Desk profile records its AMS and its own instructions for the team. AMS work goes to Pod 1 as tasks. |
 | **Q2. Flexible imports, several policies per insured** | Upload any CSV or Excel export, then match its columns once (remembered per agency). You get a preview with errors before anything is saved, grouping of several policies under one insured, files with insureds only, and producer matching. An import can be undone. |
 | **Q3. Owner / Admin, Producer, CSR** | The Owner / Admin sees everything and manages access. A Producer sees their assigned accounts. A CSR sees their assigned accounts or the whole book, as the Owner / Admin chooses. An account can have several producers and service staff. |
-| **Q4. Need-to-know for VAs, everything logged, no passwords** | A VA sees only work for agencies that authorised their pod or them by name, in their own pod. They reach accounts only through that work. Financial and personal documents need a separate permission. A request can be restricted to named people, and the access rules enforce it. **There is no screen to set a restriction yet** (Section 7). Every action is logged. No passwords are stored: The Desk keeps only a pointer to the entry in your password manager, and password-like text typed into The Desk is refused. |
+| **Q4. Need-to-know for VAs, everything logged, no passwords** | A VA sees only work for agencies that authorised their pod or them by name, in their own pod. They reach accounts only through that work. Financial and personal documents need a separate permission. An Account Manager or Operations Manager can restrict a request, with its subtasks, to named VAs, with a reason; VAs and the agency never see who is named or why. Every action is logged. No passwords are stored: The Desk keeps only a pointer to the entry in your password manager, and password-like text typed into The Desk is refused. |
 | **Q5. Business-hours targets, pausing, escalation; internal only** | Your initial targets are loaded and can be edited. They count business hours on the Desk calendar and skip weekends and holidays. The clock pauses while waiting. Overdue alerts go to the Account Manager, then to the Operations Managers. Agencies never see targets or due dates. |
 | **Q6. Track billable activity now, invoice later** | Plans (Core, Growth, Complete) and per-agency allowances. Each completed request is classed as included, overage or non-billable. A monthly usage page shows each agency against its plan. There is no invoicing yet, as you asked. |
 
@@ -77,9 +77,10 @@ Each step is recorded in the request's history. Every action by anyone is also r
 
 ## 3. How it was tested
 
-- **46 automated test suites** with **3,795 checks**:
+- **47 automated test suites** with **3,852 checks**:
   - 43 Desk suites from Modules 1–44 (3,688 checks);
   - the demo walkthrough (83 checks);
+  - restricting a request to named people (57 checks);
   - the two older text-matching and user-responses suites (24 checks).
 
   They all pass. They run against the real database through the real API routes, signed in as real people. Each one cleans up its own temporary records.
@@ -109,7 +110,7 @@ These steps are for whoever runs the hosting. Steps 1–4 are required before go
 | # | Step | Why |
 |---|---|---|
 | 1 | **Merge the branch** `feature/proposal-system` into `main` and deploy. | The Desk exists only on that branch. |
-| 2 | **Update the production database:** `npm run db:push`, then `npm run db:seed:desk`. | The first creates The Desk's collections and indexes. The second creates the defaults: the four pods, routing and follow-up rules, the three plans, your targets, the business calendar and holidays. It only creates what is missing, so running it again is safe. **Don't run `npm run db:seed` on a live database:** it resets the demo users' passwords. |
+| 2 | **Update the production database** (the `insurigence` database on Atlas, which development has also been using): `npm run db:push`, then `npm run db:seed:desk`. | The first creates The Desk's collections and indexes. The second creates the defaults: the four pods, routing and follow-up rules, the three plans, your targets, the business calendar and holidays. It only creates what is missing, so running it again is safe. **Don't run `npm run db:seed` on a live database:** it resets the demo users' passwords. |
 | 3 | **Confirm the database runs as a replica set.** MongoDB Atlas does by default. | Requests, subtasks and history are saved together in one transaction, which needs a replica set. |
 | 4 | **Set the server settings** in the table below. **Most important:** set up file storage (R2), and turn on the overdue-alert schedule. | Without R2, documents can't be uploaded. Without the schedule, nobody receives overdue or escalation alerts (the Workload page says so). |
 | 5 | **Send one real email.** Invite a staff member to your own address, and send a test request to see the notification. | Emails go through Resend, as invites already do, but no Desk email has yet been seen arriving in an inbox. |
@@ -121,8 +122,8 @@ These steps are for whoever runs the hosting. Steps 1–4 are required before go
 | Setting | Required? | What it does |
 |---|---|---|
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | **Yes, for documents** | Cloudflare R2 file storage, in the same private bucket model as the existing quote documents. **They are not set in the current `.env`.** |
-| `DESK_ALERT_CHECK_MINUTES` | **One of these two is needed for alerts** | For example `15`: the app checks for overdue work every 15 minutes while it runs. Suits a server that stays up. |
-| `DESK_CRON_SECRET` | (one of the two) | A random secret of at least 24 characters. Your host's scheduler then calls `/api/desk/cron/alerts` with `Authorization: Bearer <secret>`. Suits hosts that sleep or run several copies. Using both settings is safe: no alert is sent twice. |
+| `DESK_CRON_SECRET` | **Yes, for alerts** | A random secret of at least 24 characters. A scheduler then calls `https://insurigence.ai/api/desk/cron/alerts` every 15 minutes with the header `Authorization: Bearer <secret>`. This is the right choice for the current Replit "autoscale" deployment, which sleeps when idle and can run several copies. Any scheduler that can send a header works (for example a Replit scheduled deployment, or an external cron service). |
+| `DESK_ALERT_CHECK_MINUTES` | Not on autoscale | For example `15`: the app runs the check itself while it is running. Only suits a server that stays up (a reserved VM). Using both settings is safe: no alert is sent twice. |
 | `RESEND_API_KEY`, `EMAIL_FROM`, `APP_URL` | Already set | Email sending, and the links in emails. |
 | `DESK_EMAIL_NOTIFICATIONS=off` | Only on test copies | Stops Desk emails and alerts. Use it on any staging or test copy that shares real data. |
 
@@ -202,7 +203,6 @@ These were recorded module by module in the build plan. None blocks go-live.
 
 **Desk team**
 - The sharing of a document (internal or agency-visible) can't be changed after upload.
-- **A request can't yet be restricted to named people from the app.** The access rules enforce a restriction, and subtasks inherit it, but setting one is done directly in the database for now. A small screen for this is worth adding (about 1 hour).
 - Subtasks can't be reordered, renamed or moved to another request.
 - A follow-up rule triggers only on completion, creates one task, and leaves it unassigned in its pod's queue.
 - Bulk changes on the Workload page are limited to 50 requests at a time.
@@ -223,7 +223,7 @@ These were recorded module by module in the build plan. None blocks go-live.
 - AMS "continuation" rows with a blank name are treated as errors, rather than taking the name above.
 
 **Older parts of the app**
-- The existing quote-document upload allows 15 MB, above the 10 MB upload limit, so its larger files fail. This is unchanged by The Desk; it should be lowered to 9 MB.
+- The quote-document and document-summary uploads were lowered to 9 MB, to match the 10 MB limit on what reaches the server. Their larger files used to fail.
 - The main app's pages (the dashboard and Super Admin) send an empty page and redirect in the browser once they have checked the session. This was so before The Desk. Nothing is exposed, because the data comes only from the API, which refuses. The Desk's own pages redirect on the server.
 
 ---

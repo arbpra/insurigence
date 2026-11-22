@@ -27,7 +27,7 @@ interface Detail {
   createdAt: string; startedAt: string | null; completedAt: string | null;
   restrictedToUserIds?: string[]; restrictionReason?: string | null;
   billing?: { serviceCategory: keyof typeof SERVICE_CATEGORY_LABELS | null; units: number; nonBillable: boolean; class: string | null; status: string | null; period: string | null };
-  permissions: { statusMoves: TaskStatus[]; pickUp: boolean; release: boolean; assign: boolean; review: boolean; addDocuments: boolean; addSubtask: boolean; escalate?: boolean; movePod?: boolean };
+  permissions: { statusMoves: TaskStatus[]; pickUp: boolean; release: boolean; assign: boolean; review: boolean; addDocuments: boolean; addSubtask: boolean; escalate?: boolean; movePod?: boolean; restrict?: boolean };
   /** For managers: the pods it can be moved to (Module 40). */
   pods?: { id: string; name: string }[];
   /** On a request: its subtasks this person can see, and how many are open in all. */
@@ -39,6 +39,8 @@ interface Detail {
   eventsTotal: number;
 }
 interface Subtask { id: string; reference: number; typeLabel: string; title: string; status: TaskStatus; statusLabel: string; assignee: Person; pod: { id: string; name: string } | null; followUp: boolean }
+interface Nameable { id: string; name: string; pods: string[]; named: boolean; eligible: boolean }
+interface RestrictionForm { people: Nameable[]; chosen: string[]; reason: string; restricted: boolean }
 interface Candidate { id: string; name: string; kind: 'VA' | 'ACCOUNT_MANAGER'; lead: boolean; openTasks: number }
 
 const ACCENT = 'var(--brand-primary, #05314c)';
@@ -67,6 +69,7 @@ export function TaskWorkspace({ taskId, userId }: { taskId: string; userId: stri
   const [picker, setPicker] = useState<Candidate[] | 'loading' | null>(null);
   const [escalation, setEscalation] = useState<{ reason: string } | null>(null);
   const [podPicker, setPodPicker] = useState(false);
+  const [restriction, setRestriction] = useState<RestrictionForm | 'loading' | null>(null);
   const [note, setNote] = useState({ body: '', shared: false });
   const [upload, setUpload] = useState<{ file: File | null; sensitivity: DocumentSensitivity | ''; shared: boolean }>({ file: null, sensitivity: '', shared: false });
   const fileInput = useRef<HTMLInputElement>(null);
@@ -113,6 +116,7 @@ export function TaskWorkspace({ taskId, userId }: { taskId: string; userId: stri
       setPicker(null);
       setEscalation(null);
       setPodPicker(false);
+      setRestriction(null);
       setNotice(done);
     } else {
       setProblem(failure);
@@ -140,6 +144,28 @@ export function TaskWorkspace({ taskId, userId }: { taskId: string; userId: stri
       setPicker(null);
       setProblem(err instanceof Error ? err.message : 'Could not load who can take this.');
     }
+  }
+
+  async function openRestriction() {
+    if (restriction) return setRestriction(null);
+    setRestriction('loading');
+    try {
+      const r = await api<{ restricted: boolean; reason: string | null; people: Nameable[] }>(`/api/desk/tasks/${taskId}/restriction`);
+      setRestriction({ people: r.people, chosen: r.people.filter((x) => x.named && x.eligible).map((x) => x.id), reason: r.reason ?? '', restricted: r.restricted });
+    } catch (err) {
+      setRestriction(null);
+      setProblem(err instanceof Error ? err.message : 'Could not load who can be named.');
+    }
+  }
+
+  function saveRestriction(userIds: string[], reason: string) {
+    if (!task) return;
+    const lifting = userIds.length === 0;
+    if (lifting && !window.confirm(`Lift the restriction on #${task.reference}? Everyone authorised in its pods will see it again.`)) return;
+    void act(
+      () => post('restriction', { userIds, reason }),
+      lifting ? `#${task.reference}: restriction lifted.` : `#${task.reference} is restricted to the people you named, with its subtasks. Anyone holding it who isn't named is back in the queue.`,
+    );
   }
 
   async function sendNote() {
@@ -355,6 +381,7 @@ export function TaskWorkspace({ taskId, userId }: { taskId: string; userId: stri
               {p.escalate && (task.escalated
                 ? <button type="button" className={SECONDARY} disabled={busy} onClick={() => void act(() => post('escalation', { escalate: false }), `#${task.reference}: escalation cleared.`)} data-testid="desk-task-deescalate">Clear escalation</button>
                 : <button type="button" className={SECONDARY} disabled={busy} aria-expanded={!!escalation} onClick={() => setEscalation(escalation ? null : { reason: '' })} data-testid="desk-task-escalate">Escalate</button>)}
+              {p.restrict && <button type="button" className={SECONDARY} disabled={busy} aria-expanded={!!restriction} onClick={() => void openRestriction()} data-testid="desk-task-restrict">{task.restrictedToUserIds?.length ? 'Change restriction' : 'Restrict access'}</button>}
             </div>
             {!p.pickUp && !p.statusMoves.length && !p.assign && !p.release && (
               <p className="text-sm text-slate-500" data-testid="desk-task-no-actions">{task.status === 'COMPLETED' || task.status === 'CANCELLED' ? 'This request is closed.' : 'Someone else is working on this.'}</p>
@@ -380,6 +407,34 @@ export function TaskWorkspace({ taskId, userId }: { taskId: string; userId: stri
                 <div className="flex gap-2 mt-2">
                   <button type="button" className={PRIMARY} style={{ backgroundColor: ACCENT }} disabled={busy || !escalation.reason.trim()} onClick={() => void act(() => post('escalation', { escalate: true, reason: escalation.reason }), `#${task.reference} escalated.`)} data-testid="desk-task-escalate-confirm">Escalate</button>
                   <button type="button" className={SECONDARY} onClick={() => setEscalation(null)}>Cancel</button>
+                </div>
+              </div>
+            )}
+
+            {restriction === 'loading' && <p className="text-sm text-slate-500 mt-3">Loading who can be named…</p>}
+            {restriction && restriction !== 'loading' && (
+              <div className="mt-3 pt-3 border-t border-slate-100" data-testid="desk-task-restrict-form">
+                <p className="text-sm text-slate-700 mb-2">Only the people you tick, the agency&apos;s Account Managers and the Operations Managers will see this request and its subtasks.</p>
+                {restriction.people.length === 0 && <p className="text-sm text-slate-500" data-testid="desk-task-restrict-none">No VA is authorised for this agency in the pods doing this work, so nobody can be named.</p>}
+                <ul className="grid gap-1 list-none p-0">
+                  {restriction.people.map((person) => (
+                    <li key={person.id}>
+                      <label className={`flex items-start gap-2 text-sm ${person.eligible ? 'text-slate-800' : 'text-slate-400'}`}>
+                        <input type="checkbox" className="mt-0.5" disabled={!person.eligible} checked={restriction.chosen.includes(person.id)}
+                          onChange={(e) => setRestriction({ ...restriction, chosen: e.target.checked ? [...restriction.chosen, person.id] : restriction.chosen.filter((id) => id !== person.id) })}
+                          data-testid="desk-task-restrict-person" data-user-id={person.id} />
+                        <span>{person.name}<span className="text-slate-500"> · {person.eligible ? person.pods.join(', ') : 'named, but no longer authorised'}</span></span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+                <label className="block text-sm text-slate-700 mt-3 mb-1" htmlFor="desk-task-restrict-reason">Why is it restricted?</label>
+                <textarea id="desk-task-restrict-reason" rows={2} maxLength={500} className={`${INPUT} w-full`} value={restriction.reason} onChange={(e) => setRestriction({ ...restriction, reason: e.target.value })} data-testid="desk-task-restrict-reason" />
+                <p className="text-xs text-slate-500 mt-1">Internal: VAs and the agency don&apos;t see who is named or why. Anyone holding this work who isn&apos;t ticked goes back to the queue.</p>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  <button type="button" className={PRIMARY} style={{ backgroundColor: ACCENT }} disabled={busy || !restriction.chosen.length || !restriction.reason.trim()} onClick={() => saveRestriction(restriction.chosen, restriction.reason)} data-testid="desk-task-restrict-save">{restriction.restricted ? 'Save' : 'Restrict'}</button>
+                  {restriction.restricted && <button type="button" className={SECONDARY} disabled={busy} onClick={() => saveRestriction([], '')} data-testid="desk-task-restrict-lift">Lift restriction</button>}
+                  <button type="button" className={SECONDARY} onClick={() => setRestriction(null)}>Cancel</button>
                 </div>
               </div>
             )}

@@ -28,7 +28,9 @@ export const ALLOWED_DOCUMENT_TYPES = [
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ] as const;
 
-export const MAX_DOCUMENT_BYTES = 15 * 1024 * 1024; // 15 MB
+// Middleware runs on API routes, and Next keeps only the first 10 MB of a body
+// passing through it, so a larger file arrives cut off. 9 MB leaves room for the form.
+export const MAX_DOCUMENT_BYTES = 9 * 1024 * 1024; // 9 MB
 
 export class StorageNotConfiguredError extends Error {}
 

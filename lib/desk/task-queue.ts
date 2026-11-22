@@ -24,7 +24,8 @@ const nameOf = (p: { firstName: string | null; lastName: string | null; email: s
  * The queue is the Desk team's: anyone else gets the same "not found" as anything
  * out of reach, logged like any other refusal (Q4).
  */
-async function notForAgencies(db: Db, scope: DeskScope, op: string, entityId: string | null, ctx: GuardContext): Promise<never> {
+/** Agency users never learn about the Desk team's own tools: "not found", and logged. */
+export async function notForAgencies(db: Db, scope: DeskScope, op: string, entityId: string | null, ctx: GuardContext): Promise<never> {
   await recordAudit(db, {
     actor: { id: scope.userId, role: scope.role }, action: 'access.denied', entityType: 'Task',
     entityId: entityId && isObjectId(entityId) ? entityId : null, agencyId: scope.kind === 'AGENCY' ? scope.agencyId : null,

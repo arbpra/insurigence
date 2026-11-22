@@ -24,7 +24,7 @@ import {
 } from './business-time';
 import { nextTaskReference } from './sequence';
 import { pickServiceLevelTarget, targetSnapshot } from './service-levels';
-import { NOT_FOLLOW_UP, UNASSIGNED, UNROUTED } from './task-filters';
+import { CLOSED_STATUSES, NOT_FOLLOW_UP, UNASSIGNED, UNROUTED } from './task-filters';
 import { returnToQueue } from './task-release';
 import { followUpTitle } from './follow-ups';
 import { agencyMaySend } from './request-form';
@@ -41,6 +41,7 @@ const bad = (message: string) => new DeskAccessError(400, message);
 const conflict = (message: string) => new DeskAccessError(409, message);
 const forbidden = (message: string) => new DeskAccessError(403, message);
 
+const CLOSED = new Set<TaskStatus>(CLOSED_STATUSES);
 const CHANGED_ELSEWHERE = 'The task was changed by someone else. Refresh and try again.';
 /** The parent completion rule: a request is complete only when all its subtasks are closed. */
 const openSubtasksError = (n: number) =>
@@ -666,6 +667,134 @@ export async function moveTaskToPod(db: Db, scope: DeskScope, taskId: string, po
     });
     return tx.task.findUniqueOrThrow({ where: { id: task.id } });
   });
+}
+
+// ── Restricting a request to named VAs (Q4) ──
+
+export const RESTRICTION_REASON_MAX = 500;
+export const RESTRICTION_MAX_PEOPLE = 20;
+
+/** Can this VA be named on work for this agency in this pod? Only if the agency authorised them there. */
+export const restrictionEligible = (scope: DeskScope, agencyId: string, podId: string | null | undefined) =>
+  scope.kind === 'VA' && !!podId && scope.grants.some((g) => g.agencyId === agencyId && g.podId === podId);
+
+/**
+ * An Account Manager or Operations Manager restricts a request to named VAs
+ * ("restrict certain agencies or tasks to specific employees", Q4), changes
+ * who is named, or lifts it (an empty list). The request's Account Managers
+ * and the Operations Managers always keep access. Set on the request, it
+ * applies to its subtasks and follow-ups too, so no piece of the work stays
+ * open to the rest of a pod. Each person named must be a VA the agency
+ * authorised in the pod of the request or of one of its subtasks. Anyone
+ * holding open work they could no longer see goes back to its queue, as when
+ * someone loses access. The reason is internal: VAs and the agency never see
+ * who is named or why (lib/desk/task-api.ts).
+ */
+export async function restrictTask(
+  db: Db, scope: DeskScope, taskId: string, input: { userIds: unknown; reason?: unknown }, ctx: Ctx = {}
+): Promise<{ task: Task; subtasks: number; released: number }> {
+  const task = await getTaskForScope(db, scope, taskId, ctx);
+  await checkRules(db, scope, task, { op: 'restrict' }, ctx, async () => {
+    if (!isManager(scope)) throw forbidden('Only an Account Manager or Operations Manager can restrict a request.');
+  });
+  if (task.parentTaskId) throw bad('Restrict the main request; its subtasks follow it.');
+  if (!Array.isArray(input.userIds) || !input.userIds.every((id) => isObjectId(id))) throw bad('Choose the people to restrict it to.');
+  const userIds = [...new Set(input.userIds as string[])];
+  if (userIds.length > RESTRICTION_MAX_PEOPLE) throw bad(`Name up to ${RESTRICTION_MAX_PEOPLE} people.`);
+  const restricting = userIds.length > 0;
+  if (!restricting && !task.restrictedToUserIds.length) throw conflict('This request is not restricted.');
+  const before = [...task.restrictedToUserIds].sort();
+  if (restricting && before.length === userIds.length && [...userIds].sort().every((id, i) => id === before[i])) {
+    throw conflict('It is already restricted to exactly these people.');
+  }
+  const reason = cleanText(input.reason, 'Reason', RESTRICTION_REASON_MAX, restricting);
+
+  const family = await db.task.findMany({
+    where: { OR: [{ id: task.id }, { parentTaskId: task.id }] },
+    select: { id: true, agencyId: true, podId: true, status: true, assigneeId: true },
+  });
+  const pods = new Set(family.map((t) => t.podId).filter((id): id is string => !!id));
+  const names: string[] = [];
+  for (const id of userIds) {
+    const [user, theirs] = await Promise.all([
+      db.user.findUnique({ where: { id }, select: { firstName: true, lastName: true, email: true, isActive: true } }),
+      resolveDeskScope(db, id),
+    ]);
+    if (!user?.isActive || ![...pods].some((podId) => restrictionEligible(theirs, task.agencyId, podId))) {
+      throw bad('Each person named must be a VA this agency has authorised in the pod doing the work.');
+    }
+    names.push([user.firstName, user.lastName].filter(Boolean).join(' ') || user.email);
+  }
+
+  // Who holds open work now, checked against the new restriction inside the save.
+  const holders = new Map<string, DeskScope>();
+  for (const t of family) {
+    if (t.assigneeId && !CLOSED.has(t.status) && !holders.has(t.assigneeId)) holders.set(t.assigneeId, await resolveDeskScope(db, t.assigneeId));
+  }
+  const now = new Date();
+
+  return inTransaction(db, async (tx) => {
+    const { count } = await tx.task.updateMany({
+      where: { id: task.id, updatedAt: task.updatedAt },
+      data: { restrictedToUserIds: userIds, restrictionReason: restricting ? reason : null, lastActivityAt: now },
+    });
+    if (count !== 1) throw conflict(CHANGED_ELSEWHERE);
+    const subtaskIds = family.filter((t) => t.id !== task.id).map((t) => t.id);
+    if (subtaskIds.length) {
+      await tx.task.updateMany({ where: { id: { in: subtaskIds } }, data: { restrictedToUserIds: userIds, restrictionReason: restricting ? reason : null } });
+    }
+    const release: Parameters<typeof returnToQueue>[1] = [];
+    for (const t of family) {
+      const holder = t.assigneeId && !CLOSED.has(t.status) ? holders.get(t.assigneeId) : undefined;
+      if (!holder) continue;
+      const keeps = (await tx.task.count({ where: { AND: [{ id: t.id }, taskWhere(holder)] } })) > 0;
+      if (!keeps) release.push({ id: t.id, agencyId: t.agencyId, status: t.status, assigneeId: t.assigneeId });
+    }
+    await returnToQueue(tx, release, scope.userId, 'restricted');
+    const details = { to: userIds, names, from: task.restrictedToUserIds, subtasks: subtaskIds.length, released: release.length, ...(reason ? { reason } : {}) };
+    await tx.taskEvent.createMany({
+      data: family.map((t) => ({ taskId: t.id, agencyId: t.agencyId, actorId: scope.userId, kind: 'RESTRICTED' as const, metadata: t.id === task.id ? details : { ...details, onRequest: task.reference } })),
+    });
+    await recordAudit(tx, {
+      actor: actorOf(scope), action: 'task.restricted', entityType: 'Task', entityId: task.id, agencyId: task.agencyId,
+      metadata: { reference: task.reference, from: task.restrictedToUserIds, to: userIds, subtasks: subtaskIds.length, released: release.map((r) => r.assigneeId) }, ...ctx,
+    });
+    return { task: await tx.task.findUniqueOrThrow({ where: { id: task.id } }), subtasks: subtaskIds.length, released: release.length };
+  });
+}
+
+/**
+ * Who a manager can name on a request: the VAs the agency authorised in the
+ * pod of the request or of one of its subtasks, and who is named now.
+ */
+export async function restrictionCandidates(db: Db, scope: DeskScope, taskId: string, ctx: Ctx = {}) {
+  const task = await getTaskForScope(db, scope, taskId, ctx);
+  await checkRules(db, scope, task, { op: 'restriction_candidates' }, ctx, async () => {
+    if (!isManager(scope)) throw forbidden('Only an Account Manager or Operations Manager can restrict a request.');
+  });
+  if (task.parentTaskId) throw bad('Restrict the main request; its subtasks follow it.');
+  const family = await db.task.findMany({ where: { OR: [{ id: task.id }, { parentTaskId: task.id }] }, select: { podId: true } });
+  const podIds = [...new Set(family.map((t) => t.podId).filter((id): id is string => !!id))];
+  const [members, podRows] = await Promise.all([
+    db.podMember.findMany({ where: { podId: { in: podIds } }, select: { userId: true, podId: true } }),
+    db.pod.findMany({ where: { id: { in: podIds } }, select: { id: true, name: true } }),
+  ]);
+  const podName = new Map(podRows.map((p) => [p.id, p.name]));
+  const ids = [...new Set([...members.map((m) => m.userId), ...task.restrictedToUserIds])];
+  const users = ids.length ? await db.user.findMany({ where: { id: { in: ids } }, select: { id: true, firstName: true, lastName: true, email: true, isActive: true } }) : [];
+  const people: { id: string; name: string; pods: string[]; named: boolean; eligible: boolean }[] = [];
+  for (const user of users) {
+    const theirs = await resolveDeskScope(db, user.id);
+    const where = podIds.filter((podId) => restrictionEligible(theirs, task.agencyId, podId));
+    const named = task.restrictedToUserIds.includes(user.id);
+    if (!where.length && !named) continue;
+    people.push({
+      id: user.id, name: [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email,
+      pods: where.map((id) => podName.get(id) ?? 'A pod'), named, eligible: !!user.isActive && where.length > 0,
+    });
+  }
+  people.sort((a, b) => a.name.localeCompare(b.name));
+  return { restricted: task.restrictedToUserIds.length > 0, reason: task.restrictionReason ?? null, people };
 }
 
 // ── Reclassification and billing review ──

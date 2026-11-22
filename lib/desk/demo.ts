@@ -25,7 +25,7 @@ import { ensureDeskDefaults } from './defaults';
 import { insuredNameKey } from './insureds';
 import { literal } from './literal-match';
 import { sendMessage } from './messages';
-import { addTaskNote, assignTask, changeTaskStatus, createSubtask, createTask, escalateTask } from './tasks';
+import { addTaskNote, assignTask, changeTaskStatus, createSubtask, createTask, escalateTask, restrictTask } from './tasks';
 
 type Db = PrismaClient;
 
@@ -272,7 +272,7 @@ export async function seedDemo(db: Db, opts: { password: string; domain?: string
 
   // 7. A request restricted to one VA (a sensitive matter).
   const restricted = await file(sHannah, { type: 'DOCUMENT_UPLOAD', title: 'File the coverage dispute correspondence for Bayside', insuredId: bayside.insured.id });
-  await db.task.update({ where: { id: restricted.id }, data: { restrictedToUserIds: [vaService.id], restrictionReason: 'Open litigation: only the assigned specialist works this one.' } });
+  await restrictTask(db, sMarcus, restricted.id, { userIds: [vaService.id], reason: 'Open litigation: only the assigned specialist works this one.' });
   await take(sMarcus, restricted, vaService.id);
 
   // 8. The other agency: a certificate in progress, a cancelled request.

@@ -1184,6 +1184,8 @@ enum TaskEventKind {
   RECLASSIFIED
   /// The scheduled check sent a due-soon, overdue or escalation alert (Module 41). Internal.
   ALERTED
+  /// A manager restricted the request (and its subtasks) to named VAs, or lifted it (Q4). Internal.
+  RESTRICTED
 }
 
 /// A unit of Desk work, always tied to an agency and, when applicable, an

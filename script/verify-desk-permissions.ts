@@ -144,7 +144,7 @@ async function call(route: Route, method: Method, token: string | null, params: 
     const R = (path: string) => { const r = routes.find((x) => x.path === path); if (!r) throw new Error(`no route ${path}`); return r; };
 
     section('The routes');
-    ok('every Desk route found on disk (56)', routes.length === 56, routes.length);
+    ok('every Desk route found on disk (57)', routes.length === 57, routes.length);
     ok('each one goes through a Desk guard, or is the scheduler\'s door', routes.every((r) => r.cron || /desk(User|Admin)Request\(prisma, request/.test(readFileSync(r.file, 'utf8'))),
       routes.filter((r) => !r.cron && !/desk(User|Admin)Request\(prisma, request/.test(readFileSync(r.file, 'utf8'))).map((r) => r.path));
     ok('…and the guard comes before any database work in every handler', routes.filter((r) => !r.cron).every((r) => {
@@ -379,6 +379,8 @@ async function call(route: Route, method: Method, token: string | null, params: 
       { path: '/api/desk/tasks/[id]/assign', method: 'POST', param: 'id', body: { assigneeId: va1.id } },
       { path: '/api/desk/tasks/[id]/notes', method: 'POST', param: 'id', body: { body: 'a note', visibility: 'AGENCY' } },
       { path: '/api/desk/tasks/[id]/escalation', method: 'POST', param: 'id', body: { escalated: true, reason: 'x' } },
+      { path: '/api/desk/tasks/[id]/restriction', method: 'GET', param: 'id' },
+      { path: '/api/desk/tasks/[id]/restriction', method: 'POST', param: 'id', body: { userIds: [], reason: 'x' } },
       { path: '/api/desk/tasks/[id]/pod', method: 'POST', param: 'id', body: { podId: podA.id } },
       { path: '/api/desk/tasks/[id]/review', method: 'POST', param: 'id', body: { complexity: 'COMPLEX' } },
       { path: '/api/desk/tasks/[id]/subtasks', method: 'POST', param: 'id', body: { type: 'OTHER', title: 'x' } },
