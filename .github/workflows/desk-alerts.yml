@@ -1,0 +1,13 @@
+name: Desk alert check
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          curl -fsS -X POST \
+            -H "Authorization: Bearer ${{ secrets.DESK_CRON_SECRET }}" \
+            https://insurigence.ai/api/desk/cron/alerts
