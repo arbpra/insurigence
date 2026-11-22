@@ -15,6 +15,16 @@ export interface SendResult {
   skipped?: boolean;
 }
 
+/**
+ * Addresses that can never receive mail: the reserved names of RFC 2606 and
+ * RFC 6761 (.invalid, .test, .example, .localhost, example.com/.net/.org).
+ * The Desk's demo people use .invalid, so showing the demo sends nothing.
+ */
+export function isUndeliverableAddress(to: string): boolean {
+  const domain = to.trim().toLowerCase().split('@').pop() ?? '';
+  return /(^|\.)(invalid|test|example|localhost)$/.test(domain) || /(^|\.)example\.(com|net|org)$/.test(domain);
+}
+
 export async function sendEmail(params: {
   to: string;
   subject: string;
@@ -23,6 +33,9 @@ export async function sendEmail(params: {
   /** Address a reply should go to instead of EMAIL_FROM (which is a noreply box). */
   replyTo?: string;
 }): Promise<SendResult> {
+  if (isUndeliverableAddress(params.to)) {
+    return { ok: false, skipped: true, error: "This address can't receive email." };
+  }
   if (!isEmailConfigured()) {
     console.warn('[email] RESEND_API_KEY not set — skipping send to', params.to);
     return { ok: false, skipped: true, error: 'Email is not configured.' };

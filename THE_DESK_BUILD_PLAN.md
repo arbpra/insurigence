@@ -2303,6 +2303,141 @@ Deliberate faults: **36 of 37 caught**, each planted in the access layer, the ro
 
 Module 1–43 suites re-run: all 42 earlier Desk suites passed (3,565 checks; 3,688 with this one), plus the text-matching (11) and user-responses (13) suites.
 
+**Module 45 — Demo data and end-to-end walkthrough (✅ complete, 21 Nov 2026)**
+
+**Delivered:**
+
+- **Demo data, one command** (`npm run db:seed:desk-demo`, code in `lib/desk/demo.ts`):
+  - **Two agencies with The Desk on:**
+    - *Harbor & Pine Insurance (demo)*: Growth plan, Applied Epic, five accounts, an Owner / Admin, a CSR with the whole book, and a Producer assigned to two accounts.
+    - *Summit Ridge Agency (demo)*: Core plan, HawkSoft, two accounts and an Owner / Admin.
+    - Each has a primary and a backup Account Manager, its plan, its AMS and its pods authorised, so both setup checklists are complete.
+  - **The Desk team:** an Operations Manager, two Account Managers (each the other's backup), and a VA in each of Pods 1–3. The Pod 1 VA holds a Financial-document grant, and one Account Manager sits in the QA pod.
+  - **Requests at every stage**, made through the same service functions people use, so routing, Account Managers, targets, billing, follow-ups, history and the audit log are all real:
+    - a certificate in progress, with an internal note and one shared with the agency;
+    - an endorsement waiting on the agency, with its question;
+    - a renewal waiting on the carrier, with a team subtask;
+    - new requests in the queue;
+    - a completed AMS entry;
+    - a completed renewal, whose completion created its Pod 1 follow-up;
+    - an escalated, overdue new-business quote;
+    - a request restricted to one VA;
+    - the other agency's certificate, and a cancelled request.
+  - **Conversations** between each agency and its Account Manager.
+  - The command prints every sign-in, grouped by view.
+- **Options:**
+  - `-- --remove` takes the demo out.
+  - `-- --reset` takes it out and creates it again.
+  - Run plainly, the command refuses if the demo is already there.
+- **Sign-in:**
+  - One password for every demo person: `DESK_DEMO_PASSWORD` if set (at least 12 characters), otherwise a random one printed once.
+  - Nobody is asked to change it on first sign-in.
+  - No demo person is a Super Admin. The Operations Manager reaches Desk setup, but not the rest of the platform.
+- **No email to demo people, ever.**
+  - Every demo person and agency uses the reserved `desk-demo.invalid` domain (RFC 6761), which can't receive mail.
+  - The central email sender (`lib/email/send.ts`) now skips every reserved address: `.invalid`, `.test`, `.example`, `.localhost` and `example.com` / `.net` / `.org`. This holds even when email is configured, so clicking through the demo sends nothing.
+- **Walkthrough of the four views, as the demo's own people:**
+  - `script/verify-desk-demo.ts` goes through the real API routes, signed in through the real login.
+  - `script/walkthrough-desk-demo.ts` opens every page on a running server.
+
+**What the walkthrough covers:**
+
+- **Insurigence Admin** (Operations Manager):
+  - agency setup, usage against plans, workload per VA, turnaround, the audit log and the staff list;
+  - every page of Desk operations and of Desk setup, and the detail pages.
+- **Account Managers:**
+  - the dashboard with the escalated request;
+  - both agencies (as primary for one, backup for the other), each agency's page, the restricted request and the conversation.
+- **Pod / VA:**
+  - Pod 1's VA sees both agencies' service work and the request restricted to him, but no renewals or new business;
+  - the Renewals and New Business VAs see only their own pod's work, and can't open Pod 1's.
+- **The agency:**
+  - **the Owner / Admin:** every request (no team subtasks or follow-ups), the question asked of them, and the note shared with them; never internal notes, the carrier reason, the restriction, the escalation, targets (Q5), Desk staff names or pods;
+  - **the CSR:** the whole book;
+  - **the Producer:** only their two accounts and those accounts' requests;
+  - **the other agency:** only its own work, and can't open the first agency's.
+  - The tracker shows the waiting request with its question, next to the conversation.
+- **The target workflow, end to end, through the routes:**
+  - the agency files a certificate request; it is routed to Pod 1 with its Account Manager and target;
+  - it's in the Pod 1 VA's list, and not in the Renewals VA's;
+  - the VA picks it up, starts, and asks the agency a question;
+  - the agency sees the question and answers, and the answer puts the request back to work;
+  - QA, then completed by the Account Manager, with completion time and billing period recorded;
+  - the agency sees it completed, with its history;
+  - every step is in the history and the audit log.
+  - The Producer answering the waiting endorsement resumes it the same way.
+- **Pages** (production build, real sign-ins), as the Operations Manager, an Account Manager, a VA, an Owner / Admin, a CSR and a Producer:
+  - every page in each person's sidebar opens without an error page, as do a request, an account and an agency page (52 page loads);
+  - each sidebar holds exactly the items that role may use;
+  - other areas send people away, and signed out, every area goes to the login.
+
+**Design decisions:**
+
+- **Built through the service layer, not written into the database.** The demo then shows what the system really does: routing, targets, billing, follow-ups and history aren't hand-made. Two things have no service function, so they are set directly: the restriction on one request, and one request's target moved into the past so that overdue and escalation show.
+- **Marked by one reserved email domain,** which is also what makes it impossible to email. Removal deletes only the agencies and people on that domain and what is tied to them. It refuses if a demo agency holds anyone not on the domain, so a real person added to a demo agency is never deleted with it.
+- **The demo agencies authorise their VAs by name, not whole pods.** So no one outside the demo is let into its work.
+- **The tests use their own domain** (`m45test…`, `m45walk…`), so a demo being shown is never touched.
+- **The demo is not seeded by me on the shared database.** Creating it adds working sign-ins, including an Operations Manager, so that is the owner's decision (see Not done).
+
+**Issues:**
+
+- **Found by the walkthrough, and fixed in the check rather than the product:**
+  - In the older main app (`/dashboard`, the Super Admin pages, and Desk setup inside them), the page arrives empty and redirects in the browser once it has checked the session. That was the case before The Desk. Nothing is exposed: the empty page carries no content, and the data comes only from the API, which refuses. The Desk's own areas redirect on the server.
+  - Every page's payload includes Next.js's "page not found" template, so the check looks for a 404 status instead of that text.
+- **My own first expectations, corrected:** the policy count, and which tracker belongs to which view (the agency's tracker against the Account Manager's agency list).
+- **Seeding takes about 3 minutes** against the shared database, because each step is a round trip to it.
+
+**Not done or limited:**
+
+- **The demo is not loaded on the shared database.** Run `npm run db:seed:desk-demo` when you want it (set `DESK_DEMO_PASSWORD` to choose the password), and `-- --remove` afterwards.
+  - The demo VAs sit in the real default pods, because routing sends work there.
+  - A real agency that authorises a whole pod would therefore be visible to a demo VA. So remove the demo before real agencies go live on the same database.
+  - Today no agency on the shared database has The Desk on.
+- **No documents in the demo:** this machine has no file storage. Documents are covered by Modules 30 and 44.
+- **No browser clicks:** the page walkthrough checks what the server sends. The data on each page comes from the API routes, which the demo suite checks as the same people. The browser run that Modules 38–44 couldn't do is still outstanding.
+
+**Verified:**
+
+`npx tsc --noEmit` clean. Production build (`next build`) compiled with no errors.
+
+- New `script/verify-desk-demo.ts`: **83 passed**, on its own temporary domain, removed at the end, with a check that nothing else in the database changed.
+- New `script/walkthrough-desk-demo.ts`: **81 passed** against the production server on this machine (median page 975 ms, slowest 3.1 s), with no errors in the server log.
+
+Deliberate faults: **11 of 12 caught** (on the email guard and the demo's seeding and removal). The one missed is harmless: leaving out the removal of pod memberships changes nothing, because deleting a person already deletes their memberships. One earlier miss led to a stronger check: removing a person leaves their sign-in history with the person blanked, so the suite now finds that history by id and checks that none of it is left.
+
+Module 1–44 suites re-run: all 43 earlier Desk suites passed (3,688 checks; 3,771 with this one), plus the text-matching (11) and user-responses (13) suites.
+
+**Module 46 — Client handover report (✅ complete, 22 Nov 2026). The build plan is complete.**
+
+**Delivered:** `THE_DESK_HANDOVER.md`, written for the client, with a section a developer can follow:
+
+- **What you have:** the four views, how a request flows, and how each of the client's answers (Q1–Q6) was met.
+- **How it was tested,** including the browser click-through still outstanding.
+- **Going live:** merge and deploy, update the database (`db:push`, then `db:seed:desk`; never `db:seed` on a live database), confirm the replica set, the server settings (R2, the alert schedule), one real email, one real document, then setting up the team and the first agency.
+- **Decisions that are yours:** D1–D5 as they stand, and the questions raised during the build (sample AMS exports, unfinished imports, document and audit retention, alert timing, who gets overdue alerts, the demo).
+- **The demo**, and why it must be removed before real agencies go live on the same database.
+- **Known limits,** gathered from every module's report and grouped by who they affect.
+- **Next steps:** the renewal pipeline first, then COI, plan allowances and invoicing, and AI.
+- **For a developer:** where the access rules, task service, clock, alerts, menus and tests live, and the rules to keep.
+
+**Design decisions:**
+
+- **One document for the client, not a copy of this plan.** The plan stays the module-by-module record; the handover points to it.
+- **Limits gathered and grouped** by agencies, Desk team, reports, email, imports and older parts of the app, instead of listed per module.
+- **Every claim checked against the code** before it went in: file names, settings, thresholds and what each screen can do.
+
+**Issues:** checking the claims found two things the module reports didn't make plain:
+
+- **A request can't be restricted to named people from the app.** The restriction is enforced, and subtasks inherit it, but nothing in the app sets it; only the database can. This is part of Q4 ("restrict certain agencies or tasks to specific employees"). Agencies can be restricted to named VAs on screen; requests can't. The handover says so in the Q4 row and in the limits, with an estimate of about 1 hour.
+- **The R2 settings aren't in the current `.env`,** so documents can't be uploaded on this setup. The handover lists them as required.
+
+**Not done or limited:**
+
+- **Open items for the client:** D1 (allowances; a plan-level screen is still to build), the questions in Section 5, and a browser click-through before go-live.
+- **The branch isn't merged into `main`.** That is step 1 of going live.
+
+**Verified:** every file path, setting name, threshold (2 and 4 business hours) and test count in the handover was checked against the code and the last regression: 46 suites, 3,795 checks, all passing.
+
 ### Phase 3 — Task System Core (17 h)
 
 | # | Module | Hours | Change | Status |
@@ -2339,8 +2474,8 @@ Module 1–43 suites re-run: all 42 earlier Desk suites passed (3,565 checks; 3,
 | # | Module | Hours | Change | Status |
 |---|---|---:|---|---|
 | 44 | Permission test suite: cross-agency access, producer scope, unauthorized VA, VA need-to-know and sensitive documents, restricted tasks, internal-note leak to agency | 3.0 | ✏️ | ✅ Done |
-| 45 | Demo seed data, end-to-end walkthrough of all four views, bug fixes | 2.5 | | ⬜ |
-| 46 | Client handover report | 2.0 | | ⬜ |
+| 45 | Demo seed data, end-to-end walkthrough of all four views, bug fixes | 2.5 | | ✅ Done |
+| 46 | Client handover report | 2.0 | | ✅ Done |
 
 ---
 
@@ -2357,7 +2492,7 @@ Module 1–43 suites re-run: all 42 earlier Desk suites passed (3,565 checks; 3,
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total** | **46 modules** | **125.5 h** | **92.5 h** |
 
-**Progress:** Modules 1–44 complete (121.0 h). **4.5 h remaining.**
+**Progress:** All 46 modules complete (125.5 h). Handover report: `THE_DESK_HANDOVER.md`.
 
 The client's answers added **33 hours** (see Section 9), approximately:
 
