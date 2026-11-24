@@ -2500,6 +2500,29 @@ Module 1–44 suites re-run: all 43 earlier Desk suites passed (3,688 checks; 3,
 | 45 | Demo seed data, end-to-end walkthrough of all four views, bug fixes | 2.5 | | ✅ Done |
 | 46 | Client handover report | 2.0 | | ✅ Done |
 
+### Phase 7 — Client Feedback Before Launch (55 h, proposed 24 November 2026)
+
+From the client's feedback of 24 November 2026 (Section 11). Nothing in the existing design has to be rebuilt; these modules extend it. Estimates hold until the open questions in Section 11 are answered.
+
+| # | Module | Hours | Change | Status |
+|---|---|---:|---|---|
+| 47 | New internal roles: Director of Virtual Operations, Senior Account Manager, Pod Leader — roles, access rules, menus, staff setup | 4.0 | 🆕 | ⬜ To do |
+| 48 | Pod Leader and Director tools: assign, reassign and escalate within their pods; Director oversight of all pods, VAs, workload and productivity; permission suite extended to the new roles | 4.0 | 🆕 | ⬜ To do |
+| 49 | Plan admin screen: plans, monthly prices, allowances (managed accounts, COIs, endorsements, renewals, remarketing credits), custom agency plans, the one-time implementation fee; the client's Core / Growth / Complete figures entered | 4.0 | 🆕 D1 | ⬜ To do |
+| 50 | Overage price list: standard and complex, small commercial and middle-market, rush +50 %, Complete discounts; a "correction of our own work" flag that is never billed | 4.0 | 🆕 D1 | ⬜ To do |
+| 51 | Remarketing credits: 1 credit small commercial, 3 middle-market; 90-day rollover with a configurable cap | 3.5 | 🆕 D1 | ⬜ To do |
+| 52 | Overage review: approve, adjust or waive each charge, with a reason, audited | 2.5 | 🆕 D1 | ⬜ To do |
+| 53 | Document categories separate from sensitivity: 11 configurable categories; sensitivity stays the access control; existing documents migrated | 4.0 | ✏️ D3 | ⬜ To do |
+| 54 | Configurable escalation ladder by role (VA → Pod Leader → AM → Director → Operations Manager), VA alert emails, separate rules for urgent requests and approaching expirations | 5.0 | ✏️ Alerts | ⬜ To do |
+| 55 | In-platform notifications: a notification list with unread count for Desk staff | 3.5 | 🆕 Alerts | ⬜ To do |
+| 56 | Targets: the client's 17 internal targets entered; recurring loss-run follow-up every 3 business days; total elapsed time and the policy expiration shown beside waiting statuses | 3.5 | ✏️ D5 | ⬜ To do |
+| 57 | Automatic renewal work from policy expirations: outreach 120 days before, remarketing preparation 45–60 days before | 4.0 | 🆕 D5 | ⬜ To do |
+| 58 | Business calendar per agency: hours, time zone and holidays, used by targets, alerts and turnaround | 3.0 | ✏️ D2 | ⬜ To do |
+| 59 | Retention settings: unfinished imports expire after 30 days; removed documents recoverable for 30 days, then purged | 3.0 | 🆕 Retention | ⬜ To do |
+| 60 | Long-term retention: completed task history, audit log and import history kept 7 years (configurable); legal holds and exceptions per agency or request | 2.5 | 🆕 Retention | ⬜ To do |
+| 61 | Test agency with fictional insureds, policies and an AMS import file | 1.5 | 🆕 | ⬜ To do |
+| 62 | Pre-launch walkthrough of the client's 11 scenarios, fixes, handover report updated | 3.0 | 🆕 | ⬜ To do |
+
 ---
 
 ## 4. Schedule Summary
@@ -2513,9 +2536,11 @@ Module 1–44 suites re-run: all 43 earlier Desk suites passed (3,688 checks; 3,
 | 4 — AM Portal & Communication | 34–37 | 11.0 | 11.0 |
 | 5 — Subtasks, Service Levels & Oversight | 38–43 | 17.0 | 11.0 |
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
-| **Total** | **46 modules** | **125.5 h** | **92.5 h** |
+| **Total, original plan** | **46 modules** | **125.5 h** | **92.5 h** |
+| 7 — Client feedback before launch (proposed) | 47–62 | 55.0 | – |
+| **Total with Phase 7** | **62 modules** | **180.5 h** | |
 
-**Progress:** All 46 modules complete (125.5 h). Handover report: `THE_DESK_HANDOVER.md`.
+**Progress:** All 46 modules of the original plan complete (125.5 h). Handover report: `THE_DESK_HANDOVER.md`. Phase 7 (Modules 47–62, 55 h) proposed on 24 November 2026, waiting for the client's go-ahead and the answers in Section 11.
 
 The client's answers added **33 hours** (see Section 9), approximately:
 
@@ -2710,3 +2735,27 @@ DeskAuditLog       actorId, action, entity, entityId, agencyId, ip, userAgent, a
 | D3 | Document sensitivity categories: are General / Policy / Financial / Personal the right four? | Module 8 | Those four |
 | D4 | Can a Producer submit requests for accounts outside their assignment? | Module 9 | No: only accounts they can see |
 | D5 | Targets for ACORD, Loss Runs, Proposal Prep, QA Review and Other (none given) | Module 12 | No target date for these types; can be entered in the Module 18 editor once confirmed |
+
+## 11. Client Feedback Before Launch (received 24 November 2026)
+
+**Answered and already supported, no change:** document access by agency, user permission and sensitivity, with every view, download and change logged; Financial and Personal documents off for VAs by default and granted individually; pods never grant agencies by themselves, and each agency authorises whole pods or named VAs; the four pods as listed; Producers limited to assigned accounts, with the agency admin able to give the whole book; per-agency plan overrides; subtasks and QA reviews never billed; configurable targets by type, complexity and agency; working time measured apart from waiting. D2 default (Mon–Fri 9:00–17:00 US Eastern, federal holidays off) confirmed.
+
+**Values received:**
+
+- **Plans (D1):** Core $1,500/month: 100 managed accounts, 30 COIs, 15 endorsements, 10 renewals, 1 remarketing credit. Growth $2,500: 250, 75, 30, 25, 3. Complete from $4,000: 500, 150, 60, 50, 6. Implementation fee $1,000 one-time.
+- **Overage prices:** COI $7 standard / $15 complex; endorsement $15 / $30; renewal $75 small commercial / from $175 middle-market; remarketing $175 / $450 (Complete: $150 / $400); new-business submission $100 / $250; full quote management $250 / $600; rush +50 %. Remarketing uses 1 credit (small commercial) or generally 3 (middle-market); credits roll over 90 days, with a configurable cap.
+- **Targets (D5):** COI 4 business hours standard / 1 business day complex; endorsement 2 / 3 business days; AMS data entry 1 day; ACORD 1 day; loss-run initiation 4 hours, follow-up every 3 business days; proposal 1 / 2 days; QA review 4 hours / 1 day; new-business submission 2 days; routine document requests 1 day; other 2 days; renewal outreach from 120 days before expiration; remarketing preparation 45–60 days before.
+- **Escalation:** 2 business hours before: assigned VA. Missed: VA and Pod Leader. 4 business hours over: Pod Leader and AM. 1 business day over: Director of Virtual Operations and AM. 2 business days over: Operations Manager. Separate rules for urgent requests and approaching expirations.
+- **Retention (provisional):** unfinished imports 30 days; removed documents recoverable 30 days; completed task history, audit log and import history 7 years; with legal holds and exceptions.
+- **Document categories (D3):** General, Policy, Financial, Personal, Quotes, Applications, Loss Runs, Certificates, Proposals, Underwriting, Agency Internal; configurable, and separate from sensitivity.
+
+**Open questions (asked 24 November 2026):**
+
+1. What can a Senior Account Manager do that an Account Manager can't?
+2. Is small commercial vs middle-market set per account or per request, and by whom?
+3. Who approves, adjusts or waives overage, and must a charge be approved before it counts?
+4. Is the remarketing-credit cap per plan, per agency, or both?
+5. Are in-platform notifications for Desk staff only, or for agency users too?
+6. Should the Director of Virtual Operations see billing and agency settings, or operations only?
+
+**Still to come from the client:** R2 credentials (dedicated private production bucket, Object Read & Write on that bucket only), the initial team, the first agency's details, and the go-live date (after the pre-launch walkthrough).
