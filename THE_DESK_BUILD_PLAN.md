@@ -2500,28 +2500,34 @@ Module 1–44 suites re-run: all 43 earlier Desk suites passed (3,688 checks; 3,
 | 45 | Demo seed data, end-to-end walkthrough of all four views, bug fixes | 2.5 | | ✅ Done |
 | 46 | Client handover report | 2.0 | | ✅ Done |
 
-### Phase 7 — Client Feedback Before Launch (55 h, proposed 24 November 2026)
+### Phase 7 — Client Feedback Before Launch (95.5 h, proposed 24 November 2026, revised the same day)
 
-From the client's feedback of 24 November 2026 (Section 11). Nothing in the existing design has to be rebuilt; these modules extend it. Estimates hold until the open questions in Section 11 are answered.
+From the client's feedback and answers of 24 November 2026 (Section 11). One part of the design changes: access checks move from fixed roles to configurable positions and permissions (Modules 47–49). Who may see which agency's data does not change: it stays agency authorisation × pod × individual grants. Everything else extends the existing models. The first estimate was 55 h; the answers (configurable positions, reporting lines, the approval workflow, agency authorisation, the credit ledger, notifications for agency users and dashboards) add 40.5 h.
 
 | # | Module | Hours | Change | Status |
 |---|---|---:|---|---|
-| 47 | New internal roles: Director of Virtual Operations, Senior Account Manager, Pod Leader — roles, access rules, menus, staff setup | 4.0 | 🆕 | ⬜ To do |
-| 48 | Pod Leader and Director tools: assign, reassign and escalate within their pods; Director oversight of all pods, VAs, workload and productivity; permission suite extended to the new roles | 4.0 | 🆕 | ⬜ To do |
-| 49 | Plan admin screen: plans, monthly prices, allowances (managed accounts, COIs, endorsements, renewals, remarketing credits), custom agency plans, the one-time implementation fee; the client's Core / Growth / Complete figures entered | 4.0 | 🆕 D1 | ⬜ To do |
-| 50 | Overage price list: standard and complex, small commercial and middle-market, rush +50 %, Complete discounts; a "correction of our own work" flag that is never billed | 4.0 | 🆕 D1 | ⬜ To do |
-| 51 | Remarketing credits: 1 credit small commercial, 3 middle-market; 90-day rollover with a configurable cap | 3.5 | 🆕 D1 | ⬜ To do |
-| 52 | Overage review: approve, adjust or waive each charge, with a reason, audited | 2.5 | 🆕 D1 | ⬜ To do |
-| 53 | Document categories separate from sensitivity: 11 configurable categories; sensitivity stays the access control; existing documents migrated | 4.0 | ✏️ D3 | ⬜ To do |
-| 54 | Configurable escalation ladder by role (VA → Pod Leader → AM → Director → Operations Manager), VA alert emails, separate rules for urgent requests and approaching expirations | 5.0 | ✏️ Alerts | ⬜ To do |
-| 55 | In-platform notifications: a notification list with unread count for Desk staff | 3.5 | 🆕 Alerts | ⬜ To do |
-| 56 | Targets: the client's 17 internal targets entered; recurring loss-run follow-up every 3 business days; total elapsed time and the policy expiration shown beside waiting statuses | 3.5 | ✏️ D5 | ⬜ To do |
-| 57 | Automatic renewal work from policy expirations: outreach 120 days before, remarketing preparation 45–60 days before | 4.0 | 🆕 D5 | ⬜ To do |
-| 58 | Business calendar per agency: hours, time zone and holidays, used by targets, alerts and turnaround | 3.0 | ✏️ D2 | ⬜ To do |
-| 59 | Retention settings: unfinished imports expire after 30 days; removed documents recoverable for 30 days, then purged | 3.0 | 🆕 Retention | ⬜ To do |
-| 60 | Long-term retention: completed task history, audit log and import history kept 7 years (configurable); legal holds and exceptions per agency or request | 2.5 | 🆕 Retention | ⬜ To do |
-| 61 | Test agency with fictional insureds, policies and an AMS import file | 1.5 | 🆕 | ⬜ To do |
-| 62 | Pre-launch walkthrough of the client's 11 scenarios, fixes, handover report updated | 3.0 | 🆕 | ⬜ To do |
+| 47 | Configurable roles and permissions: a permission catalogue and editable positions in the Super Admin portal (Super Admin / CEO, COO, Director of Virtual Operations, Director of Agency Operations, Senior Account Manager, Account Manager, Pod Leader, VA); one person can hold several positions; existing roles migrated (Operations Manager → COO) | 6.0 | ✏️ | ⬜ To do |
+| 48 | Access layer on permissions: every Desk check moves from fixed roles to permissions. Agency data and sensitive documents stay governed by agency authorisation, pods and individual grants, never by position or reporting line | 5.0 | ✏️ Q4 | ⬜ To do |
+| 49 | Permission suite rebuilt for positions, combined positions and reporting lines | 3.0 | ✏️ | ⬜ To do |
+| 50 | Reporting lines and coverage: who reports to whom; Senior AMs see the agencies, accounts and requests of the AMs they supervise; covering an absent AM; reassigning agencies between authorised AMs | 5.0 | 🆕 | ⬜ To do |
+| 51 | Virtual Operations tools: the Director creates and manages pods and Pod Leaders and assigns VAs within authorised agencies; Pod Leaders assign, reassign and escalate in their pods | 4.0 | 🆕 | ⬜ To do |
+| 52 | Dashboards: Director of Virtual Operations (workload, productivity, QA, SLA, capacity; allowances read-only, no prices), Director of Agency Operations (agencies, AM performance, utilization, approvals), COO (both) | 5.0 | 🆕 | ⬜ To do |
+| 53 | Account and request classification: Small Commercial / Middle-Market / Complex-Custom on the account, overridable per request; the AM sets it, Senior AM, Director of Agency Operations and COO override with a reason; VAs and Pod Leaders can only flag; audited | 3.5 | 🆕 D1 | ⬜ To do |
+| 54 | Plan admin screen: plans, monthly prices, allowances, monthly credits and maximum balance, custom agency plans, the one-time implementation fee; the client's figures entered. Contract fields editable only by CEO / authorised administrators | 4.0 | 🆕 D1 | ⬜ To do |
+| 55 | Overage price list: by service, standard / complex, classification, rush +50 %, Complete discounts, custom pricing for Complex / Custom; internal subtasks, routine QA and corrections of our own work never charged | 4.5 | 🆕 D1 | ⬜ To do |
+| 56 | Remarketing credit ledger: monthly issue, 90-day expiry, oldest first, maximum balance per plan with agency overrides; reserved when work begins, used on completion, released on cancellation; issued / available / reserved / used / expired / adjusted | 6.0 | 🆕 D1 | ⬜ To do |
+| 57 | Agency overage authorisation: agency settings (authorise standard overages automatically, require approval before billable work begins, monthly and per-request limits, which agency users may authorise); the request waits for authorisation when required | 6.0 | 🆕 D1 | ⬜ To do |
+| 58 | Internal charge approval: usage counts on completion, the charge stays pending; VA flags, Pod Leader verifies, AM reviews, Senior AM / Director / COO approve, adjust or waive within configurable limits per agency per month; approved charges become eligible for invoicing (invoicing itself stays out of scope, Q6); audited | 6.0 | 🆕 D1 | ⬜ To do |
+| 59 | Document categories separate from sensitivity: 11 configurable categories; sensitivity stays the access control; existing documents migrated | 4.0 | ✏️ D3 | ⬜ To do |
+| 60 | Configurable escalation ladder by position (VA → Pod Leader → AM → Director of Virtual Operations → COO), separate rules for urgent requests and approaching expirations | 5.0 | ✏️ Alerts | ⬜ To do |
+| 61 | Notifications for Desk staff and agency users: in-app list with unread count, role-specific events, financial notices only to authorised agency users, nothing internal shown to agencies; email / in-app preferences with mandatory notices for critical deadlines, security events and approvals | 7.0 | 🆕 Alerts | ⬜ To do |
+| 62 | Targets: the client's 17 internal targets entered; recurring loss-run follow-up every 3 business days; total elapsed time and the policy expiration shown beside waiting statuses | 3.5 | ✏️ D5 | ⬜ To do |
+| 63 | Automatic renewal work from policy expirations: outreach 120 days before, remarketing preparation 45–60 days before | 4.0 | 🆕 D5 | ⬜ To do |
+| 64 | Business calendar per agency: hours, time zone and holidays, used by targets, alerts and turnaround | 3.0 | ✏️ D2 | ⬜ To do |
+| 65 | Retention settings: unfinished imports expire after 30 days; removed documents recoverable for 30 days, then purged | 3.0 | 🆕 Retention | ⬜ To do |
+| 66 | Long-term retention: completed task history, audit log and import history kept 7 years (configurable); legal holds and exceptions per agency or request | 2.5 | 🆕 Retention | ⬜ To do |
+| 67 | Test agency with fictional insureds, policies and an AMS import file | 1.5 | 🆕 | ⬜ To do |
+| 68 | Pre-launch walkthrough of the client's scenarios, including positions, approvals and credits; fixes; handover report updated | 4.0 | 🆕 | ⬜ To do |
 
 ---
 
@@ -2537,10 +2543,10 @@ From the client's feedback of 24 November 2026 (Section 11). Nothing in the exis
 | 5 — Subtasks, Service Levels & Oversight | 38–43 | 17.0 | 11.0 |
 | 6 — Hardening & Acceptance | 44–46 | 7.5 | 7.5 |
 | **Total, original plan** | **46 modules** | **125.5 h** | **92.5 h** |
-| 7 — Client feedback before launch (proposed) | 47–62 | 55.0 | – |
-| **Total with Phase 7** | **62 modules** | **180.5 h** | |
+| 7 — Client feedback before launch (proposed) | 47–68 | 95.5 | – |
+| **Total with Phase 7** | **68 modules** | **221.0 h** | |
 
-**Progress:** All 46 modules of the original plan complete (125.5 h). Handover report: `THE_DESK_HANDOVER.md`. Phase 7 (Modules 47–62, 55 h) proposed on 24 November 2026, waiting for the client's go-ahead and the answers in Section 11.
+**Progress:** All 46 modules of the original plan complete (125.5 h). Handover report: `THE_DESK_HANDOVER.md`. Phase 7 (Modules 47–68, 95.5 h) proposed on 24 November 2026 and revised after the client's answers; waiting for the client's go-ahead.
 
 The client's answers added **33 hours** (see Section 9), approximately:
 
@@ -2749,7 +2755,7 @@ DeskAuditLog       actorId, action, entity, entityId, agencyId, ip, userAgent, a
 - **Retention (provisional):** unfinished imports 30 days; removed documents recoverable 30 days; completed task history, audit log and import history 7 years; with legal holds and exceptions.
 - **Document categories (D3):** General, Policy, Financial, Personal, Quotes, Applications, Loss Runs, Certificates, Proposals, Underwriting, Agency Internal; configurable, and separate from sensitivity.
 
-**Open questions (asked 24 November 2026):**
+**Open questions (asked 24 November 2026, answered the same day — see below):**
 
 1. What can a Senior Account Manager do that an Account Manager can't?
 2. Is small commercial vs middle-market set per account or per request, and by whom?
@@ -2759,3 +2765,16 @@ DeskAuditLog       actorId, action, entity, entityId, agencyId, ip, userAgent, a
 6. Should the Director of Virtual Operations see billing and agency settings, or operations only?
 
 **Still to come from the client:** R2 credentials (dedicated private production bucket, Object Read & Write on that bucket only), the initial team, the first agency's details, and the go-live date (after the pre-launch walkthrough).
+
+### The client's answers (24 November 2026)
+
+- **Organisation:** Founder / CEO → COO (replaces the Operations Manager) → two departments. **Virtual Operations:** Director of Virtual Operations → Pod Leaders → VAs. **Agency Operations:** Director of Agency Operations → Senior Account Managers → Account Managers. Roles, permissions, reporting lines, financial limits and escalation rules must be configurable in the Super Admin portal; one person may hold several positions. Reporting lines never grant sensitive documents or unauthorised agency data.
+- **Senior Account Manager:** sees the agencies, accounts and requests of the AMs they supervise; covers absences; reassigns agencies between authorised AMs; monitors AM performance, service levels and utilization; handles escalated complaints; reviews and approves completed work; approves overages; adjusts or waives up to a limit; overrides classifications. Cannot change contracts, pricing or contracted allowances. The Director of Agency Operations oversees all Senior AMs, AMs and agency operations, with agency settings, billing, utilization and approvals within their authority.
+- **Classification:** Small Commercial, Middle-Market, Complex / Custom, on the account by default and overridable per request. Based on complexity, policies, locations, underwriting, markets and workload, not premium alone. The AM sets it; Senior AM, Director of Agency Operations and COO override it; VAs and Pod Leaders can only flag. Billing changes need a reason and are audited.
+- **Overage approval:** usage counts when the service is completed; the charge stays pending until approved, then becomes eligible for invoicing. VA flags; Pod Leader verifies; AM reviews and requests adjustments; Senior AM approves standard overages and adjusts or waives up to $100 per agency per month; Director of Agency Operations up to $500; COO within delegated authority; CEO / authorised administrator for exceptions and contracted pricing. Limits configurable. The Director of Virtual Operations has no billing authority by default. **Agency settings:** authorise standard overages automatically, require approval before billable work begins, monthly and per-request spending limits, which agency users may authorise. Internal subtasks, routine QA and corrections never create duplicate charges. All approvals, adjustments and waivers audited.
+- **Credits:** per plan with agency overrides. Core 1 a month, maximum balance 3; Growth 3 / 9; Complete 6 / 18. Expire 90 days after issue, oldest used first. Small commercial remarketing 1 credit, middle-market generally 3, Complex may need custom pricing. Reserved when an authorised remarketing request begins, used on completion, released on cancellation unless billable work was performed and approved. Track issued, available, reserved, used, expired and adjusted. Director of Agency Operations, COO and authorised administrators adjust allowances and caps within their authority.
+- **Notifications:** in-app for Desk staff and agency users, specific to role and permission. Staff: assignments, reassignments, upcoming deadlines, overdue, escalations, QA and corrections, internal messages, agency responses, billing approval requests, workload and capacity alerts. Agency: request confirmations, status updates, requests for information, completions, upcoming renewals, documents for review, messages, approval requests, overage authorisation requests, allowance and credit balance alerts; financial ones only to authorised agency users; never internal QA, staffing, performance, internal notes or reassignments. Email and in-app preferences configurable, with mandatory notices for critical deadlines, security events and required approvals.
+- **Director of Virtual Operations:** operational access: all pods and Pod Leaders, VA profiles and assignments, queues and workload, productivity, SLA, turnaround, QA and capacity reporting, operational escalations, authorised agency operating instructions, agency allowances and utilization read-only. Creates and manages pods, manages Pod Leaders, assigns VAs within authorised agencies, distributes work. No default access to pricing, invoices, payment or company financial information, billing adjustments, subscription or contract changes, or sensitive-document permission administration. Department dashboards for both Directors; a consolidated dashboard for the COO.
+- Marketing, accounting, finance, sales and engineering are separate departments, outside this hierarchy.
+
+**Still open (asked 24 November 2026):** the Senior AM's sign-off on completed work, the COO's default limit, AM coverage dates, the agency's default authoriser and unanswered authorisation requests, workload and capacity alert thresholds, and how the $100 / $500 limits are counted.
