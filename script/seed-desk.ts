@@ -1,7 +1,8 @@
 /**
  * Creates The Desk's defaults if missing: the 4 pods, routing rules,
- * follow-up rules, the 3 plans, service-level targets, the business calendar
- * and holidays. Idempotent and create-only; never edits existing records.
+ * follow-up rules, the 3 plans, service-level targets, the business calendar,
+ * holidays and the Desk positions (giving staff without one the position for
+ * their role). Idempotent and create-only; never edits existing records.
  * Separate from prisma/seed.ts because that script also resets the demo users'
  * passwords, which must not happen on a shared database.
  * Run with:  npm run db:seed:desk
@@ -11,6 +12,7 @@ import { prisma } from '../lib/prisma';
 import { ensureDeskDefaults } from '../lib/desk/defaults';
 import { describeTarget } from '../lib/desk/service-levels';
 import { backfillTaskLists } from '../lib/desk/integrity';
+import { ensureDefaultPositions } from '../lib/desk/positions';
 
 const list = (xs: string[]) => (xs.length ? xs.join(', ') : 'none (already present)');
 
@@ -23,6 +25,9 @@ const list = (xs: string[]) => (xs.length ? xs.join(', ') : 'none (already prese
   console.log(`Service levels created:  ${list(serviceLevels)}`);
   console.log(`Calendar created:        ${calendar ? 'yes' : 'no (already present)'}`);
   console.log(`Holidays created:        ${holidays}`);
+  const positions = await ensureDefaultPositions(prisma);
+  console.log(`Positions created:       ${list(positions.created)}`);
+  console.log(`Staff given a position:  ${positions.staffPlaced}`);
   console.log(`Tasks repaired:          ${await backfillTaskLists(prisma)}`);
 
   const rules = await prisma.taskRoutingRule.findMany({ include: { pod: { select: { code: true } } } });

@@ -62,7 +62,7 @@ function examples(cal: BusinessCalendar, now: Date) {
 }
 
 export async function getCalendarSetup(db: Db, scope: DeskScope, now: Date = new Date()) {
-  assertDeskPlatform(scope);
+  assertDeskPlatform(scope, ['settings.operations']);
   const [row, holidays, cal] = await Promise.all([
     db.deskCalendar.findUnique({ where: { id: DEFAULT_CALENDAR.id } }),
     db.deskHoliday.findMany({ orderBy: { date: 'asc' }, select: { id: true, date: true, name: true } }),
@@ -106,7 +106,7 @@ function parseCalendar(input: CalendarInput) {
 
 /** Saves the calendar. Returns false when nothing changed. */
 export async function saveCalendar(db: Db, scope: DeskScope, input: CalendarInput, ctx: GuardContext = {}): Promise<boolean> {
-  assertDeskPlatform(scope);
+  assertDeskPlatform(scope, ['settings.operations']);
   const next = parseCalendar(input);
   const current = await db.deskCalendar.findUnique({ where: { id: DEFAULT_CALENDAR.id } });
   if (current && input.version !== undefined && input.version !== current.updatedAt.toISOString()) throw conflict(CHANGED_ELSEWHERE);
@@ -137,7 +137,7 @@ function parseDate(value: unknown): string {
 }
 
 export async function addHoliday(db: Db, scope: DeskScope, input: { date?: unknown; name?: unknown }, ctx: GuardContext = {}): Promise<{ id: string }> {
-  assertDeskPlatform(scope);
+  assertDeskPlatform(scope, ['settings.operations']);
   const date = parseDate(input.date);
   const name = typeof input.name === 'string' ? input.name.trim() : '';
   if (!name) throw bad('Enter the holiday name.');
@@ -155,7 +155,7 @@ export async function addHoliday(db: Db, scope: DeskScope, input: { date?: unkno
 }
 
 export async function removeHoliday(db: Db, scope: DeskScope, id: unknown, ctx: GuardContext = {}): Promise<void> {
-  assertDeskPlatform(scope);
+  assertDeskPlatform(scope, ['settings.operations']);
   if (!isObjectId(id)) throw new DeskAccessError(404, 'Not found');
   const holiday = await db.deskHoliday.findUnique({ where: { id } });
   if (!holiday) throw new DeskAccessError(404, 'Not found');

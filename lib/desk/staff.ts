@@ -8,8 +8,10 @@
  * which agencies need a new Account Manager. Agency and pod assignments stay
  * on record, so reactivating restores them and the setup form flags the gap.
  *
- * Only a Super Admin manages Operations Managers: they hold platform-wide
- * access, so they cannot create or remove their own peers.
+ * Nobody manages someone whose positions allow as much as their own, or
+ * anything theirs doesn't (Module 48), and only a Super Admin manages
+ * Operations Managers. So no one can shut out the people above them, or their
+ * peers, and no one can invite a role with more access than their own.
  */
 import { randomBytes } from 'crypto';
 import { Prisma, type PrismaClient, type UserRole } from '@prisma/client';
@@ -18,9 +20,12 @@ import { sendEmail } from '@/lib/email/send';
 import { inviteEmail } from '@/lib/email/templates';
 import { DESK_ROLES, isDeskRole, roleLabel } from '@/lib/roles';
 import { literal } from './literal-match';
-import { DeskAccessError, isObjectId, type DeskScope, type GuardContext } from './access';
+import { can, DeskAccessError, isObjectId, isStaffScope, type DeskScope, type GuardContext } from './access';
 import { assertDeskPlatform } from './agency-setup';
 import { recordAudit, type AuditAction } from './audit';
+import { placeByRole } from './positions';
+import type { PermissionKey } from './permission-catalogue';
+import { staffProfile, staffProfiles, startingPermissions } from './staff-profile';
 import { CLOSED_STATUSES } from './task-filters';
 import { returnToQueue } from './task-release';
 
@@ -56,14 +61,47 @@ async function inTransaction<T>(db: Db, fn: (tx: Prisma.TransactionClient) => Pr
 const personName = (u: { firstName: string | null; lastName: string | null; email: string }) =>
   [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email;
 
-/** May this scope manage a staff member with this role? */
+/** May this scope manage staff with this role at all? canManagePerson then compares positions. */
 export function canManageRole(scope: DeskScope, role: string): boolean {
-  if (scope.kind !== 'PLATFORM' || !isDeskRole(role)) return false;
+  if (!isStaffScope(scope) || !can(scope, 'staff.manage') || !isDeskRole(role)) return false;
   return role !== 'DESK_ADMIN' || scope.role === 'SUPER_ADMIN';
 }
 
-function assertCanManage(scope: DeskScope, role: string): void {
-  if (!canManageRole(scope, role)) throw new DeskAccessError(403, 'Only a Super Admin can manage Operations Managers.');
+/** …and this person: everything their positions allow must be part, not all, of what the manager's allow. */
+export function canManagePerson(scope: DeskScope, target: { role: string; permissions: readonly PermissionKey[] }): boolean {
+  if (!canManageRole(scope, target.role) || !isStaffScope(scope)) return false;
+  if (scope.role === 'SUPER_ADMIN') return true;
+  return target.permissions.every((p) => can(scope, p)) && target.permissions.length < scope.permissions.length;
+}
+
+async function assertCanManage(
+  db: Db, scope: DeskScope, target: { id: string | null; role: string; permissions: readonly PermissionKey[] }, ctx: GuardContext
+): Promise<void> {
+  if (canManagePerson(scope, target)) return;
+  await recordAudit(db, {
+    actor: { id: scope.userId, role: scope.role }, action: 'access.denied', entityType: 'User', entityId: target.id,
+    metadata: { scope: scope.kind, op: 'staff', targetRole: target.role }, ip: ctx.ip, userAgent: ctx.userAgent,
+  });
+  throw new DeskAccessError(403, canManageRole(scope, target.role)
+    ? 'Their position allows as much as yours, or something yours does not. Ask the Super Admin.'
+    : 'Only a Super Admin can manage Operations Managers.');
+}
+
+/** The staff member, if this scope may manage them. */
+async function loadManaged(db: Db, scope: DeskScope, userId: string, ctx: GuardContext) {
+  const user = await loadStaff(db, userId);
+  const { permissions } = await staffProfile(db, user);
+  await assertCanManage(db, scope, { id: user.id, role: user.role, permissions }, ctx);
+  return user;
+}
+
+/** The roles this scope may invite. */
+export async function invitableRoles(db: Db, scope: DeskScope): Promise<UserRole[]> {
+  const roles: UserRole[] = [];
+  for (const role of DESK_ROLES as readonly UserRole[]) {
+    if (canManagePerson(scope, { role, permissions: await startingPermissions(db, role) })) roles.push(role);
+  }
+  return roles;
 }
 
 function requiredName(value: unknown, field: string): string {
@@ -99,7 +137,7 @@ export interface StaffRow {
 export async function listStaff(
   db: Db, scope: DeskScope, opts: { q?: string; role?: string; status?: 'active' | 'inactive' } = {}
 ): Promise<StaffRow[]> {
-  assertDeskPlatform(scope);
+  assertDeskPlatform(scope, ['staff.manage']);
   const q = opts.q?.trim() ? literal(opts.q.trim()) : '';
   const roles = opts.role && isDeskRole(opts.role) ? [opts.role as UserRole] : ([...DESK_ROLES] as UserRole[]);
   const users = await db.user.findMany({
@@ -122,6 +160,7 @@ export async function listStaff(
     },
   });
   const ids = users.map((u) => u.id);
+  const profiles = await staffProfiles(db, users);
   const tasks = ids.length
     ? await db.task.groupBy({ by: ['assigneeId'], where: { assigneeId: { in: ids }, ...OPEN_TASK }, _count: { _all: true } })
     : [];
@@ -136,7 +175,7 @@ export async function listStaff(
     agencies: new Set([...u.primaryAmFor, ...u.backupAmFor].map((a) => a.agencyId)).size,
     pods: u.podMemberships.length,
     openTasks: openByUser.get(u.id) ?? 0,
-    canManage: canManageRole(scope, u.role),
+    canManage: canManagePerson(scope, { role: u.role, permissions: profiles.get(u.id)!.permissions }),
     isSelf: u.id === scope.userId,
   }));
 }
@@ -193,10 +232,10 @@ export async function inviteStaff(
   input: { email?: unknown; firstName?: unknown; lastName?: unknown; role?: unknown },
   ctx: GuardContext = {}, send: SendInvite = sendEmail
 ): Promise<InviteResult> {
-  assertDeskPlatform(scope);
+  assertDeskPlatform(scope, ['staff.manage']);
   const role = String(input.role ?? '');
   if (!isDeskRole(role)) throw bad('Role must be Account Manager, Desk VA or Operations Manager.');
-  assertCanManage(scope, role);
+  await assertCanManage(db, scope, { id: null, role, permissions: await startingPermissions(db, role as UserRole) }, ctx);
   const email = String(input.email ?? '').trim().toLowerCase();
   if (!EMAIL_RE.test(email) || email.length > 254) throw bad('A valid email address is required.');
   const firstName = requiredName(input.firstName, 'First name');
@@ -213,10 +252,12 @@ export async function inviteStaff(
         data: { email, firstName, lastName, role: role as UserRole, agencyId: null, isActive: true, mustChangePassword: false },
         select: { id: true },
       });
+      // Their starting position (Module 47): the one for their role.
+      const placed = await placeByRole(tx, { id: user.id, role: role as UserRole }, scope.userId);
       const token = await writeInviteToken(tx, user.id);
       await recordAudit(tx, {
         actor: { id: scope.userId, role: scope.role }, action: 'staff.invited', entityType: 'User', entityId: user.id,
-        metadata: { email, role }, ip: ctx.ip, userAgent: ctx.userAgent,
+        metadata: { email, role, positionGiven: placed }, ip: ctx.ip, userAgent: ctx.userAgent,
       });
       return { id: user.id, token };
     });
@@ -232,9 +273,8 @@ export async function inviteStaff(
 export async function resendStaffInvite(
   db: Db, scope: DeskScope, userId: string, ctx: GuardContext = {}, send: SendInvite = sendEmail
 ): Promise<InviteResult> {
-  assertDeskPlatform(scope);
-  const user = await loadStaff(db, userId);
-  assertCanManage(scope, user.role);
+  assertDeskPlatform(scope, ['staff.manage']);
+  const user = await loadManaged(db, scope, userId, ctx);
   if (!user.isActive) throw conflict('Reactivate this person before sending an invite.');
   if (user.passwordHash) throw conflict('This person has already set up their account.');
   const token = await inTransaction(db, async (tx) => {
@@ -250,9 +290,8 @@ export async function resendStaffInvite(
 export async function renameStaff(
   db: Db, scope: DeskScope, userId: string, input: { firstName?: unknown; lastName?: unknown }, ctx: GuardContext = {}
 ): Promise<void> {
-  assertDeskPlatform(scope);
-  const user = await loadStaff(db, userId);
-  assertCanManage(scope, user.role);
+  assertDeskPlatform(scope, ['staff.manage']);
+  const user = await loadManaged(db, scope, userId, ctx);
   const firstName = requiredName(input.firstName, 'First name');
   const lastName = requiredName(input.lastName, 'Last name');
   if (firstName === user.firstName && lastName === user.lastName) return;
@@ -271,9 +310,8 @@ export interface DeactivateResult {
 export async function deactivateStaff(
   db: Db, scope: DeskScope, userId: string, ctx: GuardContext = {}
 ): Promise<DeactivateResult> {
-  assertDeskPlatform(scope);
-  const user = await loadStaff(db, userId);
-  assertCanManage(scope, user.role);
+  assertDeskPlatform(scope, ['staff.manage']);
+  const user = await loadManaged(db, scope, userId, ctx);
 
   const result = await inTransaction(db, async (tx) => {
     const { count } = await tx.user.updateMany({ where: { id: user.id, isActive: true }, data: { isActive: false } });
@@ -314,9 +352,8 @@ export async function deactivateStaff(
 }
 
 export async function reactivateStaff(db: Db, scope: DeskScope, userId: string, ctx: GuardContext = {}): Promise<void> {
-  assertDeskPlatform(scope);
-  const user = await loadStaff(db, userId);
-  assertCanManage(scope, user.role);
+  assertDeskPlatform(scope, ['staff.manage']);
+  const user = await loadManaged(db, scope, userId, ctx);
   await inTransaction(db, async (tx) => {
     const { count } = await tx.user.updateMany({ where: { id: user.id, isActive: false }, data: { isActive: true } });
     if (count !== 1) throw conflict('This person is already active.');

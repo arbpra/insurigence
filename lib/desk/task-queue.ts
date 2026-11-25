@@ -7,7 +7,7 @@
  * the person couldn't open.
  */
 import type { PrismaClient } from '@prisma/client';
-import { DeskAccessError, getTaskForScope, isObjectId, resolveDeskScope, taskWhere, type DeskScope, type GuardContext } from './access';
+import { can, DeskAccessError, getTaskForScope, isStaffScope, isObjectId, resolveDeskScope, taskWhere, type DeskScope, type GuardContext } from './access';
 import { recordAudit } from './audit';
 import { CLOSED_STATUSES } from './task-filters';
 import { listWhere } from './task-api';
@@ -15,8 +15,10 @@ import { listWhere } from './task-api';
 type Db = PrismaClient;
 
 const notFound = () => new DeskAccessError(404, 'Not found');
-const isManager = (s: DeskScope) => s.kind === 'ACCOUNT_MANAGER' || s.kind === 'PLATFORM';
-const isStaff = (s: DeskScope) => isManager(s) || s.kind === 'VA';
+/** Hands work out (Module 48: `requests.assign`). */
+const isManager = (s: DeskScope) => can(s, 'requests.assign');
+/** Desk staff whose position works requests or hands them out. */
+const isStaff = (s: DeskScope) => isStaffScope(s) && (can(s, 'requests.work') || isManager(s));
 const nameOf = (p: { firstName: string | null; lastName: string | null; email: string }) =>
   [p.firstName, p.lastName].filter(Boolean).join(' ') || p.email;
 
@@ -46,9 +48,10 @@ export async function queueOptions(db: Db, scope: DeskScope, ctx: GuardContext =
     podWhere = { id: { in: [...new Set(scope.grants.map((g) => g.podId))] } };
     agencyIds = [...new Set(scope.grants.map((g) => g.agencyId))];
   } else if (scope.kind === 'ACCOUNT_MANAGER') {
-    agencyIds = scope.agencyIds;
+    // Their agencies, plus pod work another of their positions reaches.
+    agencyIds = [...new Set([...scope.agencyIds, ...scope.grants.map((g) => g.agencyId)])];
     const served = await db.agencyPodAccess.findMany({ where: { agencyId: { in: scope.agencyIds } }, select: { podId: true } });
-    podWhere = { id: { in: [...new Set(served.map((s) => s.podId))] }, isActive: true };
+    podWhere = { id: { in: [...new Set([...served.map((s) => s.podId), ...scope.grants.map((g) => g.podId)])] }, isActive: true };
   }
 
   const [pods, agencies, waiting, overdue, unrouted, mine] = await Promise.all([
@@ -96,7 +99,7 @@ export async function assigneesFor(db: Db, scope: DeskScope, taskId: string, ctx
   const eligible: { id: string; name: string; kind: 'VA' | 'ACCOUNT_MANAGER'; lead: boolean }[] = [];
   for (const user of users) {
     const theirs = await resolveDeskScope(db, user.id);
-    if (theirs.kind !== 'VA' && theirs.kind !== 'ACCOUNT_MANAGER') continue;
+    if ((theirs.kind !== 'VA' && theirs.kind !== 'ACCOUNT_MANAGER') || !can(theirs, 'requests.work')) continue;
     const visible = await db.task.count({ where: { AND: [{ id: task.id }, taskWhere(theirs)] } });
     if (visible) eligible.push({ id: user.id, name: nameOf(user), kind: theirs.kind, lead: leads.has(user.id) });
   }

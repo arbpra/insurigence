@@ -277,7 +277,7 @@ function pureLogic() {
       && !['ACCOUNT_MANAGER', 'DESK_VA', 'ADMIN'].some((r) => itemAllowed('/desk-ops/usage', r)));
     const page = read('app/(desk)/desk-ops/usage/page.tsx');
     const view = read('app/components/desk/usage/UsageAuditView.tsx');
-    ok('the page is built and checks access first', page.includes('<UsageAuditView />') && page.includes("deskPageAccess('OPS', '/desk-ops/usage')") && !page.includes('DeskPage '));
+    ok('the page is built and checks access first', page.includes('<UsageAuditView tabs=') && page.includes("deskPageAccess('OPS', '/desk-ops/usage')") && !page.includes('DeskPage '));
     ok('the screen: the month, the agency table and its tasks; the log\'s filters, pages and download', ['desk-usage-month', 'desk-usage-agencies', 'desk-usage-detail', 'desk-audit-filters', 'desk-audit-pages', 'desk-audit-export', 'desk-audit-details'].every((id) => view.includes(id)));
     ok('…and says usage is tracked, not invoiced', view.includes('invoicing is not part of The Desk yet'));
   } catch (err) {

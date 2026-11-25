@@ -10,7 +10,7 @@ import { auditFilters, exportAudit, listAudit } from '@/lib/desk/audit-log';
  */
 export async function GET(request: NextRequest) {
   try {
-    const { scope, ctx } = await deskAdminRequest(prisma, request);
+    const { scope, ctx } = await deskAdminRequest(prisma, request, ['audit.view']);
     const p = request.nextUrl.searchParams;
     const filters = auditFilters(p);
     if (p.get('format') === 'csv') {

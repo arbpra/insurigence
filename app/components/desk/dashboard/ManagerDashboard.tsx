@@ -11,6 +11,7 @@ import {
 type Ref = { id: string; name: string };
 interface Dashboard {
   renewalDays: RenewalWindow;
+  opensAgencies: boolean;
   counts: { open: number; overdue: number; dueSoon: number; waitingOnAgency: number; review: number; unrouted: number; renewals: number; agencies: number };
   agencies: (Ref & { open: number; overdue: number; waitingOnAgency: number; review: number; renewals: number })[];
   review: { id: string; reference: number; title: string; typeLabel: string; statusLabel: string; agency: Ref; reasons: ReviewReason[]; escalationReason: string | null; createdAt: string }[];
@@ -169,7 +170,7 @@ export function ManagerDashboard({ initialWindow }: { initialWindow: RenewalWind
                 {data.agencies.map((a) => (
                   <tr key={a.id} className="border-b border-slate-100 last:border-0" data-testid="desk-dash-agency">
                     <td className="py-2 pr-4 min-w-[10rem] break-words">
-                      <Link href={`/desk-ops/agencies/${a.id}`} className="hover:underline" style={{ color: ACCENT }} data-testid="desk-dash-agency-open">{a.name}</Link>
+                      {data.opensAgencies ? <Link href={`/desk-ops/agencies/${a.id}`} className="hover:underline" style={{ color: ACCENT }} data-testid="desk-dash-agency-open">{a.name}</Link> : a.name}
                     </td>
                     <td className="py-2 pr-4 text-right tabular-nums">{a.open}</td>
                     <td className={`py-2 pr-4 text-right tabular-nums ${a.overdue ? 'text-red-700 font-medium' : 'text-slate-500'}`}>{a.overdue}</td>

@@ -21,6 +21,7 @@ export const AUDIT_ACTIONS = [
   'message.sent', 'message.viewed',
   'staff.invited', 'staff.invite_resent', 'staff.updated', 'staff.deactivated', 'staff.reactivated',
   'pod.created', 'pod.updated', 'pod.member_added', 'pod.member_removed', 'pod.access_changed',
+  'position.created', 'position.updated', 'position.holder_added', 'position.holder_removed',
   'routing.changed', 'service_level.changed', 'follow_up_rule.changed',
   'calendar.changed', 'holiday.added', 'holiday.removed',
   'usage.viewed', 'audit.viewed', 'audit.exported',

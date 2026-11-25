@@ -9,7 +9,7 @@
  * entry. Secret-looking values were already redacted when written.
  */
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { DeskAccessError, isObjectId, type DeskScope, type GuardContext } from './access';
+import { can, DeskAccessError, isObjectId, type DeskScope, type GuardContext } from './access';
 import { AUDIT_ACTIONS, recordAudit } from './audit';
 import { addCalendarDays, loadBusinessCalendar, zonedInstant } from './business-time';
 import { literal } from './literal-match';
@@ -38,8 +38,9 @@ export interface AuditFilters {
   page: number;
 }
 
+/** All-agency positions allowing `audit.view` (Module 48). */
 function opsOnly(scope: DeskScope) {
-  if (scope.kind !== 'PLATFORM') throw new DeskAccessError(403, 'Only Operations Managers can read the audit log.');
+  if (scope.kind !== 'PLATFORM' || !can(scope, 'audit.view')) throw new DeskAccessError(403, 'Your position does not include the audit log.');
 }
 
 const realDate = (d: string) => DATE.test(d) && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d;

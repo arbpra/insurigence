@@ -9,7 +9,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import {
-  AREA_TITLES, isActivePath, navFor, otherAreaLinks, type DeskArea, type DeskIcon,
+  AREA_TITLES, isActivePath, navFor, otherAreaLinks, type DeskArea, type DeskIcon, type NavAccess,
 } from '@/lib/desk/navigation';
 
 const ICONS: Record<DeskIcon, LucideIcon> = {
@@ -20,7 +20,8 @@ const ICONS: Record<DeskIcon, LucideIcon> = {
 
 interface DeskShellProps {
   area: DeskArea;
-  role: string;
+  /** The person's role, scope kind and permissions (Module 48): decides the sidebar. */
+  access: NavAccess;
   identity: { name: string; roleLabel: string; initials: string };
   /** Inside another layout that already has a page header (Super Admin). */
   embedded?: boolean;
@@ -28,12 +29,12 @@ interface DeskShellProps {
 }
 
 /** Sidebar + header shared by the three Desk areas. */
-export function DeskShell({ area, role, identity, embedded = false, children }: DeskShellProps) {
+export function DeskShell({ area, access, identity, embedded = false, children }: DeskShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const items = navFor(area, role);
-  const others = otherAreaLinks(area, role);
+  const items = navFor(area, access);
+  const others = otherAreaLinks(area, access);
 
   const logout = async () => {
     try {

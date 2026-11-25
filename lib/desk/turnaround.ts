@@ -21,7 +21,7 @@
  * Subtasks (Module 38) are pieces of a request, so only the request counts.
  */
 import type { Prisma, PrismaClient, TaskType } from '@prisma/client';
-import { DeskAccessError, isObjectId, taskWhere, type DeskScope, type GuardContext } from './access';
+import { can, DeskAccessError, isObjectId, taskWhere, type DeskScope, type GuardContext } from './access';
 import { businessMinutesBetween, loadBusinessCalendar, workdayMinutes, type BusinessCalendar } from './business-time';
 import { managersOnly } from './manager-dashboard';
 import { TASK_TYPE_LABELS } from './service-levels';
@@ -125,6 +125,7 @@ export async function getTurnaround(
   ctx: GuardContext = {}
 ) {
   await managersOnly(db, scope, ctx, 'turnaround');
+  if (!can(scope, 'turnaround.view')) throw new DeskAccessError(403, 'Your position does not include turnaround reports.');
   const now = opts.now ?? new Date();
   const days = opts.days ?? TURNAROUND_DEFAULT_PERIOD;
   const from = new Date(now.getTime() - days * 86_400_000);

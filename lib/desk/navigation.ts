@@ -5,13 +5,20 @@
  *
  * Three route areas:
  *  - AGENCY  `/desk`             agency users in a Desk-enabled agency
- *  - OPS     `/desk-ops`         Account Managers, VAs, Operations Managers (and Super Admin)
- *  - ADMIN   `/super-admin/desk` Desk setup: Super Admin and Operations Managers
+ *  - OPS     `/desk-ops`         Desk staff (and Super Admin)
+ *  - ADMIN   `/super-admin/desk` Desk setup: Super Admin, and staff whose
+ *                                position allows some part of setup
+ *
+ * Desk staff items depend on the person's positions (Module 48): the
+ * permissions they hold and, for all-agency pages, their reach. Agency items
+ * still depend on the agency role. A bare role stands for that role's default
+ * position (used by tests and before positions are loaded).
  *
  * The sidebar only decides what is shown. What a user can actually read is
  * still decided per record by lib/desk/access.ts.
  */
 import type { DeskScope } from './access';
+import { DEFAULT_POSITIONS, PERMISSION_KEYS, type PermissionKey } from './permission-catalogue';
 import { DESK_NOT_ENABLED } from './scope-reasons';
 
 export type DeskArea = 'AGENCY' | 'OPS' | 'ADMIN';
@@ -41,11 +48,52 @@ export interface DeskNavItem {
   module: number;
   /** One line describing what the page will do. */
   summary: string;
-  /** Roles that see the item; omitted = everyone allowed into the area. */
+  /** Roles that see the item; omitted = any role. Used for agency roles and the Super Admin. */
   roles?: readonly string[];
+  /** Desk staff: any one of these permissions; omitted = none needed. */
+  permissions?: readonly PermissionKey[];
+  /** Desk staff: the scope kinds (reach) the page works for; omitted = any. */
+  kinds?: readonly DeskScope['kind'][];
 }
 
-const MANAGERS = ['SUPER_ADMIN', 'DESK_ADMIN'] as const;
+/** What navigation needs to know about a person: plain data, so the browser shell can use it. */
+export interface NavAccess {
+  role: string;
+  kind: DeskScope['kind'];
+  permissions: readonly string[];
+}
+
+/** Any of these opens Desk setup. */
+export const SETUP_PERMISSIONS: readonly PermissionKey[] = ['agencies.setup', 'staff.manage', 'pods.manage', 'documents.grant', 'settings.operations', 'plans.manage'];
+
+const WORK: readonly PermissionKey[] = ['requests.work', 'requests.assign'];
+const MANAGED: readonly DeskScope['kind'][] = ['PLATFORM', 'ACCOUNT_MANAGER'];
+const ALL_AGENCIES: readonly DeskScope['kind'][] = ['PLATFORM'];
+
+/** The navigation view of a resolved scope. */
+export function navAccess(scope: DeskScope): NavAccess {
+  return { role: scope.role, kind: scope.kind, permissions: 'permissions' in scope ? [...scope.permissions] : [] };
+}
+
+/** A bare role read as its default position (the Super Admin has everything). */
+function accessForRole(role: string): NavAccess {
+  if (role === 'SUPER_ADMIN') return { role, kind: 'PLATFORM', permissions: PERMISSION_KEYS };
+  const preset = DEFAULT_POSITIONS.find((p) => p.legacyRole === role);
+  if (!preset) return { role, kind: role === 'ADMIN' || role === 'AGENT' || role === 'CSR' ? 'AGENCY' : 'NONE', permissions: [] };
+  const kind = preset.reach === 'ALL' ? 'PLATFORM' : preset.reach === 'POD' ? 'VA' : 'ACCOUNT_MANAGER';
+  return { role, kind, permissions: preset.permissions };
+}
+
+const asAccess = (who: NavAccess | string): NavAccess => (typeof who === 'string' ? accessForRole(who) : who);
+const hasSetup = (who: NavAccess) => who.role === 'SUPER_ADMIN' || (who.kind !== 'AGENCY' && who.kind !== 'NONE' && SETUP_PERMISSIONS.some((p) => who.permissions.includes(p)));
+const isStaffKind = (who: NavAccess) => who.kind === 'PLATFORM' || who.kind === 'ACCOUNT_MANAGER' || who.kind === 'VA';
+
+function shows(item: DeskNavItem, who: NavAccess): boolean {
+  if (item.roles && !item.roles.includes(who.role)) return false;
+  if (item.permissions && !item.permissions.some((p) => who.permissions.includes(p))) return false;
+  if (item.kinds && !item.kinds.includes(who.kind)) return false;
+  return true;
+}
 
 export const DESK_NAV: Record<DeskArea, readonly DeskNavItem[]> = {
   AGENCY: [
@@ -59,28 +107,30 @@ export const DESK_NAV: Record<DeskArea, readonly DeskNavItem[]> = {
   ],
   OPS: [
     { label: 'Overview', href: '/desk-ops', icon: 'home', module: 34, summary: 'Open, due-soon and overdue work across your agencies.' },
-    { label: 'Pod queue', href: '/desk-ops/queue', icon: 'queue', module: 31, summary: 'Unassigned work in your pods, ready to pick up.' },
-    { label: 'My tasks', href: '/desk-ops/my-tasks', icon: 'check', module: 31, summary: 'Work assigned to you.' },
-    { label: 'Agencies', href: '/desk-ops/agencies', icon: 'building', module: 35, summary: 'Your agencies, their accounts and their work.', roles: ['ACCOUNT_MANAGER', ...MANAGERS] },
-    { label: 'Messages', href: '/desk-ops/messages', icon: 'chat', module: 36, summary: 'Conversations with your agencies.', roles: ['ACCOUNT_MANAGER', ...MANAGERS] },
-    { label: 'Workload', href: '/desk-ops/workload', icon: 'layers', module: 40, summary: 'All work across agencies and pods; reassign and escalate.', roles: MANAGERS },
-    { label: 'Turnaround', href: '/desk-ops/metrics', icon: 'chart', module: 42, summary: 'Turnaround by pod, VA and agency, in business time.', roles: ['ACCOUNT_MANAGER', ...MANAGERS] },
-    { label: 'Usage & audit', href: '/desk-ops/usage', icon: 'receipt', module: 43, summary: 'Monthly usage against plan allowances, and the audit log.', roles: MANAGERS },
+    { label: 'Pod queue', href: '/desk-ops/queue', icon: 'queue', module: 31, summary: 'Unassigned work in your pods, ready to pick up.', permissions: WORK },
+    { label: 'My tasks', href: '/desk-ops/my-tasks', icon: 'check', module: 31, summary: 'Work assigned to you.', permissions: WORK },
+    { label: 'Agencies', href: '/desk-ops/agencies', icon: 'building', module: 35, summary: 'Your agencies, their accounts and their work.', permissions: ['accounts.view'], kinds: MANAGED },
+    { label: 'Messages', href: '/desk-ops/messages', icon: 'chat', module: 36, summary: 'Conversations with your agencies.', permissions: ['messages.agency'], kinds: MANAGED },
+    { label: 'Workload', href: '/desk-ops/workload', icon: 'layers', module: 40, summary: 'All work across agencies and pods; reassign and escalate.', permissions: ['workload.view'], kinds: ALL_AGENCIES },
+    { label: 'Turnaround', href: '/desk-ops/metrics', icon: 'chart', module: 42, summary: 'Turnaround by pod, VA and agency, in business time.', permissions: ['turnaround.view'], kinds: MANAGED },
+    { label: 'Usage & audit', href: '/desk-ops/usage', icon: 'receipt', module: 43, summary: 'Monthly usage against plan allowances, and the audit log.', permissions: ['usage.view', 'audit.view'], kinds: ALL_AGENCIES },
   ],
   ADMIN: [
     { label: 'Overview', href: '/super-admin/desk', icon: 'home', module: 14, summary: 'Desk setup at a glance.' },
-    { label: 'Agencies', href: '/super-admin/desk/agencies', icon: 'building', module: 15, summary: 'Turn The Desk on per agency, assign Account Managers, plans and profiles.' },
-    { label: 'Staff', href: '/super-admin/desk/staff', icon: 'staff', module: 16, summary: 'Invite and manage Account Managers, VAs and Operations Managers.' },
-    { label: 'Pods', href: '/super-admin/desk/pods', icon: 'layers', module: 17, summary: 'Pods, their members, agency authorization and VA permissions.' },
-    { label: 'Routing & targets', href: '/super-admin/desk/routing', icon: 'route', module: 18, summary: 'Where each request type goes and its service-level targets.' },
-    { label: 'Business calendar', href: '/super-admin/desk/calendar', icon: 'calendar', module: 19, summary: 'Business hours, time zone and holidays.' },
-    { label: 'Follow-up rules', href: '/super-admin/desk/follow-ups', icon: 'repeat', module: 39, summary: 'Follow-up work created automatically when a request is completed.' },
+    { label: 'Agencies', href: '/super-admin/desk/agencies', icon: 'building', module: 15, summary: 'Turn The Desk on per agency, assign Account Managers, plans and profiles.', permissions: ['agencies.setup'] },
+    { label: 'Staff', href: '/super-admin/desk/staff', icon: 'staff', module: 16, summary: 'Invite and manage Account Managers, VAs and Operations Managers.', permissions: ['staff.manage'] },
+    { label: 'Positions', href: '/super-admin/desk/positions', icon: 'shield', module: 47, summary: 'Positions, their permissions and agency reach, and who holds them.', roles: ['SUPER_ADMIN'] },
+    { label: 'Pods', href: '/super-admin/desk/pods', icon: 'layers', module: 17, summary: 'Pods, their members, agency authorization and VA permissions.', permissions: ['pods.manage', 'agencies.setup', 'documents.grant'] },
+    { label: 'Routing & targets', href: '/super-admin/desk/routing', icon: 'route', module: 18, summary: 'Where each request type goes and its service-level targets.', permissions: ['settings.operations'] },
+    { label: 'Business calendar', href: '/super-admin/desk/calendar', icon: 'calendar', module: 19, summary: 'Business hours, time zone and holidays.', permissions: ['settings.operations'] },
+    { label: 'Follow-up rules', href: '/super-admin/desk/follow-ups', icon: 'repeat', module: 39, summary: 'Follow-up work created automatically when a request is completed.', permissions: ['settings.operations'] },
   ],
 };
 
-/** The sidebar for one area and role. */
-export function navFor(area: DeskArea, role: string): DeskNavItem[] {
-  return DESK_NAV[area].filter((item) => !item.roles || item.roles.includes(role));
+/** The sidebar for one area, for a person's access (or a bare role's default position). */
+export function navFor(area: DeskArea, who: NavAccess | string): DeskNavItem[] {
+  const access = asAccess(who);
+  return DESK_NAV[area].filter((item) => shows(item, access));
 }
 
 /** The nav entry for a path (exact match), for placeholder pages. */
@@ -92,10 +142,10 @@ export function navItemFor(href: string): DeskNavItem | undefined {
   return undefined;
 }
 
-/** May this role open the page at `href`? Unknown paths are refused. */
-export function itemAllowed(href: string, role: string): boolean {
+/** May this person (or a bare role) open the page at `href`? Unknown paths are refused. */
+export function itemAllowed(href: string, who: NavAccess | string): boolean {
   const item = navItemFor(href);
-  return !!item && (!item.roles || item.roles.includes(role));
+  return !!item && shows(item, asAccess(who));
 }
 
 /** Highlight rule: an area root matches only itself; other items match their subtree. */
@@ -109,9 +159,12 @@ export function isActivePath(pathname: string, href: string): boolean {
 }
 
 /** Links to the user's other areas, shown under the sidebar. */
-export function otherAreaLinks(area: DeskArea, role: string): { label: string; href: string }[] {
+export function otherAreaLinks(area: DeskArea, who: NavAccess | string): { label: string; href: string }[] {
+  const access = asAccess(who);
+  const role = access.role;
   const links: { label: string; href: string }[] = [];
-  if (role === 'SUPER_ADMIN' || role === 'DESK_ADMIN') {
+  // Staff who may use some of Desk setup move between it and Desk Operations.
+  if (hasSetup(access) && isStaffKind(access)) {
     if (area !== 'OPS') links.push({ label: AREA_TITLES.OPS, href: AREA_ROOTS.OPS });
     if (area !== 'ADMIN') links.push({ label: AREA_TITLES.ADMIN, href: AREA_ROOTS.ADMIN });
   }
@@ -135,19 +188,20 @@ export function landingPath(role: string): string {
 }
 
 /**
- * Internal Desk staff have nothing in the agency app (leads, proposals…);
- * Operations Managers may also reach Desk setup. Everyone else is unaffected.
+ * Internal Desk staff have nothing in the agency app (leads, proposals…); they
+ * may reach Desk setup, where the Desk layout then checks their positions
+ * (Module 48: a position, not the role, decides who uses setup). Everyone else
+ * is unaffected.
  */
 export function mainAppAllowed(role: string, pathname: string): boolean {
-  if (role === 'DESK_ADMIN') return isWithin(pathname, AREA_ROOTS.ADMIN);
-  if (role === 'ACCOUNT_MANAGER' || role === 'DESK_VA') return false;
+  if (role === 'DESK_ADMIN' || role === 'ACCOUNT_MANAGER' || role === 'DESK_VA') return isWithin(pathname, AREA_ROOTS.ADMIN);
   return true;
 }
 
-/** Super Admin pages: Super Admin everywhere, Operations Managers only in Desk setup. */
+/** Super Admin pages: Super Admin everywhere, Desk staff only in Desk setup (which checks their positions). */
 export function superAdminAreaAllowed(role: string, pathname: string): boolean {
   if (role === 'SUPER_ADMIN') return true;
-  return role === 'DESK_ADMIN' && isWithin(pathname, AREA_ROOTS.ADMIN);
+  return (role === 'DESK_ADMIN' || role === 'ACCOUNT_MANAGER' || role === 'DESK_VA') && isWithin(pathname, AREA_ROOTS.ADMIN);
 }
 
 function isWithin(pathname: string, root: string): boolean {
@@ -180,7 +234,7 @@ export function gateArea(area: DeskArea, role: string, scope: DeskScope): AreaGa
     case 'OPS':
       return scope.kind === 'PLATFORM' || scope.kind === 'ACCOUNT_MANAGER' || scope.kind === 'VA' ? { ok: true } : home;
     case 'ADMIN':
-      return scope.kind === 'PLATFORM' ? { ok: true } : home;
+      return hasSetup(navAccess(scope)) ? { ok: true } : home;
   }
 }
 

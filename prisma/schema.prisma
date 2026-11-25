@@ -247,6 +247,7 @@ model User {
   assignedTasks    Task[] @relation("TaskAssignee")
   insuredAssignments InsuredAssignment[]
   deskPermission   DeskStaffPermission?
+  deskPositions    DeskPositionHolder[]
 
   @@index([role])
 }
@@ -1594,6 +1595,76 @@ model DeskStaffPermission {
   updatedAt             DateTime              @updatedAt
 
   user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── The Desk: positions and permissions (Module 47) ────────────────────────
+
+/// The department a position belongs to (client, 24 Nov 2026): the COO's
+/// office, Virtual Operations (the workforce) or Agency Operations (the
+/// agency relationships).
+enum DeskDepartment {
+  EXECUTIVE
+  VIRTUAL_OPERATIONS
+  AGENCY_OPERATIONS
+}
+
+/// Which agencies a position reaches. Reach never opens Financial or Personal
+/// documents by itself: that is a permission, or an individual grant.
+enum DeskAgencyReach {
+  /// Every Desk-enabled agency.
+  ALL
+  /// The agencies of the Account Managers this person supervises, and their own.
+  SUPERVISED
+  /// Agencies where this person is the primary or backup Account Manager.
+  ASSIGNED
+  /// Only through pod membership and the agency's pod authorisation (whole pod or named).
+  POD
+}
+
+/// A position in the Desk organisation, such as COO, Pod Leader or Account
+/// Manager: a set of permissions and an agency reach, edited by the Super
+/// Admin. Permissions are keys from lib/desk/permission-catalogue.ts, kept as
+/// strings so the catalogue can grow without a migration; unknown keys are
+/// ignored. A person may hold several positions; they get the union.
+model DeskPosition {
+  id          String          @id @default(auto()) @map("_id") @db.ObjectId
+  code        String          @unique
+  name        String
+  description String?
+  department  DeskDepartment
+  reach       DeskAgencyReach
+  permissions String[]        @default([])
+  /// The position this one reports to, for the organisation chart. Who
+  /// supervises whom, person by person, is separate.
+  reportsToId String?         @db.ObjectId
+  /// Staff with this role and no position are given this one (the migration
+  /// from fixed roles, and new invites).
+  legacyRole  UserRole?
+  /// Created by the Desk defaults; can be edited, not deleted.
+  isSystem    Boolean         @default(false)
+  isActive    Boolean         @default(true)
+  sortOrder   Int             @default(0)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  holders     DeskPositionHolder[]
+
+  @@index([department, sortOrder])
+}
+
+/// A person holding a position.
+model DeskPositionHolder {
+  id           String       @id @default(auto()) @map("_id") @db.ObjectId
+  positionId   String       @db.ObjectId
+  userId       String       @db.ObjectId
+  assignedById String?      @db.ObjectId
+  createdAt    DateTime     @default(now())
+
+  position     DeskPosition @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, positionId])
+  @@index([positionId])
 }
 
 /// Which side of an agency's conversation a message came from.

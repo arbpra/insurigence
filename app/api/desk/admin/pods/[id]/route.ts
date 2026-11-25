@@ -10,7 +10,7 @@ type Context = { params: Promise<{ id: string }> };
 export async function PATCH(request: NextRequest, { params }: Context) {
   try {
     const { id } = await params;
-    const { scope, ctx } = await deskAdminRequest(prisma, request);
+    const { scope, ctx } = await deskAdminRequest(prisma, request, ['pods.manage']);
     const body = await request.json().catch(() => null);
     switch (body?.action) {
       case 'update':

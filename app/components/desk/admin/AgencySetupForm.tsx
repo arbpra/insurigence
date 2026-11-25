@@ -61,10 +61,11 @@ function toForm(s: AgencySetupView): FormState {
 
 const numberOrNull = (text: string) => (text.trim() === '' ? null : Number(text));
 
-function toPayload(f: FormState, version: string, confirmDisable: boolean) {
+/** The plan is left out when the person can't change it, so a price they can't see is never overwritten. */
+function toPayload(f: FormState, setup: AgencySetupView, confirmDisable: boolean) {
   const price = numberOrNull(f.price);
   return {
-    version,
+    version: setup.version,
     confirmDisable,
     deskEnabled: f.deskEnabled,
     primaryAmId: f.primaryAmId || null,
@@ -73,7 +74,7 @@ function toPayload(f: FormState, version: string, confirmDisable: boolean) {
     amsSystemOther: f.amsSystemOther,
     deskInstructions: f.deskInstructions,
     credentialVaultRef: f.credentialVaultRef,
-    plan: f.planId ? {
+    ...(setup.canChangePlan ? { plan: f.planId ? {
       planId: f.planId,
       startsOn: f.startsOn,
       monthlyPriceCents: price === null ? null : Math.round(price * 100),
@@ -83,7 +84,7 @@ function toPayload(f: FormState, version: string, confirmDisable: boolean) {
         category: c,
         monthlyUnits: f.overrides[c].mode === 'unlimited' ? null : numberOrNull(f.overrides[c].units) ?? 0,
       })),
-    } : null,
+    } : null } : {}),
   };
 }
 
@@ -134,7 +135,7 @@ export function AgencySetupForm({ agencyId }: { agencyId: string }) {
       const res = await fetch(`/api/desk/admin/agencies/${agencyId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(toPayload(form, setup.version, confirmDisable)),
+        body: JSON.stringify(toPayload(form, setup, confirmDisable)),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -231,13 +232,15 @@ export function AgencySetupForm({ agencyId }: { agencyId: string }) {
 
       <section className="bg-white border border-slate-200 rounded-xl p-5 mb-5">
         <h2 className="text-base font-semibold text-slate-800 mb-4">Plan</h2>
+        {!setup.canChangePlan && <p className="text-xs text-slate-500 mb-4" data-testid="desk-plan-readonly">Your position can see the plan but not change it.</p>}
+        <fieldset disabled={!setup.canChangePlan} className="disabled:opacity-80">
         <div className="grid sm:grid-cols-2 gap-4">
           <div>
             <label className={LABEL} htmlFor="plan">Plan</label>
             <select id="plan" className={INPUT} value={form.planId} onChange={(e) => update({ planId: e.target.value })} data-testid="desk-plan">
               <option value="">No plan</option>
               {setup.options.plans.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}: {p.priceIsStartingAt ? 'from ' : ''}{money(p.monthlyPriceCents)}{p.isActive ? '' : ' (no longer offered)'}</option>
+                <option key={p.id} value={p.id}>{p.name}{p.monthlyPriceCents === null ? '' : `: ${p.priceIsStartingAt ? 'from ' : ''}${money(p.monthlyPriceCents)}`}{p.isActive ? '' : ' (no longer offered)'}</option>
               ))}
             </select>
           </div>
@@ -247,18 +250,18 @@ export function AgencySetupForm({ agencyId }: { agencyId: string }) {
                 <label className={LABEL} htmlFor="startsOn">Starts on</label>
                 <input id="startsOn" type="date" className={INPUT} value={form.startsOn} onChange={(e) => update({ startsOn: e.target.value })} data-testid="desk-plan-start" />
               </div>
-              <div>
+              {setup.canSeePrices && <div>
                 <label className={LABEL} htmlFor="price">{plan.priceIsStartingAt ? 'Agreed monthly price ($)' : 'Negotiated monthly price ($, optional)'}</label>
                 <input id="price" type="number" min="0" step="0.01" className={INPUT} value={form.price} onChange={(e) => update({ price: e.target.value })} data-testid="desk-plan-price" />
-              </div>
+              </div>}
               <div>
                 <label className={LABEL} htmlFor="accounts">Managed accounts override (optional)</label>
                 <input id="accounts" type="number" min="0" step="1" className={INPUT} placeholder={plan.managedAccounts === null ? 'Not set on the plan' : `Plan: ${plan.managedAccounts}`} value={form.managedAccounts} onChange={(e) => update({ managedAccounts: e.target.value })} data-testid="desk-plan-accounts" />
               </div>
-              <div className="sm:col-span-2">
+              {setup.canSeePrices && <div className="sm:col-span-2">
                 <label className={LABEL} htmlFor="notes">Notes</label>
                 <input id="notes" className={INPUT} maxLength={1000} value={form.notes} onChange={(e) => update({ notes: e.target.value })} data-testid="desk-plan-notes" />
-              </div>
+              </div>}
             </>
           )}
         </div>
@@ -290,6 +293,7 @@ export function AgencySetupForm({ agencyId }: { agencyId: string }) {
             </div>
           </div>
         )}
+        </fieldset>
         {setup.counts.pendingBilling > 0 && (
           <p className="text-xs text-amber-700 mt-4">{setup.counts.pendingBilling} completed request{setup.counts.pendingBilling === 1 ? ' is' : 's are'} waiting to be classified for billing.</p>
         )}

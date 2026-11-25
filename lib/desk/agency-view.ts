@@ -3,13 +3,13 @@
  * one agency's summary. Its accounts and its work are listed by the existing
  * accounts and task APIs (?agencyId=), which apply the same access rules.
  *
- * Managers only. An Account Manager sees only agencies they are the primary
+ * Managers whose position opens agency books (`accounts.view`). An Account Manager sees only agencies they are the primary
  * or backup AM for; any other agency is refused as not found, and logged
  * (Q4). Opening an agency's page is logged too: it shows the instructions
  * for Desk staff and where its logins are kept (a pointer, never a secret).
  */
 import type { PrismaClient } from '@prisma/client';
-import { DeskAccessError, isObjectId, type DeskScope, type GuardContext } from './access';
+import { can, DeskAccessError, isObjectId, type DeskScope, type GuardContext } from './access';
 import { recordAudit } from './audit';
 import { amsDisplayName } from './profile';
 import { resolveManagedAccounts } from './billing';
@@ -34,9 +34,20 @@ function roleOf(scope: DeskScope, a: { primaryAmId: string | null; backupAmId: s
   return null;
 }
 
+/** The agency pages hold its contacts and where its logins are kept, so overseeing work isn't enough. */
+async function agencyPagesOnly(db: Db, scope: DeskScope, ctx: GuardContext, op: string): Promise<void> {
+  await managersOnly(db, scope, ctx, op);
+  if (can(scope, 'accounts.view')) return;
+  await recordAudit(db, {
+    actor: { id: scope.userId, role: scope.role }, action: 'access.denied', entityType: 'Agency', entityId: null,
+    metadata: { scope: scope.kind, op, needs: ['accounts.view'] }, ip: ctx.ip, userAgent: ctx.userAgent,
+  });
+  throw new DeskAccessError(404, 'Not found.');
+}
+
 /** The agencies this manager looks after, with their work at a glance. */
 export async function managedAgencies(db: Db, scope: DeskScope, ctx: GuardContext = {}) {
-  await managersOnly(db, scope, ctx, 'agencies');
+  await agencyPagesOnly(db, scope, ctx, 'agencies');
   const f = workFilters(scope, new Date());
   const [agencies, accounts, openBy, overdueBy, waitingBy, reviewBy] = await Promise.all([
     db.agency.findMany({
@@ -71,7 +82,7 @@ export async function managedAgencies(db: Db, scope: DeskScope, ctx: GuardContex
 
 /** One agency: who looks after it, how it is set up, its work at a glance and its renewals. */
 export async function agencySummary(db: Db, scope: DeskScope, agencyId: string, ctx: GuardContext = {}) {
-  await managersOnly(db, scope, ctx, 'agency');
+  await agencyPagesOnly(db, scope, ctx, 'agency');
   const inScope = isObjectId(agencyId) && (scope.kind === 'PLATFORM' || (scope.kind === 'ACCOUNT_MANAGER' && scope.agencyIds.includes(agencyId)));
   const agency = inScope
     ? await db.agency.findFirst({

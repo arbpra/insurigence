@@ -8,7 +8,7 @@
  * queue; agency-wide figures are more than their work needs (Q4).
  */
 import type { Prisma, PrismaClient, TaskStatus } from '@prisma/client';
-import { DeskAccessError, policyWhere, taskWhere, type DeskScope, type GuardContext } from './access';
+import { can, DeskAccessError, policyWhere, taskWhere, type DeskScope, type GuardContext } from './access';
 import { recordAudit } from './audit';
 import { TASK_TYPE_LABELS } from './service-levels';
 import { STATUS_LABELS } from './task-statuses';
@@ -67,9 +67,8 @@ export function workFilters(scope: DeskScope, now: Date, renewalDays = 60) {
     unrouted: { AND: [visible, OPEN, UNROUTED] } as Prisma.TaskWhereInput,
     renewals: {
       AND: [
-        policyWhere(scope),
+        policyWhere(scope, { status: 'ACTIVE' }), // on an active account
         { status: { in: ['ACTIVE', 'PENDING'] }, expirationDate: { gte: today, lt: until } },
-        { insured: { is: { status: 'ACTIVE' } } },
         { agency: { is: { deskEnabled: true } } },
       ],
     } as Prisma.PolicyWhereInput,
@@ -143,6 +142,8 @@ export async function managerDashboard(db: Db, scope: DeskScope, opts: { renewal
 
   return {
     renewalDays: days,
+    /** Whether each agency's name links to its page. */
+    opensAgencies: can(scope, 'accounts.view'),
     counts: { open: openN, overdue: overdueN, dueSoon: dueSoonN, waitingOnAgency: waitingN, review: reviewN, unrouted: unroutedN, renewals: renewalN, agencies: agencies.length },
     agencies: agencyRows.slice(0, AGENCY_LIMIT),
     review: reviewRows.map((t) => {

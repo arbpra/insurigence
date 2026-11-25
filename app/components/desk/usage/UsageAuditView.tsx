@@ -18,12 +18,12 @@ interface AgencyRow {
   totals: { included: number; overage: number; overageUnbilled: number; nonBillable: number; pending: number };
 }
 interface Usage {
-  period: string; periods: string[]; timeZone: string; agencies: AgencyRow[];
+  period: string; showsPrices: boolean; periods: string[]; timeZone: string; agencies: AgencyRow[];
   totals: { agencies: number; overAllowance: number; overageUnbilled: number; pending: number; noPlan: number };
 }
 interface AgencyTasks {
   agency: { id: string; name: string }; period: string; truncated: boolean;
-  tasks: { id: string; reference: number; title: string; typeLabel: string; completedAt: string | null; category: string; units: number; billing: string; billingLabel: string; invoice: string | null }[];
+  tasks: { id: string; reference: number; title: string | null; typeLabel: string; completedAt: string | null; category: string; units: number; billing: string; billingLabel: string; invoice: string | null }[];
 }
 interface AuditRow {
   id: string; at: string; action: string;
@@ -43,9 +43,10 @@ const money = (cents: number | null) => (cents === null ? 'Price set per agency'
 const when = (iso: string) => new Date(iso).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
 
 /** Service usage against plan allowances, and the audit log: Operations Managers only. */
-export function UsageAuditView() {
+export function UsageAuditView({ tabs }: { tabs: ('usage' | 'audit')[] }) {
   const params = useSearchParams();
-  const [tab, setTab] = useState<'usage' | 'audit'>(params.get('tab') === 'audit' ? 'audit' : 'usage');
+  const asked = params.get('tab') === 'audit' ? 'audit' : 'usage';
+  const [tab, setTab] = useState<'usage' | 'audit'>(tabs.includes(asked) ? asked : tabs[0]);
   const choose = (t: 'usage' | 'audit') => {
     setTab(t);
     window.history.replaceState(null, '', t === 'audit' ? '/desk-ops/usage?tab=audit' : '/desk-ops/usage');
@@ -57,7 +58,7 @@ export function UsageAuditView() {
         <p className="text-sm text-slate-600">Each agency&rsquo;s monthly usage against its plan, and the record of everything done in The Desk.</p>
       </div>
       <div className="flex gap-2 border-b border-slate-200" role="tablist">
-        {(['usage', 'audit'] as const).map((t) => (
+        {tabs.map((t) => (
           <button key={t} type="button" role="tab" aria-selected={tab === t} data-testid={`desk-usage-tab-${t}`} onClick={() => choose(t)}
             className={`px-3 py-2 text-sm font-medium -mb-px border-b-2 ${tab === t ? 'border-slate-800 text-slate-900' : 'border-transparent text-slate-500'}`}>
             {t === 'usage' ? 'Usage' : 'Audit log'}
@@ -138,7 +139,7 @@ function UsageTab() {
           <tbody>
             {data && !data.agencies.length && <tr><td colSpan={4 + categories.length} className="px-3 py-3 text-slate-500">No agencies have The Desk switched on.</td></tr>}
             {(data?.agencies ?? []).map((a) => (
-              <AgencyLine key={a.id} a={a} open={open === a.id} onToggle={() => toggle(a.id)} detail={open === a.id ? detail : null} detailError={open === a.id ? detailError : ''} cols={4 + categories.length} />
+              <AgencyLine key={a.id} a={a} showsPrices={!!data?.showsPrices} open={open === a.id} onToggle={() => toggle(a.id)} detail={open === a.id ? detail : null} detailError={open === a.id ? detailError : ''} cols={4 + categories.length} />
             ))}
           </tbody>
         </table>
@@ -147,8 +148,8 @@ function UsageTab() {
   );
 }
 
-function AgencyLine({ a, open, onToggle, detail, detailError, cols }: {
-  a: AgencyRow; open: boolean; onToggle: () => void; detail: AgencyTasks | null; detailError: string; cols: number;
+function AgencyLine({ a, showsPrices, open, onToggle, detail, detailError, cols }: {
+  a: AgencyRow; showsPrices: boolean; open: boolean; onToggle: () => void; detail: AgencyTasks | null; detailError: string; cols: number;
 }) {
   const over = a.managedAccounts.included !== null && a.managedAccounts.active > a.managedAccounts.included;
   return (
@@ -159,7 +160,7 @@ function AgencyLine({ a, open, onToggle, detail, detailError, cols }: {
           {!a.deskEnabled && <span className="block text-xs text-slate-500">The Desk off</span>}
           {a.totals.pending > 0 && <span className="block text-xs text-amber-700">{a.totals.pending} not yet classified</span>}
         </td>
-        <td className="px-3 py-2">{a.plan ? <><span className="block">{a.plan.name}</span><span className="block text-xs text-slate-500">{money(a.plan.monthlyPriceCents)}</span></> : <span className="text-amber-700">No plan</span>}</td>
+        <td className="px-3 py-2">{a.plan ? <><span className="block">{a.plan.name}</span>{showsPrices && <span className="block text-xs text-slate-500">{money(a.plan.monthlyPriceCents)}</span>}</> : <span className="text-amber-700">No plan</span>}</td>
         <td className={`px-3 py-2 text-right tabular-nums ${over ? 'text-red-700 font-medium' : ''}`}>
           {a.managedAccounts.active}{a.managedAccounts.included !== null ? ` of ${a.managedAccounts.included}` : ''}
         </td>
@@ -189,7 +190,7 @@ function AgencyLine({ a, open, onToggle, detail, detailError, cols }: {
                     <tbody>
                       {detail.tasks.map((t) => (
                         <tr key={t.id} className="border-t border-slate-200">
-                          <td className="py-1"><Link className="hover:underline" href={`/desk-ops/tasks/${t.id}`}>#{t.reference} {t.title}</Link></td>
+                          <td className="py-1">{t.title === null ? <span className="text-slate-500">#{t.reference} (restricted)</span> : <Link className="hover:underline" href={`/desk-ops/tasks/${t.id}`}>#{t.reference} {t.title}</Link>}</td>
                           <td>{t.typeLabel}</td><td>{t.category}</td><td>{t.completedAt ? when(t.completedAt) : '–'}</td>
                           <td className="text-right tabular-nums">{t.units}</td>
                           <td className={t.billing === 'OVERAGE' ? 'text-red-700' : t.billing === 'PENDING' ? 'text-amber-700' : ''}>

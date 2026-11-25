@@ -8,7 +8,7 @@
  * from the task itself.
  */
 import type { PrismaClient, TaskStatus } from '@prisma/client';
-import { DeskAccessError, isObjectId, type DeskScope, type GuardContext } from './access';
+import { can, DeskAccessError, isObjectId, taskWhere, type DeskScope, type GuardContext } from './access';
 import { listTasks, setTaskAssignee, setTaskPod, type TaskListOptions } from './task-api';
 import { CLOSED_STATUSES } from './task-filters';
 import { lastAlertRun } from './alerts';
@@ -16,9 +16,13 @@ import { checkIntervalMinutes, cronSecret } from './alert-schedule';
 
 type Db = PrismaClient;
 
-/** Operations Managers and the Super Admin only; the routes refuse everyone else first, and log it. */
+/**
+ * Positions that reach every agency and allow `workload.view` (the COO, the
+ * Directors) and the Super Admin; the routes refuse everyone else first, and
+ * log it. A Pod Leader's view of their own pods comes in Module 51.
+ */
 function opsOnly(scope: DeskScope) {
-  if (scope.kind !== 'PLATFORM') throw new DeskAccessError(403, 'Only Operations Managers can see and change the workload across the Desk.');
+  if (scope.kind !== 'PLATFORM' || !can(scope, 'workload.view')) throw new DeskAccessError(403, 'Your position does not include the workload across the Desk.');
 }
 
 /** The most tasks one change can cover. */
@@ -49,7 +53,8 @@ export async function getWorkload(db: Db, scope: DeskScope, opts: TaskListOption
   opsOnly(scope);
   const now = new Date();
   const open = await db.task.findMany({
-    where: { status: { notIn: [...CLOSED_STATUSES] } },
+    // Through the access layer: restricted requests only for those who may restrict.
+    where: { AND: [{ status: { notIn: [...CLOSED_STATUSES] } }, taskWhere(scope)] },
     select: { podId: true, assigneeId: true, agencyId: true, dueAt: true, slaPausedAt: true, escalated: true, status: true },
   });
 
@@ -122,7 +127,7 @@ export async function changeWorkload(db: Db, scope: DeskScope, body: Record<stri
   const byPerson = 'assigneeId' in body;
   if (byPerson === 'podId' in body) throw new DeskAccessError(400, 'Choose a person or a pod.');
 
-  const refs = new Map((await db.task.findMany({ where: { id: { in: unique.filter(isObjectId) } }, select: { id: true, reference: true } }))
+  const refs = new Map((await db.task.findMany({ where: { AND: [{ id: { in: unique.filter(isObjectId) } }, taskWhere(scope)] }, select: { id: true, reference: true } }))
     .map((t) => [t.id, t.reference]));
   const result: BulkResult = { done: [], failed: [] };
   for (const id of unique) {

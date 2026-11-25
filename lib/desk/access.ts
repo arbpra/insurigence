@@ -6,9 +6,23 @@
  *  - Owner / Admin: the agency's whole book.
  *  - Producer, CSR: accounts they are assigned to, unless the agency admin
  *    granted the whole book (User.bookAccess, via effectiveBookAccess).
- *  - Account Manager: every agency where they are primary or backup AM.
- *  - Operations Manager, Super Admin: every agency.
- *  - Desk VA, need-to-know (client answer Q4): a task is visible only when
+ *  - Desk staff (Module 48): what they may do and which agencies they reach
+ *    come from the positions they hold (lib/desk/staff-profile.ts):
+ *      - reach "all agencies" (COO, the Directors) → kind PLATFORM;
+ *      - reach "assigned" or "supervised" (Account Managers) → kind
+ *        ACCOUNT_MANAGER: every agency where they are primary or backup AM,
+ *        plus pod work if a position of theirs also reaches by pod;
+ *      - reach "pod authorisation" only (Pod Leaders, VAs) → kind VA.
+ *    Their permissions ride on the scope; `can(scope, key)` asks for one.
+ *    A position never opens agency data on its own beyond its reach:
+ *      - agency books are open directly only with `accounts.view`, otherwise
+ *        only through requests the person can see;
+ *      - Financial / Personal documents only with `documents.all_categories`
+ *        or an individual grant;
+ *      - a request restricted to named people (Q4) is seen, beyond the named,
+ *        only by those who may restrict (`requests.restrict`) in their reach.
+ *  - Super Admin: everything.
+ *  - Pod work, need-to-know (client answer Q4): a task is visible only when
  *      1. the VA is in the task's pod (an active pod),
  *      2. the agency authorised that pod as a whole, or this VA by name,
  *         and has The Desk switched on,
@@ -21,31 +35,65 @@
  * "forbidden", so a user cannot learn that another agency's record exists.
  * Every refusal is written to the audit log.
  */
-import type { DocumentSensitivity, Prisma, PrismaClient } from '@prisma/client';
+import type { DocumentSensitivity, Prisma } from '@prisma/client';
 import { NextResponse } from 'next/server';
-import { effectiveBookAccess, isAgencyRole, type BookAccessLevel } from '../roles';
+import { effectiveBookAccess, isAgencyRole, isDeskRole, type BookAccessLevel } from '../roles';
 import { recordAudit } from './audit';
 import { DEFAULT_STAFF_SENSITIVITIES } from './need-to-know';
 import { WHOLE_POD_ACCESS } from './pods';
 import { DESK_NOT_ENABLED } from './scope-reasons';
 import { CLOSED_STATUSES, TOP_LEVEL, passesRestriction } from './task-filters';
+import type { PermissionKey } from './permission-catalogue';
+import { staffProfile } from './staff-profile';
 
-type Db = PrismaClient;
+/** A client or a transaction: a scope can be resolved inside the change that affects it. */
+type Db = Prisma.TransactionClient;
+
+/** What a Desk staff member's positions allow (Module 48). */
+interface StaffAccess {
+  permissions: PermissionKey[];
+  /** Document categories they may open (lib/desk/need-to-know.ts). */
+  sensitivities: DocumentSensitivity[];
+}
+
+/** An (agency, pod) pair a person may work through pod authorisation. */
+export interface PodGrant { agencyId: string; podId: string }
 
 export type DeskScope =
-  /** Super Admin, Operations Manager: all agencies. */
-  | { kind: 'PLATFORM'; userId: string; role: string }
+  /** Super Admin, and positions that reach every agency (COO, the Directors). */
+  | ({ kind: 'PLATFORM'; userId: string; role: string } & StaffAccess)
   /** An agency user, in a Desk-enabled agency. */
   | { kind: 'AGENCY'; userId: string; role: string; agencyId: string; book: BookAccessLevel }
-  /** An Account Manager: their assigned agencies (may be empty). */
-  | { kind: 'ACCOUNT_MANAGER'; userId: string; role: string; agencyIds: string[] }
   /**
-   * A Desk VA: the (agency, pod) pairs they may work, and the document
-   * categories they may open. No pairs = no access.
+   * Positions that reach assigned (or supervised) agencies: the agencies they
+   * manage (may be empty), plus pod work when another position of theirs
+   * reaches by pod.
    */
-  | { kind: 'VA'; userId: string; role: string; grants: { agencyId: string; podId: string }[]; sensitivities: DocumentSensitivity[] }
-  /** No Desk access (agency not enabled, unknown or inactive user). */
+  | ({ kind: 'ACCOUNT_MANAGER'; userId: string; role: string; agencyIds: string[]; grants: PodGrant[] } & StaffAccess)
+  /**
+   * Positions that reach only through pods (Pod Leader, VA): the (agency, pod)
+   * pairs they may work. No pairs = no access.
+   */
+  | ({ kind: 'VA'; userId: string; role: string; grants: PodGrant[] } & StaffAccess)
+  /** No Desk access (agency not enabled, unknown or inactive user, no active position). */
   | { kind: 'NONE'; userId: string; role: string; reason: string };
+
+/** Does the scope's position allow this? Agency users and NONE have no Desk-staff permissions. */
+export function can(scope: DeskScope, permission: PermissionKey): boolean {
+  return 'permissions' in scope && scope.permissions.includes(permission);
+}
+
+/** Desk staff, whatever their reach. */
+export function isStaffScope(scope: DeskScope): scope is Extract<DeskScope, { kind: 'PLATFORM' | 'ACCOUNT_MANAGER' | 'VA' }> {
+  return scope.kind === 'PLATFORM' || scope.kind === 'ACCOUNT_MANAGER' || scope.kind === 'VA';
+}
+
+/** Throws 403 unless the scope has at least one of the permissions. */
+export function assertCan(scope: DeskScope, permissions: readonly PermissionKey[], message = 'Your position does not allow this.'): void {
+  if (!permissions.some((p) => can(scope, p))) throw new DeskAccessError(403, message);
+}
+
+const ALL_SENSITIVITIES: DocumentSensitivity[] = ['GENERAL', 'POLICY', 'FINANCIAL', 'PERSONAL'];
 
 /**
  * A refused Desk request. 404 for anything out of scope (never more detail);
@@ -82,8 +130,6 @@ export async function resolveDeskScope(db: Db, userId: string): Promise<DeskScop
   if (!user || !user.isActive) return { kind: 'NONE', userId, role: user?.role ?? 'UNKNOWN', reason: 'inactive or missing user' };
   const base = { userId: user.id, role: user.role };
 
-  if (user.role === 'SUPER_ADMIN' || user.role === 'DESK_ADMIN') return { kind: 'PLATFORM', ...base };
-
   if (isAgencyRole(user.role)) {
     if (!user.agencyId) return { kind: 'NONE', ...base, reason: 'agency user without an agency' };
     const agency = await db.agency.findUnique({ where: { id: user.agencyId }, select: { deskEnabled: true } });
@@ -91,43 +137,50 @@ export async function resolveDeskScope(db: Db, userId: string): Promise<DeskScop
     return { kind: 'AGENCY', ...base, agencyId: user.agencyId, book: effectiveBookAccess(user.role, user.bookAccess)! };
   }
 
-  if (user.role === 'ACCOUNT_MANAGER') {
+  if (user.role !== 'SUPER_ADMIN' && !isDeskRole(user.role)) return { kind: 'NONE', ...base, reason: 'role has no Desk access' };
+  const profile = await staffProfile(db, user);
+  if (!profile.reaches.length) return { kind: 'NONE', ...base, reason: 'no active position' };
+  const { permissions } = profile;
+  const reaches = new Set(profile.reaches);
+  const sensitivities = permissions.includes('documents.all_categories') ? [...ALL_SENSITIVITIES] : await grantedSensitivities(db, user.id);
+  const staff = { ...base, permissions, sensitivities };
+
+  if (reaches.has('ALL')) return { kind: 'PLATFORM', ...staff };
+  const grants = reaches.has('POD') ? await podGrants(db, user.id) : [];
+  if (reaches.has('ASSIGNED') || reaches.has('SUPERVISED')) {
+    // Supervised agencies (Senior AMs) widen this in Module 50.
     const rows = await db.agencyDeskAssignment.findMany({
       where: { OR: [{ primaryAmId: user.id }, { backupAmId: user.id }], agency: { deskEnabled: true } },
       select: { agencyId: true },
     });
-    return { kind: 'ACCOUNT_MANAGER', ...base, agencyIds: rows.map((r) => r.agencyId) };
+    return { kind: 'ACCOUNT_MANAGER', ...staff, agencyIds: rows.map((r) => r.agencyId), grants };
   }
+  return { kind: 'VA', ...staff, grants };
+}
 
-  if (user.role === 'DESK_VA') {
-    const memberships = await db.podMember.findMany({
-      where: { userId: user.id, pod: { isActive: true } },
-      select: { podId: true },
-    });
-    const podIds = memberships.map((m) => m.podId);
-    const access = podIds.length
-      ? await db.agencyPodAccess.findMany({
-          where: {
-            podId: { in: podIds },
-            agency: { deskEnabled: true },
-            OR: [WHOLE_POD_ACCESS, { userId: user.id }],
-          },
-          select: { agencyId: true, podId: true },
-        })
-      : [];
-    // A whole-pod row and a named row for the same pair grant the same thing.
-    const seen = new Set<string>();
-    const grants = access.filter((g) => {
-      const key = `${g.agencyId}:${g.podId}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-    const permission = await db.deskStaffPermission.findUnique({ where: { userId: user.id }, select: { allowedSensitivities: true } });
-    const sensitivities = [...new Set([...DEFAULT_STAFF_SENSITIVITIES, ...(permission?.allowedSensitivities ?? [])])];
-    return { kind: 'VA', ...base, grants, sensitivities };
-  }
-  return { kind: 'NONE', ...base, reason: 'role has no Desk access' };
+/** The (agency, pod) pairs a person may work: their active pods × each agency's authorisation of the pod or of them by name. */
+async function podGrants(db: Db, userId: string): Promise<PodGrant[]> {
+  const memberships = await db.podMember.findMany({ where: { userId, pod: { isActive: true } }, select: { podId: true } });
+  const podIds = memberships.map((m) => m.podId);
+  if (!podIds.length) return [];
+  const access = await db.agencyPodAccess.findMany({
+    where: { podId: { in: podIds }, agency: { deskEnabled: true }, OR: [WHOLE_POD_ACCESS, { userId }] },
+    select: { agencyId: true, podId: true },
+  });
+  // A whole-pod row and a named row for the same pair grant the same thing.
+  const seen = new Set<string>();
+  return access.filter((g) => {
+    const key = `${g.agencyId}:${g.podId}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/** General and Policy for everyone, plus categories granted to this person (Pods page). */
+async function grantedSensitivities(db: Db, userId: string): Promise<DocumentSensitivity[]> {
+  const permission = await db.deskStaffPermission.findUnique({ where: { userId }, select: { allowedSensitivities: true } });
+  return [...new Set([...DEFAULT_STAFF_SENSITIVITIES, ...(permission?.allowedSensitivities ?? [])])];
 }
 
 /** Agencies the scope can see at all: a list, or 'ALL' for platform roles. */
@@ -135,7 +188,7 @@ export function scopeAgencyIds(scope: DeskScope): string[] | 'ALL' {
   switch (scope.kind) {
     case 'PLATFORM': return 'ALL';
     case 'AGENCY': return [scope.agencyId];
-    case 'ACCOUNT_MANAGER': return scope.agencyIds;
+    case 'ACCOUNT_MANAGER': return [...new Set([...scope.agencyIds, ...scope.grants.map((g) => g.agencyId)])];
     case 'VA': return [...new Set(scope.grants.map((g) => g.agencyId))];
     case 'NONE': return [];
   }
@@ -143,43 +196,83 @@ export function scopeAgencyIds(scope: DeskScope): string[] | 'ALL' {
 
 // ── Query filters. Combine with other conditions through AND. ──
 
-/** Insured accounts the scope may see. */
+/** Requests in a scope's managed agencies (or all, for PLATFORM): restricted ones only for those who may restrict. */
+function managedTasks(scope: Extract<DeskScope, { kind: 'PLATFORM' | 'ACCOUNT_MANAGER' }>): Prisma.TaskWhereInput {
+  const where: Prisma.TaskWhereInput = scope.kind === 'PLATFORM' ? {} : { agencyId: { in: scope.agencyIds } };
+  if (can(scope, 'requests.restrict')) return where;
+  return scope.kind === 'PLATFORM' ? passesRestriction(scope.userId) : { AND: [where, passesRestriction(scope.userId)] };
+}
+
+/** Pod work: open requests in authorised (agency, pod) pairs, plus the person's own history. */
+function podTasks(scope: { userId: string; grants: PodGrant[] }): Prisma.TaskWhereInput {
+  if (!scope.grants.length) return NOTHING;
+  return {
+    AND: [
+      // Built from (agency, pod) pairs only, so a task with no pod never matches.
+      { OR: scope.grants.map((g) => ({ agencyId: g.agencyId, podId: g.podId })) },
+      passesRestriction(scope.userId),
+      { OR: [{ status: { notIn: [...CLOSED_STATUSES] } }, { assigneeId: scope.userId }] },
+    ],
+  };
+}
+
+/** Insured accounts the scope may see. Desk staff open books directly only with `accounts.view`; otherwise through requests they can see. */
 export function insuredWhere(scope: DeskScope): Prisma.InsuredAccountWhereInput {
   switch (scope.kind) {
-    case 'PLATFORM': return {};
     case 'AGENCY':
       return scope.book === 'ALL'
         ? { agencyId: scope.agencyId }
         : { agencyId: scope.agencyId, assignments: { some: { userId: scope.userId } } };
-    case 'ACCOUNT_MANAGER': return { agencyId: { in: scope.agencyIds } };
+    case 'PLATFORM':
+      return can(scope, 'accounts.view') ? {} : { tasks: { some: taskWhere(scope) } };
+    case 'ACCOUNT_MANAGER': {
+      if (!can(scope, 'accounts.view')) return { tasks: { some: taskWhere(scope) } };
+      const managed: Prisma.InsuredAccountWhereInput = { agencyId: { in: scope.agencyIds } };
+      return scope.grants.length ? { OR: [managed, { tasks: { some: podTasks(scope) } }] } : managed;
+    }
     case 'VA': return scope.grants.length ? { tasks: { some: taskWhere(scope) } } : NOTHING;
     case 'NONE': return NOTHING;
   }
+}
+
+/** Policies reached through visible requests: the request's policy, or the account's policies when the request names none. */
+function policiesThroughTasks(visible: Prisma.TaskWhereInput, account?: Prisma.InsuredAccountWhereInput): Prisma.PolicyWhereInput {
+  const onAccount: Prisma.InsuredAccountWhereInput = { tasks: { some: { AND: [visible, { OR: [{ policyId: null }, { policyId: { isSet: false } }] }] } } };
+  if (!account) return { OR: [{ tasks: { some: visible } }, { insured: onAccount }] };
+  return {
+    OR: [
+      { AND: [{ insured: { is: account } }, { tasks: { some: visible } }] },
+      { insured: { is: { AND: [account, onAccount] } } },
+    ],
+  };
 }
 
 /**
  * Policies the scope may see: those on insureds it may see. A VA sees the
  * policy a visible task is about; a visible task on an account with no
  * specific policy (a COI, say) shows that account's policies.
+ *
+ * To limit by the account as well, pass the condition as `account`; never AND
+ * `policyWhere(scope)` with another `insured` condition. Prisma on MongoDB
+ * joins the account once per condition, the second join drops the first's
+ * requests, and the query fails.
  */
-export function policyWhere(scope: DeskScope): Prisma.PolicyWhereInput {
+export function policyWhere(scope: DeskScope, account?: Prisma.InsuredAccountWhereInput): Prisma.PolicyWhereInput {
+  const onAccount: Prisma.PolicyWhereInput = account ? { insured: { is: account } } : {};
   switch (scope.kind) {
-    case 'PLATFORM': return {};
     case 'AGENCY':
       return scope.book === 'ALL'
-        ? { agencyId: scope.agencyId }
-        : { agencyId: scope.agencyId, insured: { assignments: { some: { userId: scope.userId } } } };
-    case 'ACCOUNT_MANAGER': return { agencyId: { in: scope.agencyIds } };
-    case 'VA': {
-      if (!scope.grants.length) return NOTHING;
-      const visible = taskWhere(scope);
-      return {
-        OR: [
-          { tasks: { some: visible } },
-          { insured: { tasks: { some: { AND: [visible, { OR: [{ policyId: null }, { policyId: { isSet: false } }] }] } } } },
-        ],
-      };
+        ? { agencyId: scope.agencyId, ...onAccount }
+        : { agencyId: scope.agencyId, insured: { is: { AND: [account ?? {}, { assignments: { some: { userId: scope.userId } } }] } } };
+    case 'PLATFORM':
+      return can(scope, 'accounts.view') ? onAccount : policiesThroughTasks(taskWhere(scope), account);
+    case 'ACCOUNT_MANAGER': {
+      if (!can(scope, 'accounts.view')) return policiesThroughTasks(taskWhere(scope), account);
+      const managed: Prisma.PolicyWhereInput = { agencyId: { in: scope.agencyIds }, ...onAccount };
+      return scope.grants.length ? { OR: [managed, policiesThroughTasks(podTasks(scope), account)] } : managed;
     }
+    case 'VA':
+      return scope.grants.length ? policiesThroughTasks(taskWhere(scope), account) : NOTHING;
     case 'NONE': return NOTHING;
   }
 }
@@ -188,12 +281,12 @@ export function policyWhere(scope: DeskScope): Prisma.PolicyWhereInput {
  * Tasks the scope may see.
  *  - A Producer / CSR on assigned accounts sees tasks on those accounts, plus
  *    tasks they submitted themselves (including ones with no account).
- *  - The named-staff restriction does not apply to agency users, and an AM
- *    bypasses it for their own agencies (lib/desk/need-to-know.ts).
+ *  - The named-staff restriction does not apply to agency users; staff who
+ *    may restrict pass it in their reach (lib/desk/need-to-know.ts).
  */
 export function taskWhere(scope: DeskScope): Prisma.TaskWhereInput {
   switch (scope.kind) {
-    case 'PLATFORM': return {};
+    case 'PLATFORM': return managedTasks(scope);
     case 'AGENCY':
       // Subtasks are the Desk team's own pieces of a request (Module 38): an agency sees the request only.
       return scope.book === 'ALL'
@@ -207,17 +300,9 @@ export function taskWhere(scope: DeskScope): Prisma.TaskWhereInput {
               ],
             }, TOP_LEVEL],
           };
-    case 'ACCOUNT_MANAGER': return { agencyId: { in: scope.agencyIds } };
-    case 'VA':
-      if (!scope.grants.length) return NOTHING;
-      return {
-        AND: [
-          // Built from (agency, pod) pairs only, so a task with no pod never matches.
-          { OR: scope.grants.map((g) => ({ agencyId: g.agencyId, podId: g.podId })) },
-          passesRestriction(scope.userId),
-          { OR: [{ status: { notIn: [...CLOSED_STATUSES] } }, { assigneeId: scope.userId }] },
-        ],
-      };
+    case 'ACCOUNT_MANAGER':
+      return scope.grants.length ? { OR: [managedTasks(scope), podTasks(scope)] } : managedTasks(scope);
+    case 'VA': return podTasks(scope);
     case 'NONE': return NOTHING;
   }
 }
@@ -232,17 +317,22 @@ const NOT_DELETED: Prisma.TaskDocumentWhereInput = { OR: [{ deletedAt: null }, {
 export function documentWhere(scope: DeskScope): Prisma.TaskDocumentWhereInput {
   if (scope.kind === 'NONE') return NOTHING;
   const parts: Prisma.TaskDocumentWhereInput[] = [NOT_DELETED];
-  if (scope.kind !== 'PLATFORM') parts.push({ task: taskWhere(scope) });
+  if (!seesEveryTask(scope)) parts.push({ task: taskWhere(scope) });
   if (scope.kind === 'AGENCY') parts.push({ visibility: 'AGENCY' });
-  if (scope.kind === 'VA') parts.push({ sensitivity: { in: scope.sensitivities } });
+  if (isStaffScope(scope) && scope.sensitivities.length < ALL_SENSITIVITIES.length) parts.push({ sensitivity: { in: scope.sensitivities } });
   return { AND: parts };
+}
+
+/** Every task, with no filter at all: the Super Admin, and all-agency positions that may restrict. */
+function seesEveryTask(scope: DeskScope): boolean {
+  return scope.kind === 'PLATFORM' && can(scope, 'requests.restrict');
 }
 
 /** Timeline entries the scope may see: agency users never see internal ones. */
 export function taskEventWhere(scope: DeskScope): Prisma.TaskEventWhereInput {
   if (scope.kind === 'NONE') return NOTHING;
   const parts: Prisma.TaskEventWhereInput[] = [];
-  if (scope.kind !== 'PLATFORM') parts.push({ task: taskWhere(scope) });
+  if (!seesEveryTask(scope)) parts.push({ task: taskWhere(scope) });
   if (scope.kind === 'AGENCY') parts.push({ visibility: 'AGENCY' });
   return { AND: parts };
 }
@@ -345,8 +435,9 @@ export async function resolveSubmission(
   input: { insuredId?: string | null; policyId?: string | null; agencyId?: string | null },
   ctx: GuardContext = {}
 ): Promise<{ agencyId: string; insuredId: string | null; policyId: string | null }> {
-  // VAs work requests; they do not file them (subtasks come in Module 38).
-  if (scope.kind === 'NONE' || scope.kind === 'VA') return refuse(db, scope, 'Task', 'submit', null, ctx, { op: 'submit' });
+  // Desk staff file requests for an agency only if they may edit its book (Account Managers and up);
+  // VAs and Pod Leaders work requests, they don't file them (subtasks are separate, Module 38).
+  if (scope.kind === 'NONE' || (scope.kind !== 'AGENCY' && !can(scope, 'accounts.edit'))) return refuse(db, scope, 'Task', 'submit', null, ctx, { op: 'submit' });
 
   let insuredId: string | null = null;
   let agencyId: string | null = null;
@@ -401,7 +492,7 @@ export async function resolveSubmission(
  * Account Managers do not.
  */
 export function canManageAgencyAccess(scope: DeskScope, agencyId: string): boolean {
-  if (scope.kind === 'PLATFORM') return true;
+  if (scope.kind === 'PLATFORM') return can(scope, 'agencies.setup');
   return scope.kind === 'AGENCY' && scope.role === 'ADMIN' && scope.agencyId === agencyId;
 }
 

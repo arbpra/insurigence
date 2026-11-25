@@ -49,7 +49,7 @@ const targetView = (t: ServiceLevelTarget) => ({
 
 /** Routing and targets per request type, for the Desk or for one agency's agreement. */
 export async function getRoutingSetup(db: Db, scope: DeskScope, agencyId: string | null = null) {
-  assertDeskPlatform(scope);
+  assertDeskPlatform(scope, ['settings.operations']);
   if (agencyId !== null && (!isObjectId(agencyId) || !(await db.agency.findUnique({ where: { id: agencyId }, select: { id: true } })))) {
     throw new DeskAccessError(404, 'Not found');
   }
@@ -89,7 +89,7 @@ export async function getRoutingSetup(db: Db, scope: DeskScope, agencyId: string
 export async function setRouting(
   db: Db, scope: DeskScope, input: { taskType?: unknown; podId?: unknown; defaultPriority?: unknown }, ctx: GuardContext = {}
 ): Promise<void> {
-  assertDeskPlatform(scope);
+  assertDeskPlatform(scope, ['settings.operations']);
   if (!oneOf(TaskType, input.taskType)) throw bad('Choose a valid request type.');
   const taskType = input.taskType;
   const podId = input.podId === null || input.podId === '' || input.podId === undefined ? null : input.podId;
@@ -178,7 +178,7 @@ function parseValues(input: TargetInput) {
 
 /** Creates a target, or edits one when `id` is given. Returns the saved target's id. */
 export async function saveTarget(db: Db, scope: DeskScope, input: TargetInput, ctx: GuardContext = {}): Promise<{ id: string }> {
-  assertDeskPlatform(scope);
+  assertDeskPlatform(scope, ['settings.operations']);
   const values = parseValues(input);
   const audit = (tx: Prisma.TransactionClient, id: string, agencyId: string | null, metadata: Record<string, unknown>) => recordAudit(tx, {
     actor: { id: scope.userId, role: scope.role }, action: 'service_level.changed', entityType: 'ServiceLevelTarget', entityId: id, agencyId,
@@ -223,7 +223,7 @@ export async function saveTarget(db: Db, scope: DeskScope, input: TargetInput, c
 }
 
 export async function removeTarget(db: Db, scope: DeskScope, id: unknown, ctx: GuardContext = {}): Promise<void> {
-  assertDeskPlatform(scope);
+  assertDeskPlatform(scope, ['settings.operations']);
   if (!isObjectId(id)) throw new DeskAccessError(404, 'Not found');
   const current = await db.serviceLevelTarget.findUnique({ where: { id } });
   if (!current || !current.isActive) throw new DeskAccessError(404, 'Not found');

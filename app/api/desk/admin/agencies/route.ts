@@ -6,7 +6,7 @@ import { listDeskAgencies } from '@/lib/desk/agency-setup';
 
 export async function GET(request: NextRequest) {
   try {
-    const { scope } = await deskAdminRequest(prisma, request);
+    const { scope } = await deskAdminRequest(prisma, request, ['agencies.setup', 'pods.manage']);
     const params = request.nextUrl.searchParams;
     const desk = params.get('desk');
     const agencies = await listDeskAgencies(prisma, scope, {

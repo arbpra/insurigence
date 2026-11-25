@@ -10,7 +10,7 @@ import { getWorkload } from '@/lib/desk/workload';
  */
 export async function GET(request: NextRequest) {
   try {
-    const { scope } = await deskAdminRequest(prisma, request);
+    const { scope } = await deskAdminRequest(prisma, request, ['workload.view']);
     const p = request.nextUrl.searchParams;
     return NextResponse.json(await getWorkload(prisma, scope, {
       q: p.get('q'), status: p.get('status'), type: p.get('type'), priority: p.get('priority'),

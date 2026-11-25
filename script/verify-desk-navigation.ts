@@ -53,13 +53,13 @@ async function wipe() {
     ok('Account Manager adds agencies, messages, turnaround', labels('OPS', 'ACCOUNT_MANAGER') === 'Overview, Pod queue, My tasks, Agencies, Messages, Turnaround');
     ok('Operations Manager sees every operations page', navFor('OPS', 'DESK_ADMIN').length === DESK_NAV.OPS.length);
     ok('Super Admin sees every operations page', navFor('OPS', 'SUPER_ADMIN').length === DESK_NAV.OPS.length);
-    ok('Desk setup lists 7 pages', navFor('ADMIN', 'SUPER_ADMIN').length === 7);
+    ok('Desk setup lists 8 pages for the Super Admin, 7 for an Operations Manager / COO (Positions is for the Super Admin only)', navFor('ADMIN', 'SUPER_ADMIN').length === 8 && navFor('ADMIN', 'DESK_ADMIN').length === 7);
 
     console.log('Every sidebar entry is real');
     const all = Object.entries(DESK_NAV).flatMap(([area, items]) => items.map((i) => ({ area: area as DeskArea, ...i })));
     ok('no duplicate paths', new Set(all.map((i) => i.href)).size === all.length);
     ok('each entry lies inside its own area', all.every((i) => i.href === AREA_ROOTS[i.area] || i.href.startsWith(AREA_ROOTS[i.area] + '/')));
-    ok('each entry names the module that builds it', all.every((i) => i.module >= 14 && i.module <= 46 && i.summary.length > 10));
+    ok('each entry names the module that builds it', all.every((i) => i.module >= 14 && i.module <= 68 && i.summary.length > 10));
     const pageFile = (area: DeskArea, href: string) => join(process.cwd(), 'app', area === 'ADMIN' ? '(main)' : '(desk)', ...href.split('/').filter(Boolean), 'page.tsx');
     const missing = all.filter((i) => !existsSync(pageFile(i.area, i.href)));
     ok(`each entry has a page (${all.length})`, missing.length === 0);
@@ -104,7 +104,13 @@ async function wipe() {
     ok('Operations Manager: Desk setup', superAdminAreaAllowed('DESK_ADMIN', '/super-admin/desk') && superAdminAreaAllowed('DESK_ADMIN', '/super-admin/desk/staff'));
     ok('Operations Manager: not users, agencies or a look-alike path',
       !superAdminAreaAllowed('DESK_ADMIN', '/super-admin/users') && !superAdminAreaAllowed('DESK_ADMIN', '/super-admin') && !superAdminAreaAllowed('DESK_ADMIN', '/super-admin/desk-old'));
-    ok('agency admin and Account Manager: none', !superAdminAreaAllowed('ADMIN', '/super-admin/desk') && !superAdminAreaAllowed('ACCOUNT_MANAGER', '/super-admin/desk'));
+    ok('agency users: none', ['ADMIN', 'AGENT', 'CSR'].every((r) => !superAdminAreaAllowed(r, '/super-admin/desk')));
+    // Module 48: a position, not the role, opens Desk setup. The path is let through; the server layout then refuses them (gate checks below).
+    ok('Account Manager and VA: the Desk setup path only, where the server checks their position',
+      ['ACCOUNT_MANAGER', 'DESK_VA'].every((r) => superAdminAreaAllowed(r, '/super-admin/desk') && !superAdminAreaAllowed(r, '/super-admin') && !superAdminAreaAllowed(r, '/super-admin/users') && !superAdminAreaAllowed(r, '/super-admin/desk-old')));
+    const setupPages = DESK_NAV.ADMIN.filter((i) => i.href !== '/super-admin/desk');
+    ok('every setup page checks its own permission on the server', setupPages.every((i) => readFileSync(pageFile('ADMIN', i.href), 'utf8').includes(`deskPageAccess('ADMIN', '${i.href}')`))
+      && readFileSync(pageFile('ADMIN', '/super-admin/desk/agencies/[id]'), 'utf8').includes("deskPageAccess('ADMIN', '/super-admin/desk/agencies')"));
 
     console.log('Login redirect target');
     ok('a site path is followed', safeRedirect('/desk/requests?x=1') === '/desk/requests?x=1');

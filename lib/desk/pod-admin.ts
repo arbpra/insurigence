@@ -18,7 +18,7 @@ import { randomBytes } from 'crypto';
 import { Prisma, type DocumentSensitivity, type PrismaClient } from '@prisma/client';
 import { canBePodMember, roleLabel } from '@/lib/roles';
 import { literal } from './literal-match';
-import { DeskAccessError, isObjectId, type DeskScope, type GuardContext } from './access';
+import { can, DeskAccessError, isObjectId, type DeskScope, type GuardContext } from './access';
 import { assertDeskPlatform } from './agency-setup';
 import { recordAudit, type AuditAction } from './audit';
 import { DEFAULT_STAFF_SENSITIVITIES, SENSITIVITY_LABELS } from './need-to-know';
@@ -72,7 +72,7 @@ async function returnUnauthorizedTasks(tx: Tx, podId: string, actorId: string, r
 // ── Pods ──
 
 export async function listPods(db: Db, scope: DeskScope) {
-  assertDeskPlatform(scope);
+  assertDeskPlatform(scope, ['pods.manage']);
   const [pods, eligible] = await Promise.all([
     db.pod.findMany({
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
@@ -116,7 +116,7 @@ async function assertNameFree(db: Db, name: string, exceptId?: string) {
 }
 
 export async function createPod(db: Db, scope: DeskScope, input: { name?: unknown; description?: unknown }, ctx: GuardContext = {}): Promise<{ id: string }> {
-  assertDeskPlatform(scope);
+  assertDeskPlatform(scope, ['pods.manage']);
   const name = podName(input.name);
   const description = podDescription(input.description);
   await assertNameFree(db, name);
@@ -142,7 +142,7 @@ async function loadPod(db: Db, podId: string) {
 export async function updatePod(
   db: Db, scope: DeskScope, podId: string, input: { name?: unknown; description?: unknown; isActive?: unknown }, ctx: GuardContext = {}
 ): Promise<void> {
-  assertDeskPlatform(scope);
+  assertDeskPlatform(scope, ['pods.manage']);
   const pod = await loadPod(db, podId);
   const data: Prisma.PodUpdateInput = {};
   if (input.name !== undefined) {
@@ -181,7 +181,7 @@ export async function updatePod(
 // ── Members ──
 
 export async function addPodMember(db: Db, scope: DeskScope, podId: string, userId: unknown, ctx: GuardContext = {}): Promise<void> {
-  assertDeskPlatform(scope);
+  assertDeskPlatform(scope, ['pods.manage']);
   const pod = await loadPod(db, podId);
   if (!pod.isActive) throw conflict('This pod is switched off.');
   if (!isObjectId(userId)) throw bad('Choose an active VA or Account Manager.');
@@ -199,7 +199,7 @@ export async function addPodMember(db: Db, scope: DeskScope, podId: string, user
  * so adding them back later does not quietly restore that access.
  */
 export async function removePodMember(db: Db, scope: DeskScope, podId: string, userId: unknown, ctx: GuardContext = {}): Promise<{ tasksReturned: number }> {
-  assertDeskPlatform(scope);
+  assertDeskPlatform(scope, ['pods.manage']);
   await loadPod(db, podId);
   if (!isObjectId(userId)) throw notFound();
   return inTransaction(db, async (tx) => {
@@ -217,7 +217,7 @@ export async function removePodMember(db: Db, scope: DeskScope, podId: string, u
 export type PodAccessMode = 'NONE' | 'WHOLE' | 'NAMED';
 
 export async function getAgencyPodAccess(db: Db, scope: DeskScope, agencyId: string) {
-  assertDeskPlatform(scope);
+  assertDeskPlatform(scope, ['agencies.setup', 'pods.manage']);
   if (!isObjectId(agencyId)) throw notFound();
   const agency = await db.agency.findUnique({ where: { id: agencyId }, select: { id: true, name: true, deskEnabled: true } });
   if (!agency) throw notFound();
@@ -231,6 +231,7 @@ export async function getAgencyPodAccess(db: Db, scope: DeskScope, agencyId: str
   ]);
   return {
     agency,
+    canChange: can(scope, 'agencies.setup'),
     pods: pods.map((p) => {
       const own = rows.filter((r) => r.podId === p.id);
       const whole = own.some((r) => !r.userId);
@@ -247,7 +248,8 @@ export async function getAgencyPodAccess(db: Db, scope: DeskScope, agencyId: str
 export async function setAgencyPodAccess(
   db: Db, scope: DeskScope, agencyId: string, input: { podId?: unknown; mode?: unknown; userIds?: unknown }, ctx: GuardContext = {}
 ): Promise<{ tasksReturned: number }> {
-  assertDeskPlatform(scope);
+  // Managing pods doesn't decide which agencies they may work for.
+  assertDeskPlatform(scope, ['agencies.setup']);
   if (!isObjectId(agencyId) || !(await db.agency.findUnique({ where: { id: agencyId }, select: { id: true } }))) throw notFound();
   if (!isObjectId(input.podId)) throw bad('Choose a pod.');
   const podId = input.podId;
@@ -298,7 +300,7 @@ export const GRANTABLE_SENSITIVITIES = (Object.keys(SENSITIVITY_LABELS) as Docum
   .filter((s) => !DEFAULT_STAFF_SENSITIVITIES.includes(s));
 
 export async function listVaPermissions(db: Db, scope: DeskScope) {
-  assertDeskPlatform(scope);
+  assertDeskPlatform(scope, ['documents.grant']);
   const vas = await db.user.findMany({
     where: { role: 'DESK_VA' },
     orderBy: [{ firstName: 'asc' }, { email: 'asc' }],
@@ -308,7 +310,7 @@ export async function listVaPermissions(db: Db, scope: DeskScope) {
 }
 
 export async function setVaPermissions(db: Db, scope: DeskScope, userId: string, granted: unknown, ctx: GuardContext = {}): Promise<void> {
-  assertDeskPlatform(scope);
+  assertDeskPlatform(scope, ['documents.grant']);
   if (!isObjectId(userId)) throw notFound();
   const user = await db.user.findUnique({ where: { id: userId }, select: { role: true, deskPermission: { select: { allowedSensitivities: true } } } });
   if (!user || user.role !== 'DESK_VA') throw notFound();

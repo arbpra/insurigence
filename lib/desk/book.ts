@@ -17,10 +17,7 @@
  */
 import { Prisma, PolicyStatus, InsuredAssignmentRole, type InsuredStatus, type PrismaClient, type UserRole } from '@prisma/client';
 import { AGENCY_ROLES, canBeAssignedToInsured, defaultAssignmentRole, roleLabel } from '@/lib/roles';
-import {
-  canManageAgencyAccess, DeskAccessError, documentWhere, getInsuredForScope, getPolicyForScope, insuredWhere, isObjectId, policyWhere,
-  scopeAgencyIds, taskWhere, type DeskScope, type GuardContext,
-} from './access';
+import { can, isStaffScope, canManageAgencyAccess, DeskAccessError, documentWhere, getInsuredForScope, getPolicyForScope, insuredWhere, isObjectId, policyWhere, scopeAgencyIds, taskWhere, type DeskScope, type GuardContext,  } from './access';
 import { ACCOUNT_NAME_MAX, CONTACT_EMAIL_MAX, INSURED_TEXT, type TextRule } from './account-form';
 import { recordAudit, type AuditAction } from './audit';
 import { insuredNameKey } from './insureds';
@@ -72,12 +69,19 @@ async function forbid(db: Db, scope: DeskScope, ctx: GuardContext, entityType: s
   throw new DeskAccessError(403, message);
 }
 
-/** VAs work requests; they do not change the book. */
-const canEdit = (scope: DeskScope) => scope.kind === 'AGENCY' || scope.kind === 'ACCOUNT_MANAGER' || scope.kind === 'PLATFORM';
+/**
+ * Desk staff who reach books only through the requests they can see (VAs, Pod
+ * Leaders, any position without `accounts.view`, Module 48): need-to-know, so
+ * no premiums, notes, assignments or account-wide counts.
+ */
+const throughWork = (scope: DeskScope) => isStaffScope(scope) && !can(scope, 'accounts.view');
 
-/** Deactivating an account and assigning staff: the agency's admin, its Account Manager, Insurigence admins. */
+/** The agency's own people, and Desk staff whose position may edit books (`accounts.edit`). VAs work requests; they do not change the book. */
+const canEdit = (scope: DeskScope) => scope.kind === 'AGENCY' || (isStaffScope(scope) && can(scope, 'accounts.edit'));
+
+/** Deactivating an account and assigning staff: the agency's admin, its Account Manager, positions with agency setup. */
 export function canManage(scope: DeskScope, agencyId: string): boolean {
-  if (scope.kind === 'ACCOUNT_MANAGER') return scope.agencyIds.includes(agencyId);
+  if (scope.kind === 'ACCOUNT_MANAGER') return can(scope, 'accounts.edit') && scope.agencyIds.includes(agencyId);
   return canManageAgencyAccess(scope, agencyId);
 }
 
@@ -171,7 +175,7 @@ function policyView(p: PolicyRow, scope: DeskScope) {
     id: p.id, version: p.updatedAt.toISOString(), insuredId: p.insuredId, policyNumber: p.policyNumber, lineOfBusiness: p.lineOfBusiness, carrierName: p.carrierName,
     effectiveDate: dateOnly(p.effectiveDate), expirationDate: dateOnly(p.expirationDate), status: p.status, externalRef: p.externalRef,
     // Need-to-know: premiums and notes are not part of a VA's work.
-    ...(scope.kind === 'VA' ? {} : { premiumCents: p.premiumCents === null ? null : Number(p.premiumCents), notes: p.notes }),
+    ...(throughWork(scope) ? {} : { premiumCents: p.premiumCents === null ? null : Number(p.premiumCents), notes: p.notes }),
   };
 }
 
@@ -201,11 +205,11 @@ export function insuredListWhere(scope: DeskScope, opts: InsuredListOptions): Pr
   const staffFilters: Prisma.InsuredAccountWhereInput[] = [];
   if (opts.assignedTo !== undefined) {
     const id = person(opts.assignedTo);
-    staffFilters.push(id && scope.kind !== 'VA' ? { assignments: { some: { userId: id } } } : { id: { in: [] } });
+    staffFilters.push(id && !throughWork(scope) ? { assignments: { some: { userId: id } } } : { id: { in: [] } });
   }
   if (opts.notAssignedTo !== undefined) {
     const id = person(opts.notAssignedTo);
-    staffFilters.push(id && scope.kind !== 'VA' ? { assignments: { none: { userId: id } } } : { id: { in: [] } });
+    staffFilters.push(id && !throughWork(scope) ? { assignments: { none: { userId: id } } } : { id: { in: [] } });
   }
   return {
     AND: [
@@ -235,7 +239,7 @@ export async function listInsureds(db: Db, scope: DeskScope, opts: InsuredListOp
   // An absurd ?page= is an empty page, not a database error.
   const page = Number.isFinite(opts.page) ? Math.min(Math.max(1, Math.trunc(opts.page!)), MAX_PAGE) : 1;
   const where = insuredListWhere(scope, opts);
-  const isVa = scope.kind === 'VA';
+  const isVa = throughWork(scope);
   const [total, rows] = await Promise.all([
     db.insuredAccount.count({ where }),
     db.insuredAccount.findMany({
@@ -271,7 +275,7 @@ export async function listInsureds(db: Db, scope: DeskScope, opts: InsuredListOp
 /** The account as this user may see it. The caller logs the read. */
 async function readInsured(db: Db, scope: DeskScope, insuredId: string, ctx: GuardContext) {
   const row = await getInsuredForScope(db, scope, insuredId, ctx);
-  const isVa = scope.kind === 'VA';
+  const isVa = throughWork(scope);
   const [policies, assignments, openTasks] = await Promise.all([
     db.policy.findMany({ where: { AND: [{ insuredId: row.id }, policyWhere(scope)] }, orderBy: [{ expirationDate: 'asc' }, { id: 'asc' }] }),
     isVa ? [] : db.insuredAssignment.findMany({ where: { insuredId: row.id }, select: { role: true, user: { select: { id: true, firstName: true, lastName: true, email: true, isActive: true } } } }),
@@ -308,7 +312,7 @@ export async function getInsured(db: Db, scope: DeskScope, insuredId: string, ct
  */
 export async function getInsuredOverview(db: Db, scope: DeskScope, insuredId: string, ctx: GuardContext = {}) {
   const account = await readInsured(db, scope, insuredId, ctx);
-  const tasks: Prisma.TaskWhereInput = { AND: [{ insuredId: account.id }, taskWhere(scope), scope.kind === 'VA' ? OPEN_TASK : OPEN_REQUEST] };
+  const tasks: Prisma.TaskWhereInput = { AND: [{ insuredId: account.id }, taskWhere(scope), throughWork(scope) ? OPEN_TASK : OPEN_REQUEST] };
   const docs: Prisma.TaskDocumentWhereInput = { AND: [{ task: { is: { insuredId: account.id } } }, documentWhere(scope)] };
   const [taskRows, taskTotal, docRows, docTotal] = await Promise.all([
     db.task.findMany({ where: tasks, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: OVERVIEW_LIMIT, select: { id: true, reference: true, type: true, title: true, status: true, createdAt: true } }),

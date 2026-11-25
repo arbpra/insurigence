@@ -2,7 +2,7 @@ import { cache } from 'react';
 import { redirect } from 'next/navigation';
 import prisma from '@/lib/prisma';
 import { enterDeskArea, loginRedirectFor, overviewFacts, shellIdentity } from '@/lib/desk/session';
-import { AREA_ROOTS, itemAllowed, type DeskArea } from '@/lib/desk/navigation';
+import { AREA_ROOTS, itemAllowed, navAccess, type DeskArea } from '@/lib/desk/navigation';
 import { DeskShell } from './DeskShell';
 import { DeskNotEnabled } from './DeskNotEnabled';
 import { DeskPlaceholder } from './DeskPlaceholder';
@@ -26,7 +26,7 @@ export async function DeskAreaLayout({ area, embedded, children }: { area: DeskA
   }
 
   return (
-    <DeskShell area={area} role={user.role} identity={shellIdentity(user)} embedded={embedded}>
+    <DeskShell area={area} access={navAccess(session.scope)} identity={shellIdentity(user)} embedded={embedded}>
       {children}
     </DeskShell>
   );
@@ -41,7 +41,7 @@ export async function deskPageAccess(area: DeskArea, href: string) {
   const session = await currentDeskSession(area);
   if (!session) redirect(loginRedirectFor(area));
   if (!session.gate.ok) return null;
-  if (!itemAllowed(href, session.user.role)) redirect(AREA_ROOTS[area]);
+  if (!itemAllowed(href, navAccess(session.scope))) redirect(AREA_ROOTS[area]);
   return session;
 }
 

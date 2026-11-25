@@ -2,14 +2,16 @@
  * Desk setup for one agency (client answers Q1, Q6): turning The Desk on,
  * primary / backup Account Manager, AMS profile and plan with allowance
  * overrides. The only code that changes these settings; every save is one
- * transaction and one audit entry. Super Admin and Operations Managers only.
+ * transaction and one audit entry. Positions with `agencies.setup`; the plan,
+ * its price and its allowances need `plans.manage` as well.
  *
  * Audit entries list which fields changed, never the instructions or the
  * password-vault pointer themselves.
  */
 import { Prisma, type AmsSystem, type PrismaClient, type ServiceCategory } from '@prisma/client';
 import { literal } from './literal-match';
-import { DeskAccessError, isObjectId, type DeskScope, type GuardContext } from './access';
+import { can, DeskAccessError, isObjectId, isStaffScope, type DeskScope, type GuardContext } from './access';
+import type { PermissionKey } from './permission-catalogue';
 import { recordAudit } from './audit';
 import { classifyPendingBilling } from './billing-capture';
 import { SERVICE_CATEGORY_LABELS } from './billing';
@@ -27,8 +29,22 @@ const OPEN_TASK = { status: { notIn: [...CLOSED_STATUSES] } };
 
 const bad = (message: string) => new DeskAccessError(400, message);
 
-export function assertDeskPlatform(scope: DeskScope): void {
-  if (scope.kind !== 'PLATFORM') throw new DeskAccessError(403, 'Only Insurigence admins can change Desk setup.');
+/**
+ * Desk setup is for Desk staff whose position allows that part of it (Module
+ * 48): any one of `need`. The routes check the same through deskAdminRequest;
+ * this guards the service when called directly.
+ */
+export function assertDeskPlatform(scope: DeskScope, need: readonly PermissionKey[]): void {
+  if (!isStaffScope(scope) || !need.some((p) => can(scope, p))) throw new DeskAccessError(403, 'Your position does not allow this part of Desk setup.');
+}
+
+/**
+ * Contracted plan, price and allowances are a pricing decision (client, 24 Nov
+ * 2026): `plans.manage`, not general agency setup. Seeing prices is needed too,
+ * so nobody overwrites an agreed price they can't see.
+ */
+export function canChangePlan(scope: DeskScope): boolean {
+  return can(scope, 'plans.manage') && can(scope, 'billing.prices');
 }
 
 // ── Reading ──
@@ -53,7 +69,7 @@ export interface DeskAgencyRow {
 export async function listDeskAgencies(
   db: Db, scope: DeskScope, opts: { q?: string; desk?: 'on' | 'off' } = {}
 ): Promise<DeskAgencyRow[]> {
-  assertDeskPlatform(scope);
+  assertDeskPlatform(scope, ['agencies.setup', 'pods.manage']);
   const q = opts.q?.trim();
   const rows = await db.agency.findMany({
     where: {
@@ -78,7 +94,7 @@ export async function listDeskAgencies(
 
 /** One agency's setup with the choices the form offers. Plain JSON. */
 export async function getAgencySetup(db: Db, scope: DeskScope, agencyId: string) {
-  assertDeskPlatform(scope);
+  assertDeskPlatform(scope, ['agencies.setup']);
   if (!isObjectId(agencyId)) throw new DeskAccessError(404, 'Not found');
   const agency = await db.agency.findUnique({
     where: { id: agencyId },
@@ -110,8 +126,11 @@ export async function getAgencySetup(db: Db, scope: DeskScope, agencyId: string)
   // A person assigned earlier and since deactivated stays visible so it can be replaced.
   const offered = [...managers, ...[primaryAm, backupAm].filter((u): u is NonNullable<typeof u> => !!u && !u.isActive)];
 
+  const prices = can(scope, 'billing.prices');
   const view = {
     id: agency.id, name: agency.name, status: agency.status,
+    canChangePlan: canChangePlan(scope),
+    canSeePrices: prices,
     version: agency.updatedAt.toISOString(),
     deskEnabled: agency.deskEnabled,
     deskEnabledAt: agency.deskEnabledAt?.toISOString() ?? null,
@@ -124,16 +143,17 @@ export async function getAgencySetup(db: Db, scope: DeskScope, agencyId: string)
     plan: agency.deskPlan && {
       planId: agency.deskPlan.planId,
       startsOn: agency.deskPlan.startsOn.toISOString().slice(0, 10),
-      monthlyPriceCents: agency.deskPlan.monthlyPriceCents === null ? null : Number(agency.deskPlan.monthlyPriceCents),
+      // The notes record what was agreed, so they go with the price.
+      monthlyPriceCents: !prices || agency.deskPlan.monthlyPriceCents === null ? null : Number(agency.deskPlan.monthlyPriceCents),
       managedAccountsOverride: agency.deskPlan.managedAccountsOverride,
-      notes: agency.deskPlan.notes,
+      notes: prices ? agency.deskPlan.notes : null,
       overrides: agency.deskPlan.allowanceOverrides,
     },
     counts: { openTasks, podsAuthorized, pendingBilling },
     options: {
       accountManagers: offered.map(person),
       plans: plans.map((p) => ({
-        id: p.id, name: p.name, monthlyPriceCents: Number(p.monthlyPriceCents), priceIsStartingAt: p.priceIsStartingAt,
+        id: p.id, name: p.name, monthlyPriceCents: prices ? Number(p.monthlyPriceCents) : null, priceIsStartingAt: p.priceIsStartingAt,
         managedAccounts: p.managedAccounts, isActive: p.isActive, allowances: p.allowances,
       })),
     },
@@ -247,7 +267,7 @@ export interface AgencySetupResult {
 export async function updateAgencySetup(
   db: Db, scope: DeskScope, agencyId: string, input: AgencySetupInput, ctx: GuardContext = {}
 ): Promise<AgencySetupResult> {
-  assertDeskPlatform(scope);
+  assertDeskPlatform(scope, ['agencies.setup']);
   if (!isObjectId(agencyId)) throw new DeskAccessError(404, 'Not found');
   if (input.deskEnabled !== undefined && typeof input.deskEnabled !== 'boolean') throw bad('deskEnabled must be true or false.');
 
@@ -260,6 +280,14 @@ export async function updateAgencySetup(
     },
   });
   if (!current) throw new DeskAccessError(404, 'Not found');
+  // Any plan value at all, changed or not: an unchanged one would confirm a hidden price.
+  if (input.plan !== undefined && !canChangePlan(scope)) {
+    await recordAudit(db, {
+      actor: { id: scope.userId, role: scope.role }, action: 'access.denied', entityType: 'Agency', entityId: agencyId, agencyId,
+      metadata: { scope: scope.kind, op: 'plan', needs: ['plans.manage', 'billing.prices'] }, ip: ctx.ip, userAgent: ctx.userAgent,
+    });
+    throw new DeskAccessError(403, 'Your position does not allow changing the plan, price or allowances.');
+  }
   if (input.version !== undefined && input.version !== current.updatedAt.toISOString()) throw changedElsewhere();
 
   const changed: string[] = [];

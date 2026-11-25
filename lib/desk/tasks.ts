@@ -16,7 +16,7 @@ import {
   type PrismaClient, type Task, type TaskStatus, type DeskVisibility,
 } from '@prisma/client';
 import { recordAudit } from './audit';
-import { DeskAccessError, getTaskForScope, isObjectId, resolveDeskScope, resolveSubmission, taskWhere, type DeskScope } from './access';
+import { can, DeskAccessError, getTaskForScope, isStaffScope, isObjectId, resolveDeskScope, resolveSubmission, taskWhere, type DeskScope } from './access';
 import { defaultBilling } from './billing';
 import { completionPeriod, decideBilling, giveBack, type BillingDecision } from './billing-capture';
 import {
@@ -92,8 +92,10 @@ async function checkRules(
   }
 }
 
-const isStaff = (s: DeskScope) => s.kind === 'VA' || s.kind === 'ACCOUNT_MANAGER' || s.kind === 'PLATFORM';
-const isManager = (s: DeskScope) => s.kind === 'ACCOUNT_MANAGER' || s.kind === 'PLATFORM';
+/** Desk staff whose position works requests or hands them out (Module 48). */
+const isStaff = (s: DeskScope) => isStaffScope(s) && (can(s, 'requests.work') || can(s, 'requests.assign'));
+/** Hands work to others, reopens, moves pods: Account Managers, Pod Leaders and up. Without it, a person works only what they hold. */
+const isManager = (s: DeskScope) => isStaffScope(s) && can(s, 'requests.assign');
 const actorOf = (s: DeskScope) => ({ id: s.userId, role: s.role });
 
 // ── Create ──
@@ -320,7 +322,7 @@ export async function createSubtask(db: Db, scope: DeskScope, parentId: string, 
   const parent = await getTaskForScope(db, scope, parentId, ctx);
   await checkRules(db, scope, parent, { op: 'subtask' }, ctx, async () => {
     if (!isStaff(scope)) throw forbidden('Subtasks are added by the Desk team.');
-    if (scope.kind === 'VA' && parent.assigneeId !== scope.userId) throw forbidden('Pick up the request before adding a subtask to it.');
+    if (!isManager(scope) && parent.assigneeId !== scope.userId) throw forbidden('Pick up the request before adding a subtask to it.');
   });
   if (parent.parentTaskId) throw bad("A subtask can't have subtasks of its own. Add it to the request instead.");
   if (parent.status === 'COMPLETED' || parent.status === 'CANCELLED') throw conflict('The request is closed. Reopen it to add a subtask.');
@@ -359,10 +361,10 @@ export async function changeTaskStatus(
       if (toStatus !== 'CANCELLED' || (from !== 'NEW' && from !== 'ASSIGNED')) {
         throw forbidden('Your agency can cancel a request until work starts. For anything else, message your Account Manager.');
       }
-    } else if (scope.kind === 'VA') {
-      if (task.assigneeId !== scope.userId) throw forbidden('Pick up the task before changing its status.');
-    } else if (!isManager(scope)) {
+    } else if (!isStaff(scope)) {
       throw forbidden('You cannot change this task.');
+    } else if (!isManager(scope)) {
+      if (task.assigneeId !== scope.userId) throw forbidden('Pick up the task before changing its status.');
     }
     if ((from === 'COMPLETED' || from === 'CANCELLED') && !isManager(scope)) {
       throw forbidden('Only an Account Manager can reopen a closed task.');
@@ -528,8 +530,8 @@ export async function assignTask(
   if (task.assigneeId === assigneeId) throw conflict(assigneeId ? 'Already assigned to this person.' : 'The task is not assigned.');
   await checkRules(db, scope, task, { op: 'assign', from: task.assigneeId ?? null, to: assigneeId }, ctx, async () => {
     if (!isStaff(scope)) throw forbidden('Only Desk staff assign tasks.');
-    if (scope.kind === 'VA') {
-      const pickUp = assigneeId === scope.userId && !task.assigneeId;
+    if (!isManager(scope)) {
+      const pickUp = assigneeId === scope.userId && !task.assigneeId && can(scope, 'requests.work');
       const release = assigneeId === null && task.assigneeId === scope.userId;
       if (!pickUp && !release) throw forbidden('You can pick up unassigned tasks or release your own; ask your Account Manager to reassign.');
     }
@@ -538,7 +540,8 @@ export async function assignTask(
 
   if (assigneeId) {
     const assigneeScope = await resolveDeskScope(db, assigneeId);
-    if (assigneeScope.kind !== 'VA' && assigneeScope.kind !== 'ACCOUNT_MANAGER') throw bad('Tasks can be assigned to Desk VAs and Account Managers only.');
+    // People who hold work: a position that works requests, reaching by pod or by assignment (all-agency positions oversee).
+    if ((assigneeScope.kind !== 'VA' && assigneeScope.kind !== 'ACCOUNT_MANAGER') || !can(assigneeScope, 'requests.work')) throw bad('Tasks can be assigned to Desk VAs and Account Managers only.');
     const visible = await db.task.count({ where: { AND: [{ id: task.id }, taskWhere(assigneeScope)] } });
     if (!visible) throw bad('That person is not authorised for this agency, pod or task.');
   }
@@ -590,7 +593,7 @@ export async function escalateTask(
 ): Promise<Task> {
   const task = await getTaskForScope(db, scope, taskId, ctx);
   await checkRules(db, scope, task, { op: input.escalate === false ? 'deescalate' : 'escalate' }, ctx, async () => {
-    if (!isManager(scope)) throw forbidden('Only an Account Manager or Operations Manager can escalate work.');
+    if (!can(scope, 'requests.escalate')) throw forbidden('Your position does not allow escalating work.');
   });
   if (typeof input.escalate !== 'boolean') throw bad('Choose to escalate or to clear the escalation.');
   if (task.status === 'COMPLETED' || task.status === 'CANCELLED') throw conflict('This task is closed.');
@@ -632,7 +635,7 @@ export async function escalateTask(
 export async function moveTaskToPod(db: Db, scope: DeskScope, taskId: string, podId: unknown, ctx: Ctx = {}): Promise<Task> {
   const task = await getTaskForScope(db, scope, taskId, ctx);
   await checkRules(db, scope, task, { op: 'move_pod', from: task.podId ?? null, to: typeof podId === 'string' ? podId : null }, ctx, async () => {
-    if (!isManager(scope)) throw forbidden('Only an Account Manager or Operations Manager can move work to another pod.');
+    if (!isManager(scope)) throw forbidden('Your position does not allow moving work to another pod.');
   });
   if (!isObjectId(podId)) throw bad('Choose a pod.');
   if (task.status === 'COMPLETED' || task.status === 'CANCELLED') throw conflict('This task is closed.');
@@ -695,7 +698,7 @@ export async function restrictTask(
 ): Promise<{ task: Task; subtasks: number; released: number }> {
   const task = await getTaskForScope(db, scope, taskId, ctx);
   await checkRules(db, scope, task, { op: 'restrict' }, ctx, async () => {
-    if (!isManager(scope)) throw forbidden('Only an Account Manager or Operations Manager can restrict a request.');
+    if (!can(scope, 'requests.restrict')) throw forbidden('Your position does not allow restricting a request.');
   });
   if (task.parentTaskId) throw bad('Restrict the main request; its subtasks follow it.');
   if (!Array.isArray(input.userIds) || !input.userIds.every((id) => isObjectId(id))) throw bad('Choose the people to restrict it to.');
@@ -770,7 +773,7 @@ export async function restrictTask(
 export async function restrictionCandidates(db: Db, scope: DeskScope, taskId: string, ctx: Ctx = {}) {
   const task = await getTaskForScope(db, scope, taskId, ctx);
   await checkRules(db, scope, task, { op: 'restriction_candidates' }, ctx, async () => {
-    if (!isManager(scope)) throw forbidden('Only an Account Manager or Operations Manager can restrict a request.');
+    if (!can(scope, 'requests.restrict')) throw forbidden('Your position does not allow restricting a request.');
   });
   if (task.parentTaskId) throw bad('Restrict the main request; its subtasks follow it.');
   const family = await db.task.findMany({ where: { OR: [{ id: task.id }, { parentTaskId: task.id }] }, select: { podId: true } });
@@ -821,7 +824,7 @@ export interface ReviewInput {
 export async function reviewTask(db: Db, scope: DeskScope, taskId: string, input: ReviewInput, ctx: Ctx = {}): Promise<Task> {
   const task = await getTaskForScope(db, scope, taskId, ctx);
   await checkRules(db, scope, task, { op: 'review' }, ctx, async () => {
-    if (!isManager(scope)) throw forbidden('Only an Account Manager or Operations Manager can reclassify work or change its billing.');
+    if (!can(scope, 'requests.classify')) throw forbidden('Your position does not allow reclassifying work or changing its billing.');
   });
   if (task.status === 'COMPLETED' || task.status === 'CANCELLED') {
     throw conflict('This task is closed. Reopen it to change its classification or billing.');

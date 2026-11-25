@@ -27,8 +27,8 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 /** Pods and members, agency authorization, and VA sensitive-data permissions. */
-export function PodManager() {
-  const [tab, setTab] = useState<Tab>('pods');
+export function PodManager({ tabs: allowed }: { tabs: Tab[] }) {
+  const [tab, setTab] = useState<Tab>(allowed[0]);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
@@ -50,7 +50,7 @@ export function PodManager() {
   };
   const shared = { run, busy, onError: setError };
 
-  const tabs: [Tab, string][] = [['pods', 'Pods and members'], ['agencies', 'Agency access'], ['permissions', 'VA permissions']];
+  const tabs = ([['pods', 'Pods and members'], ['agencies', 'Agency access'], ['permissions', 'VA permissions']] as [Tab, string][]).filter(([key]) => allowed.includes(key));
 
   return (
     <div data-testid="desk-pods">
@@ -236,6 +236,7 @@ function AgencyAccessTab({ run, busy, onError }: TabProps) {
         </select>
       </div>
       {view && !view.agency.deskEnabled && <p className="text-xs text-amber-700 mb-3">The Desk is off for this agency, so nobody can reach its work until it is turned on.</p>}
+      {view && !view.canChange && <p className="text-xs text-slate-500 mb-3" data-testid="desk-access-readonly">Your position can see which pods an agency authorizes, but not change it.</p>}
       {view?.pods.map((pod) => {
         const draft = drafts[pod.id] ?? { mode: pod.mode, userIds: pod.userIds };
         const setDraft = (patch: Partial<typeof draft>) => setDrafts({ ...drafts, [pod.id]: { ...draft, ...patch } });
@@ -244,11 +245,11 @@ function AgencyAccessTab({ run, busy, onError }: TabProps) {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <h2 className="text-sm font-semibold text-slate-800">{pod.name}</h2>
               <div className="flex gap-2 items-center">
-                <select aria-label={`Access for ${pod.name}`} className={INPUT} value={draft.mode} onChange={(e) => setDraft({ mode: e.target.value as PodAccessMode })} data-testid="desk-access-mode">
+                <select aria-label={`Access for ${pod.name}`} className={INPUT} value={draft.mode} disabled={!view.canChange} onChange={(e) => setDraft({ mode: e.target.value as PodAccessMode })} data-testid="desk-access-mode">
                   {(Object.keys(MODE_LABELS) as PodAccessMode[]).map((m) => <option key={m} value={m}>{MODE_LABELS[m]}</option>)}
                 </select>
                 <button
-                  className="px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-60" style={PRIMARY} disabled={busy} data-testid="desk-access-save"
+                  className="px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-60" style={PRIMARY} disabled={busy || !view.canChange} data-testid="desk-access-save"
                   onClick={() => run(async () => {
                     const r = await api<{ tasksReturned: number }>(`/api/desk/admin/agencies/${agencyId}/pod-access`, { method: 'PUT', body: JSON.stringify({ podId: pod.id, mode: draft.mode, userIds: draft.mode === 'NAMED' ? draft.userIds : [] }) });
                     return `${pod.name}: saved.${returned(r.tasksReturned)}`;
@@ -264,7 +265,7 @@ function AgencyAccessTab({ run, busy, onError }: TabProps) {
                 {pod.vas.map((va) => (
                   <label key={va.id} className="flex items-center gap-2 text-sm text-slate-700">
                     <input
-                      type="checkbox" checked={draft.userIds.includes(va.id)}
+                      type="checkbox" checked={draft.userIds.includes(va.id)} disabled={!view.canChange}
                       onChange={(e) => setDraft({ userIds: e.target.checked ? [...draft.userIds, va.id] : draft.userIds.filter((id) => id !== va.id) })}
                     />
                     {va.name}{va.isActive ? '' : ' (inactive)'}

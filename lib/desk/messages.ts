@@ -18,7 +18,7 @@
  * refused. Reading and sending are logged, with facts only, never the text.
  */
 import type { DeskMessageSide, PrismaClient } from '@prisma/client';
-import { DeskAccessError, isObjectId, taskEventWhere, type DeskScope, type GuardContext } from './access';
+import { can, DeskAccessError, isObjectId, taskEventWhere, type DeskScope, type GuardContext } from './access';
 import { recordAudit } from './audit';
 import { looksLikeCredential } from './profile';
 import { MESSAGE_MAX, THREAD_LIMIT, CONVERSATIONS_LIMIT, sideFor, snippet } from './message-view';
@@ -74,7 +74,8 @@ function authorLabel(author: Person | undefined, side: DeskMessageSide): string 
  * conversations on requests.
  */
 export async function messageInbox(db: Db, scope: DeskScope, ctx: GuardContext = {}) {
-  if (scope.kind === 'VA' || scope.kind === 'NONE') await refuse(db, scope, null, 'inbox', ctx);
+  // Agency people, and Desk staff whose position may message agencies (not VAs or Pod Leaders by default).
+  if (scope.kind === 'NONE' || (scope.kind !== 'AGENCY' && !can(scope, 'messages.agency'))) await refuse(db, scope, null, 'inbox', ctx);
 
   let agencies: { id: string; name: string }[] = [];
   let canMessage = true;

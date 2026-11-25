@@ -12,7 +12,7 @@
  * narrow what the person could already see.
  */
 import { Prisma, TaskPriority, TaskType, type PrismaClient, type TaskEvent, type TaskStatus } from '@prisma/client';
-import { DeskAccessError, getTaskForScope, insuredWhere, isObjectId, taskEventWhere, taskWhere, type DeskScope, type GuardContext } from './access';
+import { can, DeskAccessError, getTaskForScope, insuredWhere, isObjectId, taskEventWhere, taskWhere, type DeskScope, type GuardContext } from './access';
 import { recordAudit } from './audit';
 import { literal } from './literal-match';
 import { TASK_TYPE_LABELS } from './service-levels';
@@ -45,7 +45,8 @@ type Person = { id: string; firstName: string | null; lastName: string | null; e
 
 const nameOf = (p: Person) => [p.firstName, p.lastName].filter(Boolean).join(' ') || p.email;
 const personView = (p: Person | null) => (p ? { id: p.id, name: nameOf(p) } : null);
-const isManager = (s: DeskScope) => s.kind === 'ACCOUNT_MANAGER' || s.kind === 'PLATFORM';
+/** Hands work out (Module 48: `requests.assign`): sees targets and escalation, reassigns, reopens, moves pods. */
+const isManager = (s: DeskScope) => can(s, 'requests.assign');
 const isClosed = (status: TaskStatus) => (CLOSED_STATUSES as readonly TaskStatus[]).includes(status);
 
 // ── Views ──
@@ -83,20 +84,23 @@ function viewFor(scope: DeskScope, task: TaskRow, now: Date) {
     cancelledAt: task.cancelledAt,
     lastActivityAt: task.lastActivityAt,
   };
-  if (!isManager(scope)) return staff;
+  // Each part only for a position that may act on it (Module 48).
   return {
     ...staff,
-    slaDueAt: task.slaDueAt,
-    slaTarget: task.slaTarget,
-    slaPausedMinutes: task.slaPausedMinutes,
-    escalatedAt: task.escalatedAt,
-    escalationReason: task.escalationReason,
-    restrictedToUserIds: task.restrictedToUserIds,
-    restrictionReason: task.restrictionReason,
-    billing: {
-      serviceCategory: task.serviceCategory, units: task.billableUnits, nonBillable: task.nonBillable,
-      class: task.billingClass, status: task.billingStatus, period: task.billingPeriod,
-    },
+    ...(isManager(scope) ? {
+      slaDueAt: task.slaDueAt,
+      slaTarget: task.slaTarget,
+      slaPausedMinutes: task.slaPausedMinutes,
+      escalatedAt: task.escalatedAt,
+      escalationReason: task.escalationReason,
+    } : {}),
+    ...(can(scope, 'requests.restrict') ? { restrictedToUserIds: task.restrictedToUserIds, restrictionReason: task.restrictionReason } : {}),
+    ...(can(scope, 'requests.classify') ? {
+      billing: {
+        serviceCategory: task.serviceCategory, units: task.billableUnits, nonBillable: task.nonBillable,
+        class: task.billingClass, status: task.billingStatus, period: task.billingPeriod,
+      },
+    } : {}),
   };
 }
 
@@ -138,7 +142,8 @@ function staffEventView(scope: DeskScope, event: TaskEvent, actors: Map<string, 
     const found = actors.get(id);
     return found ? nameOf(found) : 'Former user';
   };
-  const details = isManager(scope) ? metadata : Object.fromEntries(Object.entries(metadata).filter(([k]) => VA_EVENT_DETAILS.includes(k)));
+  // The full record (who is named, why, billing) only for those who may restrict; others get the short allowlist.
+  const details = can(scope, 'requests.restrict') ? metadata : Object.fromEntries(Object.entries(metadata).filter(([k]) => VA_EVENT_DETAILS.includes(k)));
   return {
     id: event.id,
     kind: event.kind,
@@ -408,18 +413,18 @@ function staffPermissions(scope: DeskScope, task: TaskRow, openSubtasks: number)
   return {
     // Not completed while a subtask is open (the parent completion rule).
     statusMoves: statusMoves(task.status, { manager, holdsIt, assigned: !!task.assigneeId }).filter((to) => to !== 'COMPLETED' || !openSubtasks),
-    pickUp: scope.kind === 'VA' && open && !task.assigneeId,
+    pickUp: !manager && can(scope, 'requests.work') && open && !task.assigneeId,
     release: open && holdsIt,
     assign: manager && open,
-    review: manager && open,
+    review: can(scope, 'requests.classify') && open,
     addDocuments: open,
     // One level only; a VA on a request they hold.
     addSubtask: open && !task.parentTaskId && (manager || holdsIt),
     // Module 40: flag for a manager's attention, or move to another pod.
-    escalate: manager && open,
+    escalate: can(scope, 'requests.escalate') && open,
     movePod: manager && open,
     // Q4: on the request, at any stage (a dispute can come after the work); subtasks follow it.
-    restrict: manager && !task.parentTaskId,
+    restrict: can(scope, 'requests.restrict') && !task.parentTaskId,
   };
 }
 

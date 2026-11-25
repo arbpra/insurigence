@@ -41,7 +41,7 @@ async function inTransaction<T>(db: Db, fn: (tx: Prisma.TransactionClient) => Pr
 
 /** Every rule (on and off), with where its follow-ups go today, and the choices for the form. */
 export async function getFollowUpSetup(db: Db, scope: DeskScope) {
-  assertDeskPlatform(scope);
+  assertDeskPlatform(scope, ['settings.operations']);
   const [rules, pods, routing] = await Promise.all([
     db.taskFollowUpRule.findMany({ where: { triggerStatus: 'COMPLETED' }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] }),
     db.pod.findMany({ orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }], select: { id: true, name: true, isActive: true } }),
@@ -101,7 +101,7 @@ async function parseValues(db: Db, input: FollowUpRuleInput): Promise<RuleValues
 
 /** Creates a rule, or edits one when `id` is given. Returns the rule's id. */
 export async function saveFollowUpRule(db: Db, scope: DeskScope, input: FollowUpRuleInput, ctx: GuardContext = {}): Promise<{ id: string }> {
-  assertDeskPlatform(scope);
+  assertDeskPlatform(scope, ['settings.operations']);
   const audit = (tx: Prisma.TransactionClient, id: string, metadata: Record<string, unknown>) => recordAudit(tx, {
     actor: { id: scope.userId, role: scope.role }, action: 'follow_up_rule.changed', entityType: 'TaskFollowUpRule', entityId: id,
     metadata, ip: ctx.ip, userAgent: ctx.userAgent,
@@ -143,7 +143,7 @@ export async function saveFollowUpRule(db: Db, scope: DeskScope, input: FollowUp
 
 /** Switches a rule off (no more follow-ups from it) or back on. */
 export async function setFollowUpRuleActive(db: Db, scope: DeskScope, id: unknown, isActive: unknown, ctx: GuardContext = {}): Promise<void> {
-  assertDeskPlatform(scope);
+  assertDeskPlatform(scope, ['settings.operations']);
   if (!isObjectId(id)) throw notFound();
   if (typeof isActive !== 'boolean') throw bad('Choose on or off.');
   const current = await db.taskFollowUpRule.findUnique({ where: { id } });

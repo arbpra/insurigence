@@ -26,7 +26,7 @@ export function StaffManager() {
   const [role, setRole] = useState('');
   const [status, setStatus] = useState('active');
   const [staff, setStaff] = useState<StaffRow[] | null>(null);
-  const [canManageOps, setCanManageOps] = useState(false);
+  const [inviteRoles, setInviteRoles] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState<{ text: string; link?: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -40,9 +40,10 @@ export function StaffManager() {
     if (q.trim()) params.set('q', q.trim());
     if (role) params.set('role', role);
     if (status) params.set('status', status);
-    const data = await api<{ staff: StaffRow[]; canManageOperationsManagers: boolean }>(`/api/desk/admin/staff?${params}`);
+    const data = await api<{ staff: StaffRow[]; inviteRoles: string[] }>(`/api/desk/admin/staff?${params}`);
     setStaff(data.staff);
-    setCanManageOps(data.canManageOperationsManagers);
+    setInviteRoles(data.inviteRoles);
+    setInvite((i) => (data.inviteRoles.includes(i.role) || !data.inviteRoles.length ? i : { ...i, role: data.inviteRoles[0] }));
   }, [q, role, status]);
 
   useEffect(() => {
@@ -74,7 +75,7 @@ export function StaffManager() {
     run(async () => {
       const r = await api<InviteResult>('/api/desk/admin/staff', { method: 'POST', body: JSON.stringify(invite) });
       setInviting(false);
-      setInvite({ email: '', firstName: '', lastName: '', role: 'ACCOUNT_MANAGER' });
+      setInvite({ email: '', firstName: '', lastName: '', role: inviteRoles.includes('ACCOUNT_MANAGER') ? 'ACCOUNT_MANAGER' : inviteRoles[0] ?? '' });
       return inviteNotice(invite.email, r);
     });
   };
@@ -106,9 +107,9 @@ export function StaffManager() {
           <h1 className="text-2xl font-bold tracking-tight mb-1" style={{ color: 'var(--brand-primary, #05314c)' }} data-testid="page-title">Staff</h1>
           <p className="text-sm text-slate-500">Invite and manage Account Managers, VAs and Operations Managers.</p>
         </div>
-        <button onClick={() => setInviting(!inviting)} className="px-4 py-2 rounded-lg text-sm font-medium text-white self-start" style={PRIMARY} data-testid="desk-staff-invite-open">
+        {inviteRoles.length > 0 && <button onClick={() => setInviting(!inviting)} className="px-4 py-2 rounded-lg text-sm font-medium text-white self-start" style={PRIMARY} data-testid="desk-staff-invite-open">
           Invite staff
-        </button>
+        </button>}
       </div>
 
       {inviting && (
@@ -129,7 +130,7 @@ export function StaffManager() {
             <div>
               <label className={LABEL} htmlFor="inviteRole">Role</label>
               <select id="inviteRole" className={INPUT} value={invite.role} onChange={(e) => setInvite({ ...invite, role: e.target.value })}>
-                {roleChoices.filter((r) => r !== 'DESK_ADMIN' || canManageOps).map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                {roleChoices.filter((r) => inviteRoles.includes(r)).map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
               </select>
             </div>
           </div>

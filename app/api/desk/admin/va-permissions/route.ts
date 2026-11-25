@@ -6,7 +6,7 @@ import { GRANTABLE_SENSITIVITIES, listVaPermissions, setVaPermissions } from '@/
 
 export async function GET(request: NextRequest) {
   try {
-    const { scope } = await deskAdminRequest(prisma, request);
+    const { scope } = await deskAdminRequest(prisma, request, ['documents.grant']);
     return NextResponse.json({ vas: await listVaPermissions(prisma, scope), grantable: GRANTABLE_SENSITIVITIES });
   } catch (err) {
     return deskAccessResponse(err);
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 /** Body: { userId, granted: DocumentSensitivity[] } */
 export async function PUT(request: NextRequest) {
   try {
-    const { scope, ctx } = await deskAdminRequest(prisma, request);
+    const { scope, ctx } = await deskAdminRequest(prisma, request, ['documents.grant']);
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== 'object' || typeof body.userId !== 'string') throw new DeskAccessError(400, 'Invalid request.');
     await setVaPermissions(prisma, scope, body.userId, body.granted, ctx);

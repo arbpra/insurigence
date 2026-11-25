@@ -11,8 +11,9 @@ import type { DeskScope } from './access';
 export function sideFor(scope: DeskScope, agencyId: string): 'AGENCY' | 'DESK' | null {
   switch (scope.kind) {
     case 'AGENCY': return scope.agencyId === agencyId && scope.book === 'ALL' ? 'AGENCY' : null;
-    case 'ACCOUNT_MANAGER': return scope.agencyIds.includes(agencyId) ? 'DESK' : null;
-    case 'PLATFORM': return 'DESK';
+    // Desk staff whose position may message agencies (Module 48), in their reach.
+    case 'ACCOUNT_MANAGER': return scope.permissions.includes('messages.agency') && scope.agencyIds.includes(agencyId) ? 'DESK' : null;
+    case 'PLATFORM': return scope.permissions.includes('messages.agency') ? 'DESK' : null;
     default: return null;
   }
 }

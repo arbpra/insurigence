@@ -9,7 +9,7 @@ type Context = { params: Promise<{ id: string }> };
 export async function GET(request: NextRequest, { params }: Context) {
   try {
     const { id } = await params;
-    const { scope } = await deskAdminRequest(prisma, request, id);
+    const { scope } = await deskAdminRequest(prisma, request, ['agencies.setup'], id);
     return NextResponse.json({ setup: await getAgencySetup(prisma, scope, id) });
   } catch (err) {
     return deskAccessResponse(err);
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest, { params }: Context) {
 export async function PATCH(request: NextRequest, { params }: Context) {
   try {
     const { id } = await params;
-    const { scope, ctx } = await deskAdminRequest(prisma, request, id);
+    const { scope, ctx } = await deskAdminRequest(prisma, request, ['agencies.setup'], id);
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== 'object' || Array.isArray(body)) throw new DeskAccessError(400, 'Invalid request.');
     return NextResponse.json(await updateAgencySetup(prisma, scope, id, body, ctx));

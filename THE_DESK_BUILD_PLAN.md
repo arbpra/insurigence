@@ -2461,6 +2461,130 @@ Module 1–44 suites re-run: all 43 earlier Desk suites passed (3,688 checks; 3,
 
 **Verified:** `tsc --noEmit` exit 0 · **57 tests passed** (`script/verify-desk-restriction.ts`) · 7 of 7 deliberate faults caught (VA may restrict, subtasks not restricted, holders not released, anyone can be named, no reason needed, VAs see the names, the agency learns it exists) and the code restored · full regression: **47 suites, 3,852 checks, all passing** (handover Section 3 updated).
 
+**Module 47 — Configurable positions and permissions (✅ complete, 24 Nov 2026)**
+
+**Built:**
+
+- **Positions as data** (`DeskPosition`, `DeskPositionHolder`). Each position has:
+  - a department: the COO's office, Virtual Operations or Agency Operations;
+  - an **agency reach**: all agencies, supervised agencies, assigned agencies, or pod authorisation only;
+  - a set of permissions, and the position it reports to.
+
+  A person can hold several positions and gets everything they allow, which covers the client's "individuals occupying multiple positions".
+- **The permission catalogue** (`lib/desk/permission-catalogue.ts`): 20 permissions in five groups (requests, agencies, oversight, documents, administration). They are stored as text, so the catalogue can grow without a migration. Unknown keys are ignored.
+- **The client's seven positions** as defaults:
+  - COO (replaces the Operations Manager), with every permission;
+  - Director of Virtual Operations: operations, staff and pods; allowances read-only; no prices, sensitive documents, document grants or agency setup;
+  - Pod Leader and VA;
+  - Director of Agency Operations: agency setup, prices and utilization;
+  - Senior Account Manager: supervised agencies; no plans or pricing;
+  - Account Manager.
+
+  Only the COO manages plans and pricing by default.
+- **Migration from fixed roles:** `npm run db:seed:desk` creates the positions if missing, then gives every Desk staff member without a position the one for their role (Operations Manager → COO, Account Manager → Account Manager, Desk VA → VA). It only creates, so it never undoes a Super Admin's change. New invites start in their role's position.
+- **The Positions page** (`/super-admin/desk/positions`), for the **Super Admin only**: the sidebar hides it from everyone else, the page sends them back, and the API refuses them. It covers:
+  - creating positions;
+  - changing their name, department, reach, reporting line, description and permissions;
+  - switching them off;
+  - giving positions to people and taking them away.
+
+  Three routes under `/api/desk/admin/positions`.
+- **`effectivePermissions`:** one person's permissions and reaches, the union of their active positions. The Super Admin has everything. Module 48 moves the access checks onto it.
+
+**Design decisions:**
+
+- **Managing positions is not a permission.** Only the Super Admin (the CEO, above positions) does it, so no one can give themselves more access. The COO is refused, and the refusal is logged.
+- **A position or reporting line never opens agency data or sensitive documents by itself** (client: "reporting relationships should not automatically grant unrestricted access to sensitive documents or unauthorized agency data"). Reach decides which agencies. Financial and Personal documents need `documents.all_categories` or an individual grant. The page says so.
+- **Who supervises whom, person by person, is separate** (Module 50). The reporting line between positions is the organisation chart.
+- **Safeguards:**
+  - an active person's only position can't be taken away, because they would lose The Desk; deactivate them instead;
+  - a position can't be switched off while someone holds it or an active position reports to it;
+  - reporting loops are refused;
+  - only Desk staff can hold positions.
+- **Every change is audited:**
+  - created, with the full definition;
+  - changed, with the old and new values, and permissions listed as removed and added;
+  - holders added or removed.
+
+**Not done or limited:**
+
+- **On its own, this module changes no access.** Module 48 (below) moves the checks onto positions; the two go live together. The positions and indexes exist in the database (`db push`). **The defaults haven't been created on the live database yet**: that happens with `npm run db:seed:desk` when 47–48 are deployed.
+- The Staff page still invites by role; the invitee then starts in that role's position.
+
+**Verified:**
+
+- `prisma validate`; `db push` created 2 collections and 4 indexes; `tsc --noEmit` exit 0.
+- **74 tests passed** (`script/verify-desk-positions.ts`):
+  - the catalogue and the client's defaults;
+  - who may manage positions;
+  - creating, changing and switching off, with every rule;
+  - holders;
+  - the union and its exclusions;
+  - placement by role and on invite;
+  - the routes, the screen and its gate.
+- 9 of 9 deliberate faults caught, and the code restored:
+  - the COO may manage positions;
+  - an unknown permission is accepted;
+  - reporting loops are allowed;
+  - a person's last position can be removed;
+  - switched-off positions still count;
+  - a position can be switched off while held;
+  - agency users may hold positions;
+  - invites get no position;
+  - changes aren't audited.
+- Suites updated: navigation (80 passed: Desk setup has 8 pages for the Super Admin, 7 for the COO), permissions (123 passed, now 60 routes), staff (86 passed).
+
+**Module 48 — Access checks on permissions (✅ complete, 25 Nov 2026)**
+
+**Built:**
+
+- **Positions now decide access.** A person's reach decides which agencies they see, and their permissions decide what they may do there, read afresh on every request, so a change applies at once:
+  - all agencies: everything their permissions allow, across the Desk;
+  - supervised or assigned agencies: the agencies they manage (supervised agencies come in Module 50; until then this means assigned);
+  - pod authorisation: only agencies that authorised their pod or them by name;
+  - several positions: the union, so an Account Manager who is also a Pod Leader sees both;
+  - no active position: nothing. Staff who hold no position at all get their role's default, so nobody is locked out on deployment day.
+- **Every Desk check moved from roles to permissions:** requests, accounts, messages, documents, the queue, workload, turnaround, usage, the audit log and each setup page. The sidebar, the pages and the API routes follow the same rules. Refusals are logged with what was needed.
+- **Agency data and sensitive documents stay governed separately.** A position that reaches all agencies opens insured accounts only with `accounts.view`; otherwise its holder sees an account only through a request they may see. Financial and Personal documents need `documents.all_categories` or an individual grant. Restricted requests are seen only by the people named and those who may restrict.
+- **Work follows access.** When a position is taken away or changed, open work its holder can no longer reach goes back to the queue, and the change says how many requests moved. Finished work stays theirs.
+
+**Gaps found by review after the first full pass, all fixed:**
+
+1. Anyone with agency setup could change an agency's plan or price. It now needs both `plans.manage` and `billing.prices` (only the COO by default), and prices and agreement notes are hidden without `billing.prices`.
+2. Anyone who managed pods could authorise them for an agency. Authorising now needs `agencies.setup`; pod managers see it read-only.
+3. The Director of Virtual Operations could deactivate the COO, the other Director or a fellow Director. Nobody now manages a person whose positions allow as much as their own, or anything theirs don't. The same rule decides whom they may invite.
+4. The usage page showed the titles of restricted requests. They still count, without the title.
+5. Agency pages (contacts, and where logins are kept) opened without `accounts.view`.
+6. A bulk change revealed the reference number of a request the person couldn't see.
+7. Work stayed with someone who had lost access to it.
+
+**Issues found and solved:**
+
+- **The Overview crashed** for anyone who reaches policies only through requests: the Director of Virtual Operations, and an Account Manager who is also a Pod Leader. The new checks found it. Prisma on MongoDB fails when two separate conditions on the same related record are combined (error 17124); `policyWhere` now takes the account condition and combines them itself.
+- **The user-responses suite left one audit entry on the live database per run** (27 since 6 November, all of the audit log). They were matched to test sign-ins that no longer exist, saved and removed. The suite now removes its entry and checks that it did.
+
+**Design decisions and their consequences:**
+
+- **The Director of Virtual Operations can invite and manage VAs and Pod Leaders only,** which follows from the rule in gap 3.
+- **The Senior Account Manager and the Director of Agency Operations see prices but can't change plans,** as the client asked.
+- **Setup pages check on the server,** not only in the sidebar.
+
+**Not done or limited:**
+
+- **The default positions don't exist on the live database yet.** After deploying 47–48, run `npm run db:seed:desk`.
+- Left for later modules: supervised agencies (50); a Pod Leader's workload view and pod-scoped assignment (51); alerts and escalation, which still go to the role "Operations Manager" (60).
+- The sidebar still shows a person's role, not their position. An Account Manager who loses the position stays on the agency's assignment record until it is changed in agency setup.
+- As in earlier modules, the screens were not seen in a browser.
+- The handover describes the live system, so it is updated when 47–48 are deployed.
+
+**Verified:**
+
+- `tsc --noEmit` exit 0.
+- **91 tests passed** (`script/verify-desk-position-access.ts`): each default position's agencies, requests, documents, pages and routes; several, switched-off and missing positions; who manages whom; plans and prices; returned work; and changes applying on the next request.
+- **31 deliberate faults. The first run caught 29.** The two missed were workload counts that included restricted requests, and managing someone with fewer permissions but one the manager lacks. In both cases the code was right and the tests were too weak. Two checks were added, and both faults are now caught. All files were restored.
+- Full regression: **49 suites, 4,021 checks, all passing.**
+- The live database was checked afterwards: no test records left.
+
 ### Phase 3 — Task System Core (17 h)
 
 | # | Module | Hours | Change | Status |
@@ -2506,8 +2630,8 @@ From the client's feedback and answers of 24 November 2026 (Section 11). One par
 
 | # | Module | Hours | Change | Status |
 |---|---|---:|---|---|
-| 47 | Configurable roles and permissions: a permission catalogue and editable positions in the Super Admin portal (Super Admin / CEO, COO, Director of Virtual Operations, Director of Agency Operations, Senior Account Manager, Account Manager, Pod Leader, VA); one person can hold several positions; existing roles migrated (Operations Manager → COO) | 6.0 | ✏️ | ⬜ To do |
-| 48 | Access layer on permissions: every Desk check moves from fixed roles to permissions. Agency data and sensitive documents stay governed by agency authorisation, pods and individual grants, never by position or reporting line | 5.0 | ✏️ Q4 | ⬜ To do |
+| 47 | Configurable roles and permissions: a permission catalogue and editable positions in the Super Admin portal (Super Admin / CEO, COO, Director of Virtual Operations, Director of Agency Operations, Senior Account Manager, Account Manager, Pod Leader, VA); one person can hold several positions; existing roles migrated (Operations Manager → COO) | 6.0 | ✏️ | ✅ Done |
+| 48 | Access layer on permissions: every Desk check moves from fixed roles to permissions. Agency data and sensitive documents stay governed by agency authorisation, pods and individual grants, never by position or reporting line | 5.0 | ✏️ Q4 | ✅ Done |
 | 49 | Permission suite rebuilt for positions, combined positions and reporting lines | 3.0 | ✏️ | ⬜ To do |
 | 50 | Reporting lines and coverage: who reports to whom; Senior AMs see the agencies, accounts and requests of the AMs they supervise; covering an absent AM; reassigning agencies between authorised AMs | 5.0 | 🆕 | ⬜ To do |
 | 51 | Virtual Operations tools: the Director creates and manages pods and Pod Leaders and assigns VAs within authorised agencies; Pod Leaders assign, reassign and escalate in their pods | 4.0 | 🆕 | ⬜ To do |

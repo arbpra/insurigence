@@ -10,7 +10,7 @@
  * be billed, it bills nothing.
  */
 import type { BillingClass, Prisma, PrismaClient, ServiceCategory } from '@prisma/client';
-import { DeskAccessError, isObjectId, type DeskScope, type GuardContext } from './access';
+import { can, DeskAccessError, isObjectId, taskWhere, type DeskScope, type GuardContext } from './access';
 import { recordAudit } from './audit';
 import { SERVICE_CATEGORY_LABELS, billingPeriodOf, resolveAllowance, resolveManagedAccounts } from './billing';
 import { loadBusinessCalendar } from './business-time';
@@ -25,8 +25,9 @@ export const USAGE_MONTHS = 12;
 /** The most tasks listed for one agency's month. */
 export const USAGE_TASKS_MAX = 1000;
 
+/** All-agency positions allowing `usage.view` (Module 48); prices only with `billing.prices`. */
 function opsOnly(scope: DeskScope) {
-  if (scope.kind !== 'PLATFORM') throw new DeskAccessError(403, 'Only Operations Managers can see service usage.');
+  if (scope.kind !== 'PLATFORM' || !can(scope, 'usage.view')) throw new DeskAccessError(403, 'Your position does not include service usage.');
 }
 
 const PERIOD = /^(\d{4})-(0[1-9]|1[0-2])$/;
@@ -146,7 +147,7 @@ export async function getUsage(db: Db, scope: DeskScope, opts: { period?: string
     const price = p ? (p.monthlyPriceCents ?? (p.plan.priceIsStartingAt ? null : p.plan.monthlyPriceCents)) : null;
     return {
       id: a.id, name: a.name, deskEnabled: a.deskEnabled,
-      plan: p ? { name: p.plan.name, monthlyPriceCents: price === null ? null : Number(price) } : null,
+      plan: p ? { name: p.plan.name, monthlyPriceCents: price === null || !can(scope, 'billing.prices') ? null : Number(price) } : null,
       managedAccounts: { active: active.get(a.id) ?? 0, included: p ? resolveManagedAccounts(p.plan, p) : null },
       categories,
       totals: { included: sum('included'), overage: sum('overage'), overageUnbilled: sum('overageUnbilled'), nonBillable: sum('nonBillable'), pending: sum('pending') },
@@ -157,6 +158,7 @@ export async function getUsage(db: Db, scope: DeskScope, opts: { period?: string
 
   return {
     period,
+    showsPrices: can(scope, 'billing.prices'),
     periods: recentPeriods(billingPeriodOf(now, cal.timeZone)),
     timeZone: cal.timeZone,
     agencies: rows,
@@ -191,6 +193,8 @@ export async function getAgencyUsage(db: Db, scope: DeskScope, agencyId: string,
   });
   const truncated = tasks.length > USAGE_TASKS_MAX;
   if (truncated) tasks.length = USAGE_TASKS_MAX;
+  // Every line counts toward the bill; a request the person may not see is listed without its title.
+  const visible = new Set((await db.task.findMany({ where: { AND: [{ id: { in: tasks.map((t) => t.id) } }, taskWhere(scope)] }, select: { id: true } })).map((t) => t.id));
   await recordAudit(db, {
     actor: { id: scope.userId, role: scope.role }, action: 'usage.viewed', entityType: 'Agency', entityId: agency.id, agencyId: agency.id,
     metadata: { period }, ip: ctx.ip, userAgent: ctx.userAgent,
@@ -200,7 +204,7 @@ export async function getAgencyUsage(db: Db, scope: DeskScope, agencyId: string,
     tasks: tasks.map((t) => {
       const cls: BillingClass | 'PENDING' = t.billingClass ?? (t.nonBillable ? 'NON_BILLABLE' : 'PENDING');
       return {
-        id: t.id, reference: t.reference, title: t.title, typeLabel: TASK_TYPE_LABELS[t.type],
+        id: t.id, reference: t.reference, title: visible.has(t.id) ? t.title : null, typeLabel: TASK_TYPE_LABELS[t.type],
         completedAt: t.completedAt?.toISOString() ?? null,
         category: SERVICE_CATEGORY_LABELS[t.serviceCategory ?? 'SERVICE'],
         units: t.billableUnits, billing: cls, billingLabel: BILLING_LABELS[cls],

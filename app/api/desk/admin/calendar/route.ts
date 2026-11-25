@@ -6,7 +6,7 @@ import { getCalendarSetup, saveCalendar } from '@/lib/desk/calendar-admin';
 
 export async function GET(request: NextRequest) {
   try {
-    const { scope } = await deskAdminRequest(prisma, request);
+    const { scope } = await deskAdminRequest(prisma, request, ['settings.operations']);
     return NextResponse.json(await getCalendarSetup(prisma, scope));
   } catch (err) {
     return deskAccessResponse(err);
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 /** Body: { version?, timeZone, workDays, dayStartMinute, dayEndMinute } */
 export async function PUT(request: NextRequest) {
   try {
-    const { scope, ctx } = await deskAdminRequest(prisma, request);
+    const { scope, ctx } = await deskAdminRequest(prisma, request, ['settings.operations']);
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== 'object' || Array.isArray(body)) throw new DeskAccessError(400, 'Invalid request.');
     const changed = await saveCalendar(prisma, scope, body, ctx);

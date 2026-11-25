@@ -12,7 +12,7 @@
  * open is a short-lived link minted after the check and the log entry.
  */
 import { Prisma, DocumentSensitivity, type PrismaClient, type TaskDocument } from '@prisma/client';
-import { DeskAccessError, documentWhere, getDocumentForScope, getTaskForScope, type DeskScope, type GuardContext } from './access';
+import { isStaffScope, can, DeskAccessError, documentWhere, getDocumentForScope, getTaskForScope, type DeskScope, type GuardContext } from './access';
 import { recordAudit } from './audit';
 import { MAX_DOCUMENTS_PER_TASK, checkDocument, viewableInline } from './document-files';
 import { SENSITIVITY_LABELS } from './need-to-know';
@@ -40,7 +40,8 @@ export const r2DocumentStore: DocumentStore = {
 };
 
 const STORAGE_OFF = 'File storage is not set up yet, so documents can\'t be attached or opened. Your Desk team has been told.';
-const isManager = (s: DeskScope) => s.kind === 'ACCOUNT_MANAGER' || s.kind === 'PLATFORM';
+/** Hands work out (Module 48: `requests.assign`): may remove any file they can see. */
+const isManager = (s: DeskScope) => can(s, 'requests.assign');
 const isClosed = (status: string) => (CLOSED_STATUSES as readonly string[]).includes(status);
 const actorOf = (s: DeskScope) => ({ id: s.userId, role: s.role });
 
@@ -69,7 +70,7 @@ const nameOf = (u: Uploader) => [u.firstName, u.lastName].filter(Boolean).join('
 
 /**
  * Who may remove a file:
- *  - Account / Operations Managers: any they can see, at any time;
+ *  - positions that hand work out (Account Managers and up): any they can see, at any time;
  *  - whoever attached it, while the request is open;
  *  - an agency's Owner / Admin: any file their agency's people attached, while open.
  */
@@ -153,8 +154,8 @@ export async function addTaskDocument(db: Db, scope: DeskScope, taskId: string, 
     throw new DeskAccessError(400, 'Choose what kind of document this is.', 'NO_SENSITIVITY');
   }
   const sensitivity = input.sensitivity as DocumentSensitivity;
-  // A VA can't file a document into a category they couldn't open themselves.
-  if (scope.kind === 'VA' && !scope.sensitivities.includes(sensitivity)) {
+  // Staff can't file a document into a category they couldn't open themselves.
+  if (isStaffScope(scope) && !scope.sensitivities.includes(sensitivity)) {
     throw new DeskAccessError(403, `You can't attach ${SENSITIVITY_LABELS[sensitivity].toLowerCase()} documents. Ask your Account Manager.`, 'SENSITIVITY_NOT_HELD');
   }
   // Agency users' files are always shared with their agency; staff files are internal unless shared.

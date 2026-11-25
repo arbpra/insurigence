@@ -22,6 +22,7 @@ async function wipe() {
   const userId = { in: users.map((u) => u.id) };
   await prisma.activityEvent.deleteMany({ where: { userId } });
   await prisma.session.deleteMany({ where: { userId } });
+  await prisma.deskAuditLog.deleteMany({ where: { OR: [{ actorId: userId }, { entityId: userId }] } });
   await prisma.user.deleteMany({ where: { id: userId } });
 }
 
@@ -65,8 +66,10 @@ async function main() {
 main()
   .catch((err) => { console.error(err); fail++; })
   .finally(async () => {
+    const ids = (await prisma.user.findMany({ where: { email: { contains: TAG } }, select: { id: true } })).map((u) => u.id);
     await wipe().catch((err) => { console.error('cleanup failed', err); fail++; });
     ok('nothing left behind', await prisma.user.count({ where: { email: { contains: TAG } } }) === 0);
+    ok('no audit entry left behind', ids.length > 0 && await prisma.deskAuditLog.count({ where: { OR: [{ actorId: { in: ids } }, { entityId: { in: ids } }] } }) === 0);
     await prisma.$disconnect();
     console.log(`\n${pass} passed, ${fail} failed`);
     process.exit(fail ? 1 : 0);
