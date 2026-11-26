@@ -248,6 +248,10 @@ model User {
   insuredAssignments InsuredAssignment[]
   deskPermission   DeskStaffPermission?
   deskPositions    DeskPositionHolder[]
+  deskReportsTo    DeskReportingLine?  @relation("DeskReportsTo")
+  deskReports      DeskReportingLine[] @relation("DeskManager")
+  deskAbsences     DeskCoverage[]      @relation("DeskCoverageAbsent")
+  deskCovering     DeskCoverage[]      @relation("DeskCoverageCover")
 
   @@index([role])
 }
@@ -1665,6 +1669,50 @@ model DeskPositionHolder {
 
   @@unique([userId, positionId])
   @@index([positionId])
+}
+
+/// Who a Desk staff member reports to, person by person (Module 50). The
+/// reporting line between positions (DeskPosition.reportsToId) is the
+/// organisation chart; this is the person. A line widens access only for a
+/// position whose reach is "supervised agencies": its holder reaches the
+/// agencies of the Account Managers below them. It never opens Financial or
+/// Personal documents or restricted requests by itself.
+model DeskReportingLine {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  /// One manager per person.
+  userId       String   @unique @db.ObjectId
+  managerId    String   @db.ObjectId
+  assignedById String?  @db.ObjectId
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User     @relation("DeskReportsTo", fields: [userId], references: [id], onDelete: Cascade)
+  manager      User     @relation("DeskManager", fields: [managerId], references: [id], onDelete: Cascade)
+
+  @@index([managerId])
+}
+
+/// Cover for an absent Account Manager, for set dates (Module 50). While it
+/// runs, the covering person reaches the agencies the absent person is
+/// assigned to (primary or backup), and is told what they would be told.
+/// Never what the absent person supervises. Ended early with endedAt.
+model DeskCoverage {
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  absentUserId String    @db.ObjectId
+  coverUserId  String    @db.ObjectId
+  startsAt     DateTime
+  endsAt       DateTime
+  note         String?
+  createdById  String?   @db.ObjectId
+  endedAt      DateTime?
+  endedById    String?   @db.ObjectId
+  createdAt    DateTime  @default(now())
+
+  absent       User      @relation("DeskCoverageAbsent", fields: [absentUserId], references: [id], onDelete: Cascade)
+  cover        User      @relation("DeskCoverageCover", fields: [coverUserId], references: [id], onDelete: Cascade)
+
+  @@index([coverUserId, endsAt])
+  @@index([absentUserId, endsAt])
 }
 
 /// Which side of an agency's conversation a message came from.

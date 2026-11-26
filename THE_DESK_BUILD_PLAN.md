@@ -2617,6 +2617,42 @@ Module 1–44 suites re-run: all 43 earlier Desk suites passed (3,688 checks; 3,
 - Full regression: **49 suites, 4,049 checks, all passing.**
 - The live database was checked afterwards. Today's runs left nothing, but three bare agencies from an interrupted `verify-desk-insureds` run on 24 November (`m20test-1795544784102`) were found, with nothing tied to them; they were saved and removed. No test records are left.
 
+**Module 50 — Reporting lines, cover and reassignment (✅ complete, 26 Nov 2026)**
+
+**Built:**
+
+- **Who reports to whom, person by person** (`DeskReportingLine`, one manager each). A Senior Account Manager now reaches the agencies of every Account Manager below them, directly or further down, and through them the accounts and requests. A reporting line widens reach only for a position whose reach is "supervised agencies"; an Account Manager gains nothing from someone reporting to them.
+- **What a reporting line never gives:** Financial or Personal files, restricted requests, or any permission. Those still come only from the person's own positions and grants (client: reporting relationships "should not automatically grant unrestricted access to sensitive documents or unauthorized agency data"). A supervised position without document permissions was tested to see its team's requests but not their Financial files.
+- **Cover for an absent Account Manager, for set dates** (`DeskCoverage`). While it runs, the person covering reaches the absent AM's agencies, works them with their own permissions, and is sent what the absent AM is sent (new requests, alerts, messages). Covering a Senior AM gives their own agencies, never their team's. A cover can be arranged ahead, cancelled, or ended early. It ends by itself at its end date: the scheduled alert check closes it. One cover per person at a time, no cover by someone who is away then, at most 180 days (longer is a reassignment), and the note is screened for passwords.
+- **Moving agencies between Account Managers.** Open requests follow the new primary AM, as in agency setup.
+- **"Authorised Account Manager" now means a position, not a role:** active, with a position that reaches assigned or supervised agencies. Agency setup offers and accepts the same people, so a Senior AM can be an agency's AM and someone with the old role but no such position can't.
+- **Who may do it: the new permission `team.manage`** ("Cover and reassign Account Managers"). By default it goes to the COO, the Director of Agency Operations and the Senior AM.
+  - Those who reach every agency: any Account Manager, and who reports to whom.
+  - A Senior AM: themselves and the people below them. They can't change reporting lines, which would widen their own reach.
+- **A permission added to the catalogue reaches the live positions once.** `npm run db:seed:desk` gives `team.manage` to the three default positions and records that it did, so if the Super Admin later takes it away, the next seed doesn't give it back.
+- **New page: Desk Operations → Account Managers** (`/desk-ops/account-managers`): people and who they report to, cover (current and upcoming), and agencies with their primary and backup AM. In the sidebar only for `team.manage`.
+- **Work follows access, as in Module 48.** When a reporting line is removed, a cover ends (early or on its date) or an agency is moved, open work someone can no longer reach goes back to the queue, recorded on each request. Every change is in the audit log (`staff.reporting_line_changed`, `coverage.arranged`, `coverage.ended`, `agency.am_reassigned`), and every refusal too.
+
+**Design decisions and their consequences:**
+
+- **Someone deactivated still counts below their supervisor,** so the Senior AM keeps their agencies in reach and can move them. Someone whose position no longer manages agencies does not.
+- **The cover's dates are a start and an end, set by whoever arranges it.** This answers "AM coverage dates" with a default; the client's answer may change it (for example, open-ended cover, or the backup AM covering automatically).
+- **A Senior AM's turnaround report now covers their team's agencies** (it was already scoped by reach). Workload and usage still need a position that reaches every agency; a team view is part of the dashboards (Module 52).
+
+**Not done or limited:**
+
+- When an AM's own position changes, open work their Senior AM held in that AM's agencies isn't checked (it is when the reporting line changes). The Senior AM can still be seen holding it on the Workload page.
+- The Senior AM's sign-off on completed work is still open with the client (Section 11).
+- As in earlier Phase 7 modules, the new page was not seen in a browser.
+
+**Verified:**
+
+- `tsc --noEmit` exit 0. `prisma db push` added 2 collections and 4 indexes (nothing changed or removed).
+- **100 tests passed** (`script/verify-desk-supervision.ts`): who sets reporting lines and loops; a Senior AM's reach, further down, deactivated and non-managing people; what a line never opens; cover rules, what it gives, notifications, ending early and by date; moving agencies in and out of reach; agency setup by position; the page, sidebar and routes; the one-time permission grant; and nothing left behind, audit entries included.
+- **Fault check: 28 of 28 faults caught** on the first run, each put into the code one at a time and the code restored after: reach (supervised, assigned, depth, deactivated and non-managing people), cover (its dates, ending, overlap, who may cover), who may act and on whom, loops, work going back to the queue in all four cases, moving agencies, the cover being told, the scheduled check (and test runs leaving real covers alone), agency setup by position, the one-time permission grant, and the sidebar.
+- Full regression: `tsc` and 50 suites, **4,170 checks, 0 failed**. Two expectations were updated on the way: the permission suite now finds 65 Desk routes (the 5 new ones, each checked for its guard), and one alert check failed once because the live server's own 15-minute check wrote its run record while the suite ran; it passed on re-run.
+- The live database was checked afterwards: no test records left.
+
 ### Phase 3 — Task System Core (17 h)
 
 | # | Module | Hours | Change | Status |
@@ -2665,7 +2701,7 @@ From the client's feedback and answers of 24 November 2026 (Section 11). One par
 | 47 | Configurable roles and permissions: a permission catalogue and editable positions in the Super Admin portal (Super Admin / CEO, COO, Director of Virtual Operations, Director of Agency Operations, Senior Account Manager, Account Manager, Pod Leader, VA); one person can hold several positions; existing roles migrated (Operations Manager → COO) | 6.0 | ✏️ | ✅ Done |
 | 48 | Access layer on permissions: every Desk check moves from fixed roles to permissions. Agency data and sensitive documents stay governed by agency authorisation, pods and individual grants, never by position or reporting line | 5.0 | ✏️ Q4 | ✅ Done |
 | 49 | Permission suite rebuilt for positions, combined positions and reporting lines | 3.0 | ✏️ | ✅ Done |
-| 50 | Reporting lines and coverage: who reports to whom; Senior AMs see the agencies, accounts and requests of the AMs they supervise; covering an absent AM; reassigning agencies between authorised AMs | 5.0 | 🆕 | ⬜ To do |
+| 50 | Reporting lines and coverage: who reports to whom; Senior AMs see the agencies, accounts and requests of the AMs they supervise; covering an absent AM; reassigning agencies between authorised AMs | 5.0 | 🆕 | ✅ Done |
 | 51 | Virtual Operations tools: the Director creates and manages pods and Pod Leaders and assigns VAs within authorised agencies; Pod Leaders assign, reassign and escalate in their pods | 4.0 | 🆕 | ⬜ To do |
 | 52 | Dashboards: Director of Virtual Operations (workload, productivity, QA, SLA, capacity; allowances read-only, no prices), Director of Agency Operations (agencies, AM performance, utilization, approvals), COO (both) | 5.0 | 🆕 | ⬜ To do |
 | 53 | Account and request classification: Small Commercial / Middle-Market / Complex-Custom on the account, overridable per request; the AM sets it, Senior AM, Director of Agency Operations and COO override with a reason; VAs and Pod Leaders can only flag; audited | 3.5 | 🆕 D1 | ⬜ To do |

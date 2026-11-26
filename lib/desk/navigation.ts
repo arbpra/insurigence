@@ -111,6 +111,7 @@ export const DESK_NAV: Record<DeskArea, readonly DeskNavItem[]> = {
     { label: 'My tasks', href: '/desk-ops/my-tasks', icon: 'check', module: 31, summary: 'Work assigned to you.', permissions: WORK },
     { label: 'Agencies', href: '/desk-ops/agencies', icon: 'building', module: 35, summary: 'Your agencies, their accounts and their work.', permissions: ['accounts.view'], kinds: MANAGED },
     { label: 'Messages', href: '/desk-ops/messages', icon: 'chat', module: 36, summary: 'Conversations with your agencies.', permissions: ['messages.agency'], kinds: MANAGED },
+    { label: 'Account Managers', href: '/desk-ops/account-managers', icon: 'staff', module: 50, summary: 'Who reports to whom, cover for absences, and moving agencies between Account Managers.', permissions: ['team.manage'], kinds: MANAGED },
     { label: 'Workload', href: '/desk-ops/workload', icon: 'layers', module: 40, summary: 'All work across agencies and pods; reassign and escalate.', permissions: ['workload.view'], kinds: ALL_AGENCIES },
     { label: 'Turnaround', href: '/desk-ops/metrics', icon: 'chart', module: 42, summary: 'Turnaround by pod, VA and agency, in business time.', permissions: ['turnaround.view'], kinds: MANAGED },
     { label: 'Usage & audit', href: '/desk-ops/usage', icon: 'receipt', module: 43, summary: 'Monthly usage against plan allowances, and the audit log.', permissions: ['usage.view', 'audit.view'], kinds: ALL_AGENCIES },

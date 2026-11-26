@@ -16,6 +16,7 @@ import { recordAudit } from './audit';
 import { classifyPendingBilling } from './billing-capture';
 import { SERVICE_CATEGORY_LABELS } from './billing';
 import { AMS_SYSTEM_LABELS, looksLikeCredential } from './profile';
+import { authorisedManagers, isAuthorisedManager } from './supervision';
 import { BILLING_UNCLASSIFIED, CLOSED_STATUSES } from './task-filters';
 
 type Db = PrismaClient;
@@ -108,7 +109,8 @@ export async function getAgencySetup(db: Db, scope: DeskScope, agencyId: string)
   if (!agency) throw new DeskAccessError(404, 'Not found');
 
   const [managers, plans, openTasks, podsAuthorized, pendingBilling] = await Promise.all([
-    db.user.findMany({ where: { role: 'ACCOUNT_MANAGER', isActive: true }, select: PERSON, orderBy: [{ firstName: 'asc' }, { email: 'asc' }] }),
+    // Whoever holds a position that manages agencies (Module 50), not a role.
+    authorisedManagers(db),
     db.deskPlan.findMany({
       where: { OR: [{ isActive: true }, ...(agency.deskPlan ? [{ id: agency.deskPlan.planId }] : [])] },
       orderBy: { sortOrder: 'asc' },
@@ -476,8 +478,7 @@ function samePlan(
 
 const changedElsewhere = () => new DeskAccessError(409, 'Someone else just changed this agency. Reload to see their changes, then try again.');
 
+/** Active, with a position that reaches assigned or supervised agencies (Module 50). */
 async function assertAccountManager(db: Db, userId: string): Promise<void> {
-  if (!isObjectId(userId)) throw bad('Choose an active Account Manager.');
-  const user = await db.user.findUnique({ where: { id: userId }, select: { role: true, isActive: true } });
-  if (!user || user.role !== 'ACCOUNT_MANAGER' || !user.isActive) throw bad('Choose an active Account Manager.');
+  if (!(await isAuthorisedManager(db, userId))) throw bad('Choose an active Account Manager.');
 }

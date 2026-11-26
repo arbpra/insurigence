@@ -5,7 +5,9 @@
  *  - ensureDefaultPositions: creates the client's positions if missing, then
  *    gives every Desk staff member without a position the one for their role
  *    (DESK_ADMIN → COO, ACCOUNT_MANAGER → Account Manager, DESK_VA → VA).
- *    Create-only: it never changes a position the Super Admin edited.
+ *    Create-only: it never changes a position the Super Admin edited, except
+ *    that a permission added to the catalogue later (PERMISSION_ADDITIONS) is
+ *    given once to the default positions listed for it.
  *  - effectivePermissions: what one person may do, the union of their active
  *    positions (lib/desk/staff-profile.ts, which the access layer uses too).
  *  - list / create / update positions, add and remove holders: audited. Open
@@ -15,7 +17,7 @@ import { Prisma, type DeskAgencyReach, type DeskDepartment, type PrismaClient, t
 import { isDeskRole, roleLabel } from '@/lib/roles';
 import { can, DeskAccessError, isObjectId, resolveDeskScope, taskWhere, type DeskScope, type GuardContext } from './access';
 import { recordAudit, type AuditAction } from './audit';
-import { DEFAULT_POSITIONS, PERMISSION_KEYS, REACH_ORDER, isPermissionKey, type PermissionKey } from './permission-catalogue';
+import { DEFAULT_POSITIONS, PERMISSION_ADDITIONS, PERMISSION_KEYS, REACH_ORDER, isPermissionKey, type PermissionKey } from './permission-catalogue';
 import { staffProfile } from './staff-profile';
 import { CLOSED_STATUSES } from './task-filters';
 import { returnToQueue } from './task-release';
@@ -72,7 +74,10 @@ export async function placeByRole(tx: Tx | Db, user: { id: string; role: UserRol
   return true;
 }
 
-export async function ensureDefaultPositions(db: Db): Promise<{ created: string[]; staffPlaced: number }> {
+/** The DeskJobRun that records a catalogue addition as given. */
+export const additionMarker = (key: string) => `permission-added:${key}`;
+
+export async function ensureDefaultPositions(db: Db): Promise<{ created: string[]; staffPlaced: number; permissionsAdded: string[] }> {
   const created: string[] = [];
   for (const [i, p] of DEFAULT_POSITIONS.entries()) {
     if (await db.deskPosition.findUnique({ where: { code: p.code }, select: { id: true } })) continue;
@@ -92,10 +97,36 @@ export async function ensureDefaultPositions(db: Db): Promise<{ created: string[
       await db.deskPosition.update({ where: { code: p.code }, data: { reportsToId: ids.get(p.reportsTo)! } });
     }
   }
+  const permissionsAdded = await applyPermissionAdditions(db);
   let staffPlaced = 0;
   const staff = await db.user.findMany({ where: { role: { in: ['DESK_ADMIN', 'ACCOUNT_MANAGER', 'DESK_VA'] }, deskPositions: { none: {} } }, select: { id: true, role: true } });
   for (const user of staff) if (await placeByRole(db, user, null)) staffPlaced += 1;
-  return { created, staffPlaced };
+  return { created, staffPlaced, permissionsAdded };
+}
+
+export interface PermissionAddition { key: PermissionKey; module: number; codes: readonly string[]; /** Tests only: another marker. */ marker?: string }
+
+/**
+ * Permissions added to the catalogue later, given to the default positions
+ * listed for each: once each (recorded as a DeskJobRun), so a removal by the
+ * Super Admin stands. Returns what was given, for the seed's output.
+ */
+export async function applyPermissionAdditions(db: Db, additions: readonly PermissionAddition[] = PERMISSION_ADDITIONS): Promise<string[]> {
+  const permissionsAdded: string[] = [];
+  for (const add of additions) {
+    const id = add.marker ?? additionMarker(add.key);
+    if (await db.deskJobRun.findUnique({ where: { id }, select: { id: true } })) continue;
+    const given: string[] = [];
+    for (const position of await db.deskPosition.findMany({ where: { code: { in: [...add.codes] }, isSystem: true }, select: { id: true, code: true, permissions: true } })) {
+      if (position.permissions.includes(add.key)) continue;
+      await db.deskPosition.update({ where: { id: position.id }, data: { permissions: [...position.permissions, add.key] } });
+      given.push(position.code);
+    }
+    const now = new Date();
+    await db.deskJobRun.create({ data: { id, startedAt: now, finishedAt: now, result: { module: add.module, positions: given } } });
+    permissionsAdded.push(`${add.key} → ${given.join(', ') || 'none needed'}`);
+  }
+  return permissionsAdded;
 }
 
 // ── What a person may do ──
@@ -206,7 +237,7 @@ function codeFor(text: string): string {
  * or work, so it never sits with someone who can't do it. Agencies with The
  * Desk off are left alone: nobody sees their work until it is back on.
  */
-async function releaseUnreachable(tx: Tx, userIds: string[], actorId: string): Promise<number> {
+export async function releaseUnreachable(tx: Tx, userIds: string[], actorId: string | null, reason = 'position_changed'): Promise<number> {
   const held = await tx.task.findMany({
     where: { assigneeId: { in: userIds }, status: { notIn: [...CLOSED_STATUSES] }, agency: { is: { deskEnabled: true } } },
     select: { id: true, agencyId: true, status: true, assigneeId: true },
@@ -218,7 +249,7 @@ async function releaseUnreachable(tx: Tx, userIds: string[], actorId: string): P
     const reachable = can(scope, 'requests.work')
       ? new Set((await tx.task.findMany({ where: { AND: [{ id: { in: own.map((t) => t.id) } }, taskWhere(scope)] }, select: { id: true } })).map((t) => t.id))
       : new Set<string>();
-    returned += await returnToQueue(tx, own.filter((t) => !reachable.has(t.id)), actorId, 'position_changed');
+    returned += await returnToQueue(tx, own.filter((t) => !reachable.has(t.id)), actorId, reason);
   }
   return returned;
 }

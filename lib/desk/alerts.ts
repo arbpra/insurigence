@@ -27,6 +27,7 @@ import { Prisma, type PrismaClient, type Task } from '@prisma/client';
 import { recordAudit } from './audit';
 import { addBusinessMinutes, businessMinutesBetween, loadBusinessCalendar, type BusinessCalendar } from './business-time';
 import { notificationsOff, sendAlert, type AlertRung } from './notifications';
+import { closeEndedCovers } from './supervision';
 import { WAITING_STATUSES } from './task-statuses';
 
 type Db = PrismaClient;
@@ -74,6 +75,8 @@ export interface AlertRunResult {
   autoEscalated: number;
   emails: number;
   failed: number;
+  /** Covers for absent Account Managers that ended since the last check (Module 50); only when any did. */
+  coversClosed?: number;
 }
 
 /** Climbs one task to `rung`, if nothing changed it meanwhile. Returns false if it had changed. */
@@ -136,6 +139,16 @@ export async function runAlertCheck(
   const now = opts.now ?? new Date();
   const jobId = opts.jobId ?? ALERT_JOB_ID;
   const result: AlertRunResult = { ran: false, checked: 0, dueSoon: 0, overdue: 0, escalated: 0, autoEscalated: 0, emails: 0, failed: 0 };
+  // Covers whose dates have passed end, and their open work goes back to the queue (Module 50).
+  // Not on test runs, which pass their own time or agencies and must not touch real covers.
+  if (!opts.now && !opts.agencyIds && !opts.jobId) {
+    try {
+      const closed = await closeEndedCovers(db, now);
+      if (closed) result.coversClosed = closed;
+    } catch (err) {
+      console.error('[desk/alerts] closing ended covers failed', err);
+    }
+  }
   if (notificationsOff()) return { ...result, reason: 'Desk email notifications are switched off (DESK_EMAIL_NOTIFICATIONS=off).' };
   result.ran = true;
   let firstError: string | null = null;

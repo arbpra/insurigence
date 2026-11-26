@@ -12,6 +12,9 @@
  *      - reach "assigned" or "supervised" (Account Managers) → kind
  *        ACCOUNT_MANAGER: every agency where they are primary or backup AM,
  *        plus pod work if a position of theirs also reaches by pod;
+ *        "supervised" adds the agencies of the Account Managers who report to
+ *        them, and anyone covering an absent AM gets that AM's agencies for
+ *        the cover's dates (Module 50, lib/desk/supervision-reach.ts);
  *      - reach "pod authorisation" only (Pod Leaders, VAs) → kind VA.
  *    Their permissions ride on the scope; `can(scope, key)` asks for one.
  *    A position never opens agency data on its own beyond its reach:
@@ -45,6 +48,7 @@ import { DESK_NOT_ENABLED } from './scope-reasons';
 import { CLOSED_STATUSES, TOP_LEVEL, passesRestriction } from './task-filters';
 import type { PermissionKey } from './permission-catalogue';
 import { staffProfile } from './staff-profile';
+import { managedReach } from './supervision-reach';
 
 /** A client or a transaction: a scope can be resolved inside the change that affects it. */
 type Db = Prisma.TransactionClient;
@@ -71,7 +75,11 @@ export type DeskScope =
    * through a pod: their pod positions' permissions and their own document
    * grants, never their Account Manager permissions (Module 49; use scopeIn).
    */
-  | ({ kind: 'ACCOUNT_MANAGER'; userId: string; role: string; agencyIds: string[]; grants: PodGrant[]; pod: StaffAccess } & StaffAccess)
+  | ({
+      kind: 'ACCOUNT_MANAGER'; userId: string; role: string; agencyIds: string[]; grants: PodGrant[]; pod: StaffAccess;
+      /** Module 50: the Account Managers below them (supervised reach), and the people they cover today. */
+      team?: string[]; covering?: string[];
+    } & StaffAccess)
   /**
    * Positions that reach only through pods (Pod Leader, VA): the (agency, pod)
    * pairs they may work. No pairs = no access.
@@ -150,14 +158,14 @@ export async function resolveDeskScope(db: Db, userId: string): Promise<DeskScop
   if (reaches.has('ALL')) return { kind: 'PLATFORM', ...staff };
   const grants = reaches.has('POD') ? await podGrants(db, user.id) : [];
   if (reaches.has('ASSIGNED') || reaches.has('SUPERVISED')) {
-    // Supervised agencies (Senior AMs) widen this in Module 50.
+    const reach = await managedReach(db, user.id, reaches.has('SUPERVISED'));
     const rows = await db.agencyDeskAssignment.findMany({
-      where: { OR: [{ primaryAmId: user.id }, { backupAmId: user.id }], agency: { deskEnabled: true } },
+      where: { OR: [{ primaryAmId: { in: reach.people } }, { backupAmId: { in: reach.people } }], agency: { deskEnabled: true } },
       select: { agencyId: true },
     });
     const pod: StaffAccess = { permissions: profile.podPermissions, sensitivities: [...DEFAULT_STAFF_SENSITIVITIES] };
     if (grants.length) pod.sensitivities = pod.permissions.includes('documents.all_categories') ? [...ALL_SENSITIVITIES] : await grantedSensitivities(db, user.id);
-    return { kind: 'ACCOUNT_MANAGER', ...staff, agencyIds: rows.map((r) => r.agencyId), grants, pod };
+    return { kind: 'ACCOUNT_MANAGER', ...staff, agencyIds: rows.map((r) => r.agencyId), grants, pod, team: reach.team, covering: reach.covering };
   }
   return { kind: 'VA', ...staff, grants };
 }

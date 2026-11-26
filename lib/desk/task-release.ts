@@ -17,7 +17,7 @@ export interface ReleasableTask {
 }
 
 export async function returnToQueue(
-  tx: Prisma.TransactionClient, tasks: ReleasableTask[], actorId: string, reason: string
+  tx: Prisma.TransactionClient, tasks: ReleasableTask[], actorId: string | null, reason: string
 ): Promise<number> {
   if (tasks.length === 0) return 0;
   const restart = new Set<TaskStatus>(RESTART_STATUSES);

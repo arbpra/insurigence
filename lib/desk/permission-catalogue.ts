@@ -38,6 +38,7 @@ export const PERMISSIONS = [
   { key: 'accounts.edit', group: 'Agencies', label: 'Edit agency books', description: 'Add and change accounts and policies, and import books, for agencies in reach.' },
   { key: 'messages.agency', group: 'Agencies', label: 'Message agencies', description: 'Read and send the agency conversation.' },
   { key: 'agencies.setup', group: 'Agencies', label: 'Agency Desk setup', description: 'Turn The Desk on, assign Account Managers, AMS, instructions and which pods may work for the agency.' },
+  { key: 'team.manage', group: 'Agencies', label: 'Cover and reassign Account Managers', description: 'Arrange cover for an absent Account Manager and move agencies between Account Managers in reach (for supervised reach: themselves and the people who report to them). With all agencies, also who reports to whom.' },
   // Oversight
   { key: 'workload.view', group: 'Oversight', label: 'Workload', description: 'See all work in reach across pods and people.' },
   { key: 'turnaround.view', group: 'Oversight', label: 'Turnaround reports', description: 'Turnaround by pod, person and agency.' },
@@ -67,7 +68,7 @@ export const DEPARTMENT_LABELS: Record<DeskDepartment, string> = {
 
 export const REACH_LABELS: Record<DeskAgencyReach, { label: string; description: string }> = {
   ALL: { label: 'All agencies', description: 'Every agency with The Desk on.' },
-  SUPERVISED: { label: 'Supervised agencies', description: 'Their own agencies and those of the Account Managers they supervise.' },
+  SUPERVISED: { label: 'Supervised agencies', description: 'Their own agencies and those of the Account Managers who report to them, directly or further down.' },
   ASSIGNED: { label: 'Assigned agencies', description: 'Agencies where they are the primary or backup Account Manager.' },
   POD: { label: 'Pod authorisation', description: 'Only work in their pods, for agencies that authorise the pod or them by name.' },
 };
@@ -114,18 +115,28 @@ export const DEFAULT_POSITIONS: readonly DefaultPosition[] = [
   {
     code: 'DIRECTOR_AGENCY_OPS', name: 'Director of Agency Operations', department: 'AGENCY_OPERATIONS', reach: 'ALL', reportsTo: 'COO', legacyRole: null,
     description: 'Oversees Senior Account Managers, Account Managers and the agency relationships, settings, billing and utilization.',
-    permissions: ['requests.assign', 'requests.escalate', 'requests.restrict', 'requests.classify', 'accounts.view', 'accounts.edit', 'messages.agency', 'agencies.setup', 'workload.view', 'turnaround.view', 'usage.view', 'billing.prices', 'documents.all_categories'],
+    permissions: ['requests.assign', 'requests.escalate', 'requests.restrict', 'requests.classify', 'accounts.view', 'accounts.edit', 'messages.agency', 'agencies.setup', 'team.manage', 'workload.view', 'turnaround.view', 'usage.view', 'billing.prices', 'documents.all_categories'],
   },
   {
     code: 'SENIOR_AM', name: 'Senior Account Manager', department: 'AGENCY_OPERATIONS', reach: 'SUPERVISED', reportsTo: 'DIRECTOR_AGENCY_OPS', legacyRole: null,
     description: 'Supervises Account Managers and covers for them. Cannot change contracts, pricing or contracted allowances.',
-    permissions: ['requests.work', 'requests.assign', 'requests.escalate', 'requests.restrict', 'requests.classify', 'accounts.view', 'accounts.edit', 'messages.agency', 'turnaround.view', 'usage.view', 'billing.prices', 'documents.all_categories'],
+    permissions: ['requests.work', 'requests.assign', 'requests.escalate', 'requests.restrict', 'requests.classify', 'accounts.view', 'accounts.edit', 'messages.agency', 'team.manage', 'turnaround.view', 'usage.view', 'billing.prices', 'documents.all_categories'],
   },
   {
     code: 'AM', name: 'Account Manager', department: 'AGENCY_OPERATIONS', reach: 'ASSIGNED', reportsTo: 'SENIOR_AM', legacyRole: 'ACCOUNT_MANAGER',
     description: 'Owns the relationship with their assigned agencies.',
     permissions: ['requests.work', 'requests.assign', 'requests.escalate', 'requests.restrict', 'requests.classify', 'accounts.view', 'accounts.edit', 'messages.agency', 'turnaround.view', 'documents.all_categories'],
   },
+];
+
+/**
+ * Permissions added to the catalogue after the defaults were first created,
+ * and the default positions that get them. The seed adds each to those
+ * positions once (recorded as a DeskJobRun), so a later change by the Super
+ * Admin is never undone.
+ */
+export const PERMISSION_ADDITIONS: readonly { key: PermissionKey; module: number; codes: readonly string[] }[] = [
+  { key: 'team.manage', module: 50, codes: ['COO', 'DIRECTOR_AGENCY_OPS', 'SENIOR_AM'] },
 ];
 
 /** Reach from widest to narrowest, for showing the widest a person has. */

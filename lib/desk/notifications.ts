@@ -37,6 +37,7 @@ import { sendEmail } from '@/lib/email/send';
 import { deskNotificationEmail } from '@/lib/email/templates';
 import { resolveDeskScope, taskWhere, type DeskScope } from './access';
 import { sideFor } from './message-view';
+import { coverRunning } from './supervision-reach';
 import { TASK_TYPE_LABELS } from './service-levels';
 
 type Db = PrismaClient;
@@ -100,9 +101,17 @@ async function safely(what: string, fn: () => Promise<void>): Promise<void> {
   }
 }
 
-/** Active people, other than the one who acted, who pass the check. Order kept. */
+/**
+ * Active people, other than the one who acted, who pass the check. Order kept.
+ * Anyone covering one of them today (Module 50) comes right after them.
+ */
 async function eligible(db: Db, ids: (string | null | undefined)[], actorId: string, check: (scope: DeskScope) => Promise<boolean> | boolean): Promise<Person[]> {
-  const wanted = [...new Set(ids.filter((id): id is string => !!id && id !== actorId))];
+  const named = [...new Set(ids.filter((id): id is string => !!id))];
+  const covers = named.length
+    ? await db.deskCoverage.findMany({ where: { absentUserId: { in: named }, ...coverRunning(new Date()) }, select: { absentUserId: true, coverUserId: true } })
+    : [];
+  const withCover = named.flatMap((id) => [id, ...covers.filter((c) => c.absentUserId === id).map((c) => c.coverUserId)]);
+  const wanted = [...new Set(withCover.filter((id) => id !== actorId))];
   if (!wanted.length) return [];
   const people = await db.user.findMany({ where: { id: { in: wanted }, isActive: true }, select: PERSON });
   const byId = new Map(people.map((p) => [p.id, p]));

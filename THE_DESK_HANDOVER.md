@@ -1,7 +1,7 @@
 # The Desk — Handover Report
 
 **Date:** 22 November 2026, updated 26 November 2026
-**Covers:** the 46 modules of the Desk build plan (`THE_DESK_BUILD_PLAN.md`), 125.5 hours in total, and Modules 47–48 (positions and permissions) from Phase 7
+**Covers:** the 46 modules of the Desk build plan (`THE_DESK_BUILD_PLAN.md`), 125.5 hours in total, and Modules 47–50 (positions, permissions, reporting lines and cover) from Phase 7
 **Code:** merged into `main` and deployed to https://insurigence.ai (Modules 47–48 on 26 November 2026)
 
 ---
@@ -57,7 +57,17 @@ What Desk staff may do comes from the positions they hold, which the **Super Adm
 - **A new invite starts in the position for its role:** Operations Manager → COO, Account Manager → Account Manager, VA → Virtual Agent. Assign the Directors, Senior Account Managers and Pod Leaders on the Positions page.
 - **A position or reporting line never opens sensitive documents or agency data by itself.** Restricted requests, document permissions and pod authorisation still apply.
 - **Plans and prices:** only the COO and the Super Admin change them by default.
-- **Not built yet:** supervised agencies (a Senior Account Manager sees only assigned agencies until Module 50), a Pod Leader's workload view (51), and alerts by position (60; they still go to the role "Operations Manager").
+- **Not built yet:** a Pod Leader's workload view (51), and alerts by position (60; they still go to the role "Operations Manager").
+
+### Account Managers: reporting lines, cover and reassignment (Module 50)
+
+On **Desk Operations → Account Managers**, for the COO, the Director of Agency Operations and Senior Account Managers (permission "Cover and reassign Account Managers"):
+
+- **Who reports to whom,** person by person. Set by those who reach every agency. A Senior Account Manager then sees the agencies, accounts and requests of everyone below them, but no Financial or Personal file, restricted request or permission beyond their own position's.
+- **Cover for an absent Account Manager,** from a start to an end date. The person covering works the absent AM's agencies and is sent what they are sent. It ends by itself at the end date, or can be ended early.
+- **Moving an agency** to another Account Manager. Its open requests follow.
+- A Senior Account Manager does all of this for themselves and the people below them only, and can't change reporting lines.
+- When someone loses an agency this way, open work they can no longer reach goes back to the queue.
 
 ### How a request flows
 
@@ -87,7 +97,7 @@ Each step is recorded in the request's history. Every action by anyone is also r
 
 ## 3. How it was tested
 
-- **49 automated test suites** with **4,049 checks**:
+- **50 automated test suites** with **4,170 checks**:
   - 43 Desk suites from Modules 1–44;
   - the demo walkthrough (83 checks);
   - restricting a request to named people (57 checks);
@@ -118,9 +128,9 @@ Each step is recorded in the request's history. Every action by anyone is also r
 
 These steps are for whoever runs the hosting. Steps 1–4 are required before go-live; steps 5 and 6 are needed for the first agency. **Status on 22 November 2026:** steps 1, 2, 3 and 5 are done; in step 4 everything but R2 is set; step 6 waits for R2.
 
-**Status on 26 November 2026:** Modules 47–48 are live. On that day insurigence.ai was first found to be running a build without The Desk; the new code was then pulled, built and started, and the seven positions created. The site runs on an Ubuntu server behind nginx, so the server settings below belong **on that server**. **Alerts:** the app now runs the alert check itself every 15 minutes (`DESK_ALERT_CHECK_MINUTES=15` on the server); runs were confirmed at 02:34 and 02:48 UTC on 26 November. The GitHub schedule stays as a backup. Its runs from 23 to 25 November failed because the site was running a build without The Desk; the first run after the rebuild succeeded.
+**Status on 26 November 2026:** Modules 47–49 are live. On that day insurigence.ai was first found to be running a build without The Desk; the new code was then pulled, built and started, and the seven positions created. The site runs on an Ubuntu server behind nginx, so the server settings below belong **on that server**. **Alerts:** the app now runs the alert check itself every 15 minutes (`DESK_ALERT_CHECK_MINUTES=15` on the server); runs were confirmed at 02:34 and 02:48 UTC on 26 November. The GitHub schedule stays as a backup. Its runs from 23 to 25 November failed because the site was running a build without The Desk; the first run after the rebuild succeeded.
 
-**Each time code is deployed,** on that server: `git pull origin main`, `npm ci`, `npm run db:push`, `npm run build`, `npm run db:seed:desk`, then restart the app. A push to GitHub alone doesn't update the site.
+**Each time code is deployed,** on that server: `git pull origin main`, `npm ci`, `npm run db:push`, `npm run build`, `npm run db:seed:desk`, then restart the app. A push to GitHub alone doesn't update the site. **Module 50 needs both database steps:** `db:push` adds the reporting-line and cover collections (already added to the shared database on 26 November, so there it changes nothing), and `db:seed:desk` should print "Permissions added: team.manage → COO, DIRECTOR_AGENCY_OPS, SENIOR_AM" the first time (nothing on later runs).
 
 | # | Step | Why |
 |---|---|---|

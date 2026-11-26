@@ -28,6 +28,7 @@ const list = (xs: string[]) => (xs.length ? xs.join(', ') : 'none (already prese
   const positions = await ensureDefaultPositions(prisma);
   console.log(`Positions created:       ${list(positions.created)}`);
   console.log(`Staff given a position:  ${positions.staffPlaced}`);
+  console.log(`Permissions added:       ${list(positions.permissionsAdded)}`);
   console.log(`Tasks repaired:          ${await backfillTaskLists(prisma)}`);
 
   const rules = await prisma.taskRoutingRule.findMany({ include: { pod: { select: { code: true } } } });
