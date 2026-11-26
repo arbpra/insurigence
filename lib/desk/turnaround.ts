@@ -131,7 +131,7 @@ export async function getTurnaround(
   const from = new Date(now.getTime() - days * 86_400_000);
   const where: Prisma.TaskWhereInput = {
     AND: [
-      taskWhere(scope), TOP_LEVEL,
+      taskWhere(scope, { counts: true }), TOP_LEVEL,
       // As on the dashboard: agencies with The Desk switched off are left out.
       { agency: { is: { deskEnabled: true } } },
       { status: 'COMPLETED', completedAt: { gte: from, lte: now } },

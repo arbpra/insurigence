@@ -12,7 +12,7 @@
  * narrow what the person could already see.
  */
 import { Prisma, TaskPriority, TaskType, type PrismaClient, type TaskEvent, type TaskStatus } from '@prisma/client';
-import { can, DeskAccessError, getTaskForScope, insuredWhere, isObjectId, taskEventWhere, taskWhere, type DeskScope, type GuardContext } from './access';
+import { can, DeskAccessError, getTaskForScope, insuredWhere, isObjectId, scopeIn, taskEventWhere, taskWhere, type DeskScope, type GuardContext } from './access';
 import { recordAudit } from './audit';
 import { literal } from './literal-match';
 import { TASK_TYPE_LABELS } from './service-levels';
@@ -52,6 +52,7 @@ const isClosed = (status: TaskStatus) => (CLOSED_STATUSES as readonly TaskStatus
 // ── Views ──
 
 function viewFor(scope: DeskScope, task: TaskRow, now: Date) {
+  scope = scopeIn(scope, task.agencyId);
   const account = { insured: task.insured, policy: task.policy, typeLabel: TASK_TYPE_LABELS[task.type] };
   if (scope.kind === 'AGENCY') return { ...agencyTaskView(task), ...account };
   const staff = {
@@ -136,6 +137,7 @@ function agencyEventView(event: TaskEvent, agencyId: string, actors: Map<string,
 const VA_EVENT_DETAILS = ['clock', 'automatic', 'reference', 'followUp'];
 
 function staffEventView(scope: DeskScope, event: TaskEvent, actors: Map<string, Actor>) {
+  scope = scopeIn(scope, event.agencyId);
   const metadata = (event.metadata ?? {}) as Record<string, unknown>;
   const person = (id: unknown) => {
     if (typeof id !== 'string') return null;
@@ -328,6 +330,7 @@ export async function listTasks(db: Db, scope: DeskScope, opts: TaskListOptions 
 /** One task and the history this person may see. Opening it is logged (Q4), and if that can't be logged, it doesn't open. */
 export async function getTaskDetail(db: Db, scope: DeskScope, taskId: string, ctx: GuardContext = {}) {
   const found = await getTaskForScope(db, scope, taskId, ctx);
+  scope = scopeIn(scope, found.agencyId);
   const task = await db.task.findUniqueOrThrow({ where: { id: found.id }, include: RELATED });
   const where: Prisma.TaskEventWhereInput = { AND: [{ taskId: task.id }, taskEventWhere(scope)] };
   const [newestFirst, eventsTotal] = await Promise.all([
@@ -407,6 +410,7 @@ async function subtaskFamily(db: Db, scope: DeskScope, task: TaskRow) {
  * screen: the task service checks every change again.
  */
 function staffPermissions(scope: DeskScope, task: TaskRow, openSubtasks: number) {
+  scope = scopeIn(scope, task.agencyId);
   const manager = isManager(scope);
   const holdsIt = task.assigneeId === scope.userId;
   const open = !isClosed(task.status);

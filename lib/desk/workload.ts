@@ -54,7 +54,7 @@ export async function getWorkload(db: Db, scope: DeskScope, opts: TaskListOption
   const now = new Date();
   const open = await db.task.findMany({
     // Through the access layer: restricted requests only for those who may restrict.
-    where: { AND: [{ status: { notIn: [...CLOSED_STATUSES] } }, taskWhere(scope)] },
+    where: { AND: [{ status: { notIn: [...CLOSED_STATUSES] } }, taskWhere(scope, { counts: true })] },
     select: { podId: true, assigneeId: true, agencyId: true, dueAt: true, slaPausedAt: true, escalated: true, status: true },
   });
 

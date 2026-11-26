@@ -1,8 +1,8 @@
 # The Desk — Handover Report
 
-**Date:** 22 November 2026
-**Covers:** the 46 modules of the Desk build plan (`THE_DESK_BUILD_PLAN.md`), 125.5 hours in total
-**Code:** merged into `main` and deployed to https://insurigence.ai (22 November 2026)
+**Date:** 22 November 2026, updated 26 November 2026
+**Covers:** the 46 modules of the Desk build plan (`THE_DESK_BUILD_PLAN.md`), 125.5 hours in total, and Modules 47–48 (positions and permissions) from Phase 7
+**Code:** merged into `main` and deployed to https://insurigence.ai (Modules 47–48 on 26 November 2026)
 
 ---
 
@@ -43,9 +43,21 @@ It is live on https://insurigence.ai: the code is deployed, the database is upda
 | **Agency Portal** | The agency's Owner / Admin, Producers and CSRs | `/desk` | Overview of what needs their attention, all requests with simple statuses, sending a new request, accounts and policies, importing the book (Owner / Admin), messages with their Account Manager, and who in the agency sees which accounts (Owner / Admin) |
 | **Account Manager Portal** | Account Managers | `/desk-ops` | Dashboard of open, due-soon and overdue work and upcoming renewals; each agency's accounts and work; messages with agencies; turnaround figures |
 | **Pod / VA Portal** | VAs | `/desk-ops` | Their pod's queue to pick work up from, "My tasks", and the working page for a request: status, notes, documents, subtasks and history |
-| **Insurigence Admin** | Operations Managers | `/super-admin/desk` and `/desk-ops` | Desk setup: agencies, staff, pods, routing and targets, business calendar, follow-up rules. Operations: workload across all agencies with reassigning and escalating, turnaround, monthly usage against plans, and the audit log |
+| **Insurigence Admin** | The COO, the Directors and the Super Admin, each as their position allows | `/super-admin/desk` and `/desk-ops` | Desk setup: agencies, staff, pods, routing and targets, business calendar, follow-up rules. Operations: workload across all agencies with reassigning and escalating, turnaround, monthly usage against plans, and the audit log |
 
-Each person sees only the menu items their role may use. A page outside their role sends them away, and the data behind it is refused as well.
+Each person sees only the menu items they may use. A page they may not open sends them away, and the data behind it is refused as well.
+
+### Positions and permissions (Modules 47–48)
+
+What Desk staff may do comes from the positions they hold, which the **Super Admin** manages at `/super-admin/desk/positions`.
+
+- **Each position has** a reach (all agencies, supervised, assigned, or pod authorisation only), a set of permissions, and the position it reports to.
+- **One person can hold several** positions and gets everything they allow. A change applies on their next request.
+- **Seven are set up:** Chief Operating Officer (replaces the Operations Manager), Director of Virtual Operations, Pod Leader, Virtual Agent, Director of Agency Operations, Senior Account Manager and Account Manager.
+- **A new invite starts in the position for its role:** Operations Manager → COO, Account Manager → Account Manager, VA → Virtual Agent. Assign the Directors, Senior Account Managers and Pod Leaders on the Positions page.
+- **A position or reporting line never opens sensitive documents or agency data by itself.** Restricted requests, document permissions and pod authorisation still apply.
+- **Plans and prices:** only the COO and the Super Admin change them by default.
+- **Not built yet:** supervised agencies (a Senior Account Manager sees only assigned agencies until Module 50), a Pod Leader's workload view (51), and alerts by position (60; they still go to the role "Operations Manager").
 
 ### How a request flows
 
@@ -75,11 +87,12 @@ Each step is recorded in the request's history. Every action by anyone is also r
 
 ## 3. How it was tested
 
-- **47 automated test suites** with **3,852 checks**:
-  - 43 Desk suites from Modules 1–44 (3,688 checks);
+- **49 automated test suites** with **4,049 checks**:
+  - 43 Desk suites from Modules 1–44;
   - the demo walkthrough (83 checks);
   - restricting a request to named people (57 checks);
-  - the two older text-matching and user-responses suites (24 checks).
+  - positions (75 checks) and access by position (91 checks);
+  - the two older text-matching and user-responses suites (25 checks).
 
   They all pass. They run against the real database through the real API routes, signed in as real people. Each one cleans up its own temporary records.
 - **Permission suite (Module 44):** 123 checks that each person can do only what their role allows:
@@ -105,6 +118,10 @@ Each step is recorded in the request's history. Every action by anyone is also r
 
 These steps are for whoever runs the hosting. Steps 1–4 are required before go-live; steps 5 and 6 are needed for the first agency. **Status on 22 November 2026:** steps 1, 2, 3 and 5 are done; in step 4 everything but R2 is set; step 6 waits for R2.
 
+**Status on 26 November 2026:** Modules 47–48 are live. On that day insurigence.ai was first found to be running a build without The Desk; the new code was then pulled, built and started, and the seven positions created. The site runs on an Ubuntu server behind nginx, so the server settings below belong **on that server**. **Alerts:** the app now runs the alert check itself every 15 minutes (`DESK_ALERT_CHECK_MINUTES=15` on the server); runs were confirmed at 02:34 and 02:48 UTC on 26 November. The GitHub schedule stays as a backup. Its runs from 23 to 25 November failed because the site was running a build without The Desk; the first run after the rebuild succeeded.
+
+**Each time code is deployed,** on that server: `git pull origin main`, `npm ci`, `npm run db:push`, `npm run build`, `npm run db:seed:desk`, then restart the app. A push to GitHub alone doesn't update the site.
+
 | # | Step | Why |
 |---|---|---|
 | 1 | ✅ **Merge the branch** `feature/proposal-system` into `main` and deploy. Done 22 November 2026. | The Desk existed only on that branch. |
@@ -120,8 +137,8 @@ These steps are for whoever runs the hosting. Steps 1–4 are required before go
 | Setting | Required? | What it does |
 |---|---|---|
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | **Yes, for documents** | Cloudflare R2 file storage, in the same private bucket model as the existing quote documents. **Not set yet:** waiting for the client's Cloudflare credentials. |
-| `DESK_CRON_SECRET` | **Yes, for alerts** | A random secret of at least 24 characters. A scheduler then calls `https://insurigence.ai/api/desk/cron/alerts` every 15 minutes with the header `Authorization: Bearer <secret>`. This is the right choice for the current Replit "autoscale" deployment, which sleeps when idle and can run several copies. Any scheduler that can send a header works. **Set up:** the secret is set on Replit, and GitHub Actions calls the check every 15 minutes (`.github/workflows/desk-alerts.yml`, using the repository secret `DESK_CRON_SECRET`, which must match Replit's). It can also be run by hand from GitHub → Actions → Desk alert check → Run workflow. A failed call shows as a red run. GitHub can start scheduled runs a few minutes late, which doesn't matter for 2- and 4-hour thresholds. |
-| `DESK_ALERT_CHECK_MINUTES` | Not on autoscale | For example `15`: the app runs the check itself while it is running. Only suits a server that stays up (a reserved VM). Using both settings is safe: no alert is sent twice. |
+| `DESK_CRON_SECRET` | **Yes, for alerts** | A random secret of at least 24 characters. A scheduler then calls `https://insurigence.ai/api/desk/cron/alerts` every 15 minutes with the header `Authorization: Bearer <secret>`. It suits any kind of hosting. Any scheduler that can send a header works. **Set up, as a backup:** GitHub Actions calls the check every 15 minutes (`.github/workflows/desk-alerts.yml`, using the repository secret `DESK_CRON_SECRET`, which must match the server's). It can also be run by hand from GitHub → Actions → Desk alert check → Run workflow. A failed call shows as a red run. GitHub can start scheduled runs a few minutes late, which doesn't matter for 2- and 4-hour thresholds. |
+| `DESK_ALERT_CHECK_MINUTES` | Alternative to the schedule | For example `15`: the app runs the check itself while it is running. Suits a server that stays up, as the Ubuntu server does. **Set to `15` on the server since 26 November 2026; this is now the main check.** Using both settings is safe: no alert is sent twice. |
 | `RESEND_API_KEY`, `EMAIL_FROM`, `APP_URL` | Already set | Email sending, and the links in emails. `APP_URL` is `https://insurigence.ai` on the server. |
 | `DESK_EMAIL_NOTIFICATIONS=off` | Only on test copies | Stops Desk emails and alerts. Use it on any staging or test copy that shares real data. |
 

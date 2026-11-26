@@ -21,6 +21,19 @@
  *    with a grant, removed ones to nobody, each refusal logged with its kind;
  *  - restricted tasks, internal notes, losing access mid-session.
  *
+ * Rebuilt for positions (Module 49). Every Desk person holds test copies of
+ * the client's positions, with their reporting lines, and the world adds the
+ * Directors, a Senior Account Manager, a Pod Leader, an Account Manager who is
+ * also a Pod Leader, a position made for oversight only, someone with no
+ * position (their role's default) and someone whose position is switched off:
+ *
+ *  - every setup and oversight handler: what it needs is read from its source,
+ *    and each person gets in exactly where their positions' permissions meet
+ *    it, and is refused (and logged) everywhere else;
+ *  - the page sweep covers each of them;
+ *  - two positions at once: each agency by the position that reaches it;
+ *  - a reporting line, or a role, opens nothing by itself.
+ *
  * Client answers: Q3 (agency roles and book access), Q4 (need-to-know: agency
  * authorisation, pod, individual permissions, task requirements; everything
  * logged), Q5 (targets internal). Against the shared database, temporary
@@ -31,7 +44,8 @@ import 'dotenv/config';
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { join, relative, sep } from 'path';
 import { NextRequest } from 'next/server';
-import type { UserRole } from '@prisma/client';
+import type { DeskAgencyReach, DeskDepartment, UserRole } from '@prisma/client';
+import { DEFAULT_POSITIONS } from '../lib/desk/permission-catalogue';
 import { prisma } from '../lib/prisma';
 import { createSession } from '../lib/auth';
 
@@ -70,6 +84,10 @@ async function wipe() {
   await prisma.deskStaffPermission.deleteMany({ where: { userId: { in: cleanup.userIds } } });
   await prisma.deskAuditLog.deleteMany({ where: { OR: [{ agencyId }, { actorId: { in: cleanup.userIds } }] } });
   await prisma.session.deleteMany({ where: { userId: { in: cleanup.userIds } } });
+  const positions = (await prisma.deskPosition.findMany({ where: { code: { startsWith: TAG } }, select: { id: true } })).map((p) => p.id);
+  await prisma.deskPositionHolder.deleteMany({ where: { OR: [{ userId: { in: cleanup.userIds } }, { positionId: { in: positions } }] } });
+  await prisma.deskPosition.updateMany({ where: { id: { in: positions } }, data: { reportsToId: null } });
+  await prisma.deskPosition.deleteMany({ where: { id: { in: positions } } });
   await prisma.user.deleteMany({ where: { id: { in: cleanup.userIds } } });
   await prisma.agency.deleteMany({ where: { id: agencyId } });
 }
@@ -206,6 +224,35 @@ async function call(route: Route, method: Method, token: string | null, params: 
     await prisma.deskStaffPermission.create({ data: { userId: va1.id, allowedSensitivities: ['FINANCIAL'] } });
     await prisma.agencyDeskAssignment.createMany({ data: [{ agencyId: A.id, primaryAmId: amA.id }, { agencyId: B.id, primaryAmId: amB.id }] });
 
+    // ── Positions (Module 49): test copies of the client's defaults, with their reporting lines ──
+    const pos = new Map<string, { id: string; permissions: string[] }>();
+    for (const [i, d] of DEFAULT_POSITIONS.entries()) {
+      const p = await prisma.deskPosition.create({ data: { code: `${TAG}_${d.code}`, name: `${TAG} ${d.name}`, department: d.department as DeskDepartment, reach: d.reach as DeskAgencyReach, permissions: [...d.permissions], sortOrder: 900 + i } });
+      pos.set(d.code, { id: p.id, permissions: [...d.permissions] });
+    }
+    for (const d of DEFAULT_POSITIONS) if (d.reportsTo) await prisma.deskPosition.update({ where: { id: pos.get(d.code)!.id }, data: { reportsToId: pos.get(d.reportsTo)!.id } });
+    const clerkPos = await prisma.deskPosition.create({ data: { code: `${TAG}_CLERK`, name: `${TAG} Usage clerk`, department: 'EXECUTIVE', reach: 'ALL', permissions: ['usage.view'] } });
+    const offPos = await prisma.deskPosition.create({ data: { code: `${TAG}_OFF`, name: `${TAG} Switched off`, department: 'VIRTUAL_OPERATIONS', reach: 'POD', permissions: ['requests.work'], isActive: false } });
+    const hold = (userId: string, ...ids: string[]) => prisma.deskPositionHolder.createMany({ data: ids.map((positionId) => ({ userId, positionId })) });
+    const P_ = (code: string) => pos.get(code)!.id;
+    await hold(ops.id, P_('COO'));
+    for (const u of [amA, amB]) await hold(u.id, P_('AM'));
+    for (const u of [va1, va2, vaB, vaNone, vaQuiet]) await hold(u.id, P_('VA'));
+    // Roles chosen to differ from the position, so a test can't pass by the role.
+    const dvo = await mkUser('dvo', 'DESK_VA'); await hold(dvo.id, P_('DIRECTOR_VIRTUAL_OPS'));
+    const dao = await mkUser('dao', 'ACCOUNT_MANAGER'); await hold(dao.id, P_('DIRECTOR_AGENCY_OPS'));
+    // The AMs' position reports to the Senior AM's; that line alone opens none of their agencies (supervision of people is Module 50).
+    const senior = await mkUser('senior', 'ACCOUNT_MANAGER'); await hold(senior.id, P_('SENIOR_AM'));
+    const lead = await mkUser('lead', 'DESK_VA'); await hold(lead.id, P_('POD_LEADER'));
+    const amPod = await mkUser('ampod', 'ACCOUNT_MANAGER'); await hold(amPod.id, P_('AM'), P_('POD_LEADER'));
+    const clerk = await mkUser('clerk', 'DESK_ADMIN'); await hold(clerk.id, clerkPos.id);
+    const bare = await mkUser('bare', 'DESK_VA');
+    const switched = await mkUser('switched', 'DESK_VA'); await hold(switched.id, offPos.id);
+    await prisma.podMember.createMany({ data: [lead, amPod, bare, switched].map((u) => ({ podId: podA.id, userId: u.id })) });
+    // amPod: Account Manager (backup) for Beta, and Pod Leader in the pod Alpha authorises.
+    await prisma.agencyDeskAssignment.updateMany({ where: { agencyId: B.id }, data: { backupAmId: amPod.id } });
+    const permsOf = (...codes: string[]) => [...new Set(codes.flatMap((c) => pos.get(c)!.permissions))];
+
     const account = (agencyId: string, name: string) => prisma.insuredAccount.create({ data: { agencyId, name, nameKey: name.toLowerCase() } });
     const a1 = await account(A.id, M.a1), a2 = await account(A.id, M.a2), a3 = await account(A.id, M.a3);
     const bAcc = await account(B.id, M.b), offAcc = await account(Off.id, M.off);
@@ -247,8 +294,15 @@ async function call(route: Route, method: Method, token: string | null, params: 
       { agencyId: B.id, authorId: amB.id, side: 'DESK', body: M.bMsg },
     ] });
 
-    const people = { ops, adminA, csrA, producer, adminB, adminOff, amA, amB, va1, va2, vaB, vaNone, vaQuiet };
+    const people = { ops, adminA, csrA, producer, adminB, adminOff, amA, amB, va1, va2, vaB, vaNone, vaQuiet, dvo, dao, senior, lead, amPod, clerk, bare, switched };
     type Who = keyof typeof people;
+    /** What each person's positions allow, from the definitions above (not from the code under test). No position: their role's default. */
+    const perms: Record<Who, string[]> = {
+      ops: permsOf('COO'), amA: permsOf('AM'), amB: permsOf('AM'), va1: permsOf('VA'), va2: permsOf('VA'), vaB: permsOf('VA'), vaNone: permsOf('VA'), vaQuiet: permsOf('VA'),
+      dvo: permsOf('DIRECTOR_VIRTUAL_OPS'), dao: permsOf('DIRECTOR_AGENCY_OPS'), senior: permsOf('SENIOR_AM'), lead: permsOf('POD_LEADER'), amPod: permsOf('AM', 'POD_LEADER'),
+      clerk: ['usage.view'], bare: [...DEFAULT_POSITIONS.find((d) => d.legacyRole === 'DESK_VA')!.permissions], switched: [],
+      adminA: [], csrA: [], producer: [], adminB: [], adminOff: [],
+    };
     const tok = Object.fromEntries(await Promise.all(Object.entries(people).map(async ([k, u]) => [k, await createSession(u.id)]))) as Record<Who, string>;
     const denials = () => prisma.deskAuditLog.count({ where: { action: 'access.denied', actorId: { in: cleanup.userIds } } });
 
@@ -285,20 +339,63 @@ async function call(route: Route, method: Method, token: string | null, params: 
       }
     }
 
-    section('Operations routes: Operations Managers and the Super Admin only');
+    section('Setup and oversight routes: by what each handler needs and what each person\'s positions allow');
     {
+      // What each handler needs, read from its source, so the test can't drift from the route.
+      const needs = new Map<string, string[] | 'SUPER_ADMIN' | 'UNKNOWN'>();
+      for (const r of routes.filter((x) => x.admin)) {
+        for (const part of readFileSync(r.file, 'utf8').split(/export (?:async function|const) /).slice(1)) {
+          const m = part.match(/^(GET|POST|PUT|PATCH|DELETE)\b/);
+          if (!m) continue;
+          const need = part.match(/deskAdminRequest\(prisma, request, (\[[^\]]*\]|'SUPER_ADMIN')/);
+          needs.set(`${m[1]} ${r.path}`, !need ? 'UNKNOWN' : need[1] === "'SUPER_ADMIN'" ? 'SUPER_ADMIN' : [...need[1].matchAll(/'([a-z_]+\.[a-z_]+)'/g)].map((x) => x[1]));
+        }
+      }
+      const handlerCount = routes.filter((x) => x.admin).reduce((n, r) => n + Object.keys(r.handlers).length, 0);
+      ok(`every setup handler names what it needs (${handlerCount})`, needs.size === handlerCount && [...needs.values()].every((v) => v !== 'UNKNOWN' && (v === 'SUPER_ADMIN' || v.length > 0)),
+        [...needs.entries()].filter(([, v]) => v === 'UNKNOWN'));
+      ok('positions are the Super Admin\'s alone', [...needs.entries()].filter(([k]) => k.includes('/admin/positions')).every(([, v]) => v === 'SUPER_ADMIN'));
+      // Workload and usage cover every agency, so they also need a position that reaches every agency
+      // (a Pod Leader's own pods come in Module 51, a Senior AM's supervised agencies in Module 50).
+      const EVERY_AGENCY = routes.filter((r) => /everyAgency: true/.test(readFileSync(r.file, 'utf8'))).map((r) => r.path);
+      ok('workload and usage are the pages that need every agency', EVERY_AGENCY.sort().join() === ['/api/desk/usage', '/api/desk/usage/[agencyId]', '/api/desk/workload', '/api/desk/workload/bulk'].join(), EVERY_AGENCY);
+      const reachesAll: Record<string, boolean> = {};
+      for (const w of Object.keys(perms)) reachesAll[w] = ['ops', 'dvo', 'dao', 'clerk'].includes(w);
+      let byReach = 0;
+      const everyone: Who[] = ['adminA', 'csrA', 'producer', 'ops', 'amA', 'va1', 'dvo', 'dao', 'senior', 'lead', 'amPod', 'clerk', 'bare', 'switched'];
       const before = await denials();
       const wrong: string[] = [];
-      const tries = (['adminA', 'csrA', 'producer', 'amA', 'va1'] as Who[]).flatMap((who) => routes.filter((x) => x.admin).flatMap((r) => (Object.keys(r.handlers) as Method[]).map((m) => ({ who, r, m }))));
-      const calls = tries.length;
-      await pool(tries, async ({ who, r, m }) => {
-        const a = await call(r, m, tok[who], { id: A.id, agencyId: A.id }, { name: 'x' });
-        if (a.status !== 403) wrong.push(`${who} ${m} ${r.path} ${a.status}`);
+      let refused = 0, admitted = 0;
+      const tries = everyone.flatMap((w) => routes.filter((x) => x.admin).flatMap((r) => (Object.keys(r.handlers) as Method[]).map((m) => ({ w, r, m }))));
+      await pool(tries, async ({ w, r, m }) => {
+        const need = needs.get(`${m} ${r.path}`)!;
+        const permitted = Array.isArray(need) && need.some((p) => perms[w].includes(p));
+        if (permitted && EVERY_AGENCY.includes(r.path) && !reachesAll[w]) {
+          byReach += 1;
+          const a = await call(r, m, tok[w], { id: A.id, agencyId: A.id }, { name: 'x' });
+          if (a.status !== 403) wrong.push(`${w} ${m} ${r.path}: ${a.status}, expected 403 (needs every agency)`);
+          return;
+        }
+        if (!permitted) {
+          refused += 1;
+          const a = await call(r, m, tok[w], { id: A.id, agencyId: A.id }, { name: 'x' });
+          if (a.status !== 403) wrong.push(`${w} ${m} ${r.path}: ${a.status}, expected 403`);
+        } else if (m === 'GET') {
+          // Changes by those allowed are tested in each module's own suite; here, reading is enough.
+          admitted += 1;
+          const a = await call(r, 'GET', tok[w], { id: A.id, agencyId: A.id });
+          if (a.status === 401 || a.status === 403 || a.status >= 500) wrong.push(`${w} GET ${r.path}: ${a.status}, expected in`);
+        }
       });
-      ok('agency admins, CSRs, producers, Account Managers and VAs: 403 from every handler', wrong.length === 0, wrong);
-      ok('each refusal logged', (await denials()) - before === calls, { calls, logged: (await denials()) - before });
-      const okGet = await call(R('/api/desk/usage'), 'GET', tok.ops);
-      ok('…while the Operations Manager gets in', okGet.status === 200);
+      ok(`each person in exactly where their positions allow (${admitted} reads let in), refused everywhere else (${refused + byReach} calls, 403)`, wrong.length === 0, wrong);
+      ok(`…including workload and usage for those with the permission who don't reach every agency (${byReach} calls)`, byReach > 0);
+      ok('each refusal logged', (await denials()) - before === refused + byReach, { refused, byReach, logged: (await denials()) - before });
+      const holdsPositions = (w: Who) => tries.some((t) => t.w === w && t.m === 'GET' && Array.isArray(needs.get(`GET ${t.r.path}`)) && (needs.get(`GET ${t.r.path}`) as string[]).some((p) => perms[w].includes(p))
+        && (!EVERY_AGENCY.includes(t.r.path) || reachesAll[w]));
+      ok('the COO, the Directors and the clerk get in somewhere; agency users, VAs, Account Managers and a switched-off position nowhere',
+        (['ops', 'dvo', 'dao', 'clerk'] as Who[]).every(holdsPositions) && !(['adminA', 'csrA', 'producer', 'va1', 'amA', 'bare', 'switched'] as Who[]).some(holdsPositions));
+      ok('a role decides nothing: the clerk has the Operations Manager role, and only usage', (await call(R('/api/desk/usage'), 'GET', tok.clerk)).status === 200
+        && (await call(R('/api/desk/workload'), 'GET', tok.clerk)).status === 403 && (await call(R('/api/desk/admin/staff'), 'GET', tok.clerk)).status === 403);
     }
 
     // ── What everyone can ask for, searched for what they mustn't see ──
@@ -337,6 +434,15 @@ async function call(route: Route, method: Method, token: string | null, params: 
       { who: 'va2', label: 'VA in the pod, no grant, not named', never: [...B_ALL, M.a3, M.aMsg, M.finDoc, M.persDoc, M.restricted, M.restrictReason, M.doneByVa1, M.goneDoc], must: [M.ta1, M.intNote, M.intDoc] },
       { who: 'vaB', label: 'VA working only the other agency', never: A_ALL, must: [M.tb] },
       { who: 'vaNone', label: 'VA in a pod no agency authorised', never: [...A_ALL, ...B_ALL], must: [] },
+      // Module 49: the client's other positions, combined and unusual ones.
+      { who: 'dvo', label: 'Director of Virtual Operations (every agency, through requests)', never: [M.finDoc, M.persDoc, M.restricted, M.restrictReason, M.aMsg, M.bMsg, M.a3, M.goneDoc], must: [M.ta1, M.ta2, M.tb, M.intNote, M.intDoc, M.subtask, M.a1, M.b] },
+      { who: 'dao', label: 'Director of Agency Operations', never: [M.goneDoc], must: [M.ta1, M.tb, M.a3, M.finDoc, M.persDoc, M.restricted, M.restrictReason, M.aMsg, M.bMsg, M.policyA2] },
+      { who: 'senior', label: 'Senior AM above the AMs\' position, supervising no one yet', never: [...A_ALL, ...B_ALL], must: [] },
+      { who: 'lead', label: 'Pod Leader in the authorised pod', never: [...B_ALL, M.a3, M.aMsg, M.finDoc, M.persDoc, M.restricted, M.restrictReason, M.doneByVa1, M.goneDoc], must: [M.ta1, M.ta2, M.intNote, M.intDoc, M.subtask] },
+      { who: 'amPod', label: 'AM for Beta who is also a Pod Leader for Alpha', never: [M.a3, M.aMsg, M.finDoc, M.persDoc, M.restricted, M.restrictReason, M.doneByVa1, M.goneDoc], must: [M.tb, M.b, M.bMsg, M.bNote, M.bDoc, M.ta1, M.intNote, M.intDoc] },
+      { who: 'clerk', label: 'a position for usage only (every agency, no request permission)', never: [...A_ALL, ...B_ALL], must: [] },
+      { who: 'bare', label: 'no position yet: their role\'s default (VA)', never: [...B_ALL, M.a3, M.aMsg, M.finDoc, M.persDoc, M.restricted, M.restrictReason, M.doneByVa1], must: [M.ta1, M.intNote] },
+      { who: 'switched', label: 'only position switched off', never: [...A_ALL, ...B_ALL], must: [] },
     ];
     const swept = new Map<Who, Awaited<ReturnType<typeof sweep>>>();
     section('Every page each person can ask for');
@@ -362,7 +468,6 @@ async function call(route: Route, method: Method, token: string | null, params: 
     }
 
     // ── Out of reach answers like nothing there, and changes nothing ──
-    section('Out of reach is the same as not there, and changes nothing');
     const snapshot = async () => JSON.stringify(await Promise.all([
       prisma.task.findMany({ where: { agencyId: { in: [A.id, B.id] } }, orderBy: { id: 'asc' } }),
       prisma.taskEvent.count({ where: { agencyId: { in: [A.id, B.id] } } }),
@@ -373,6 +478,67 @@ async function call(route: Route, method: Method, token: string | null, params: 
       prisma.deskMessage.count({ where: { agencyId: { in: [A.id, B.id] } } }),
       prisma.user.findMany({ where: { id: { in: cleanup.userIds } }, select: { id: true, role: true, bookAccess: true, isActive: true, agencyId: true }, orderBy: { id: 'asc' } }),
     ]));
+
+    section('Two positions at once: each agency by the position that reaches it');
+    {
+      const detail = async (w: Who, id: string) => JSON.parse((await call(R('/api/desk/tasks/[id]'), 'GET', tok[w], { id })).text) as Json;
+      const own = await detail('amPod', tb.id), viaPod = await detail('amPod', ta1.id);
+      ok('in the agency they manage: what the Account Manager position allows', own.permissions?.restrict === true && own.permissions?.review === true && 'restrictedToUserIds' in own, own.permissions);
+      ok('in the agency reached through their pod: only what the Pod Leader position allows', viaPod.permissions?.restrict === false && viaPod.permissions?.review === false
+        && viaPod.permissions?.assign === true && viaPod.permissions?.escalate === true && !('restrictedToUserIds' in viaPod) && !('billing' in viaPod), viaPod.permissions);
+      const reqs = JSON.parse((await call(R('/api/desk/tasks'), 'GET', tok.amPod, {}, undefined, 'pageSize=100')).text) as Json;
+      const req = (id: string) => (reqs.rows ?? []).find((r: Json) => r.id === id);
+      ok('…the same in the request list: no restriction or billing on the pod agency\'s request, both on their own agency\'s',
+        !!req(ta1.id) && !('restrictedToUserIds' in req(ta1.id)) && !('billing' in req(ta1.id)) && !!req(tb.id) && 'restrictedToUserIds' in req(tb.id) && 'billing' in req(tb.id),
+        { a: req(ta1.id) && Object.keys(req(ta1.id)), b: req(tb.id) && Object.keys(req(tb.id)) });
+      ok('…no Financial or Personal file there, as for any Pod Leader', !JSON.stringify(viaPod).includes(M.finDoc) && !JSON.stringify(viaPod).includes(M.persDoc) && JSON.stringify(viaPod).includes(M.intDoc));
+      const before = await snapshot();
+      const tries = await Promise.all([
+        call(R('/api/desk/tasks/[id]/restriction'), 'POST', tok.amPod, { id: ta2.id }, { userIds: [va1.id], reason: 'x' }),
+        call(R('/api/desk/tasks/[id]/review'), 'POST', tok.amPod, { id: ta2.id }, { complexity: 'COMPLEX' }),
+        call(R('/api/desk/insureds/[id]'), 'PATCH', tok.amPod, { id: a1.id }, { city: 'Elsewhere' }),
+        call(R('/api/desk/insureds/[id]/policies'), 'POST', tok.amPod, { id: a1.id }, { policyNumber: `${TAG}-viapod` }),
+        call(R('/api/desk/tasks'), 'POST', tok.amPod, {}, { type: 'OTHER', title: `${TAG} via pod`, agencyId: A.id }),
+        call(R('/api/desk/insureds'), 'POST', tok.amPod, {}, { name: `${TAG} via pod`, agencyId: A.id }),
+      ]);
+      ok('there they can\'t restrict, reclassify, edit an account, add a policy, file a request or add an account',
+        tries.slice(0, 4).every((r) => r.status === 403) && tries.slice(4).every((r) => r.status === 403 || r.status === 404), tries.map((r) => r.status));
+      ok('…and nothing changed', (await snapshot()) === before);
+      const accA = JSON.parse((await call(R('/api/desk/insureds/[id]'), 'GET', tok.amPod, { id: a1.id })).text) as Json;
+      const accB = JSON.parse((await call(R('/api/desk/insureds/[id]'), 'GET', tok.amPod, { id: bAcc.id })).text) as Json;
+      ok('an account reached through the pod: no premiums, notes or who is assigned, and not editable; their own agency\'s: all of it',
+        !('assignments' in accA) && !JSON.stringify(accA.policies ?? []).includes('premiumCents') && accA.can?.edit === false
+        && 'assignments' in accB && JSON.stringify(accB.policies).includes('premiumCents') && accB.can?.edit === true, { a: accA.can, b: accB.can });
+      const list = JSON.parse((await call(R('/api/desk/insureds'), 'GET', tok.amPod)).text) as Json;
+      const row = (id: string) => list.insureds.find((r: Json) => r.id === id);
+      ok('…the same in the account list', row(a1.id) && !('assignments' in row(a1.id)) && row(bAcc.id) && 'assignments' in row(bAcc.id));
+      const filtered = JSON.parse((await call(R('/api/desk/insureds'), 'GET', tok.amPod, {}, undefined, `assignedTo=${producer.id}`)).text) as Json;
+      ok('…and the list can\'t be filtered by who is assigned to accounts they reach only through the pod', filtered.insureds.length === 0, filtered.insureds.map((r: Json) => r.name));
+      await prisma.deskStaffPermission.create({ data: { userId: amPod.id, allowedSensitivities: ['FINANCIAL'] } });
+      const granted = JSON.stringify(await detail('amPod', ta1.id));
+      ok('an individual Financial grant applies through the pod, as for any Pod Leader; Personal still not', granted.includes(M.finDoc) && !granted.includes(M.persDoc));
+      await prisma.deskStaffPermission.deleteMany({ where: { userId: amPod.id } });
+      const ownEdit = await call(R('/api/desk/insureds/[id]'), 'PATCH', tok.amPod, { id: bAcc.id }, { city: 'Harbourside' });
+      ok('in their own agency they edit the account', ownEdit.status === 200, ownEdit.status);
+      ok('their messages: their own agency\'s conversation, not the pod agency\'s', (await call(R('/api/desk/messages/[agencyId]'), 'GET', tok.amPod, { agencyId: B.id })).status === 200
+        && (await call(R('/api/desk/messages/[agencyId]'), 'GET', tok.amPod, { agencyId: A.id })).status === 404);
+    }
+
+    section('A position for oversight only, a reporting line, no position');
+    {
+      const tasks = JSON.parse((await call(R('/api/desk/tasks'), 'GET', tok.clerk)).text) as Json;
+      ok('usage only: no requests in the list, none by id, no accounts', tasks.total === 0 && (await call(R('/api/desk/tasks/[id]'), 'GET', tok.clerk, { id: ta1.id })).status === 404
+        && (JSON.parse((await call(R('/api/desk/insureds'), 'GET', tok.clerk)).text) as Json).total === 0, tasks.total);
+      ok('…but the usage page opens', (await call(R('/api/desk/usage'), 'GET', tok.clerk)).status === 200);
+      ok('a Senior AM opens none of the AM\'s agency, though the AMs\' position reports to theirs', (await call(R('/api/desk/tasks/[id]'), 'GET', tok.senior, { id: ta1.id })).status === 404
+        && (await call(R('/api/desk/insureds/[id]'), 'GET', tok.senior, { id: a1.id })).status === 404);
+      ok('the Director of Virtual Operations reports to the COO, and still can\'t open the audit log or a Financial file', (await call(R('/api/desk/audit'), 'GET', tok.dvo)).status === 403
+        && !(await call(R('/api/desk/tasks/[id]'), 'GET', tok.dvo, { id: ta1.id })).text.includes(M.finDoc));
+      ok('no position yet: their role\'s default works the pod; a switched-off position: nothing', (await call(R('/api/desk/tasks/[id]'), 'GET', tok.bare, { id: ta1.id })).status === 200
+        && (await call(R('/api/desk/tasks'), 'GET', tok.switched)).status === 403);
+    }
+
+    section('Out of reach is the same as not there, and changes nothing');
     const attacks: { path: string; method: Method; param: string; body?: unknown }[] = [
       { path: '/api/desk/tasks/[id]', method: 'GET', param: 'id' },
       { path: '/api/desk/tasks/[id]/status', method: 'POST', param: 'id', body: { status: 'CANCELLED', reason: 'x' } },
@@ -521,6 +687,8 @@ async function call(route: Route, method: Method, token: string | null, params: 
     const r2Keys = ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET'];
     const r2Before = Object.fromEntries(r2Keys.map((k) => [k, process.env[k]]));
     if (!r2Keys.every((k) => process.env[k]?.trim())) Object.assign(process.env, { R2_ACCOUNT_ID: 'testaccount', R2_ACCESS_KEY_ID: 'testkey', R2_SECRET_ACCESS_KEY: 'testsecret', R2_BUCKET: process.env.R2_BUCKET?.trim() || 'testbucket' });
+    // By now Alpha authorises named VAs only (above); the whole pod again, so the Pod Leader rows test positions, not that change.
+    const podAgain = await prisma.agencyPodAccess.create({ data: { agencyId: A.id, podId: podA.id } });
     try {
       const open = async (who: Who, id: string) => (await call(R('/api/desk/documents/[id]'), 'GET', tok[who], { id })).status;
       const table: [string, string, Partial<Record<Who, number>>][] = [
@@ -529,7 +697,11 @@ async function call(route: Route, method: Method, token: string | null, params: 
         ['internal, Financial', dFin.id, { ops: 302, amA: 302, va1: 302, va2: 404, adminA: 404, producer: 404 }],
         ['shared, Personal', dPers.id, { adminA: 302, amA: 302, va1: 404, va2: 404, adminB: 404 }],
         ['removed', dGone.id, { ops: 404, amA: 404, adminA: 404, va1: 404 }],
-        ['the other agency\'s', dB.id, { adminB: 302, vaB: 302, adminA: 404, amA: 404, va1: 404 }],
+        ['the other agency\'s', dB.id, { adminB: 302, vaB: 302, adminA: 404, amA: 404, va1: 404, amPod: 302 }],
+        // Module 49: by position, and by the position that reaches the agency.
+        ['internal, general, by position', dInt.id, { dvo: 302, dao: 302, lead: 302, amPod: 302, bare: 302, clerk: 404, senior: 404, switched: 403 }],
+        ['internal, Financial, by position', dFin.id, { dao: 302, dvo: 404, lead: 404, amPod: 404, bare: 404, clerk: 404 }],
+        ['shared, Personal, by position', dPers.id, { dao: 302, dvo: 404, lead: 404, amPod: 404 }],
       ];
       for (const [label, id, expect] of table) {
         const got: Record<string, number> = {};
@@ -543,6 +715,7 @@ async function call(route: Route, method: Method, token: string | null, params: 
       const redirect = await call(R('/api/desk/documents/[id]'), 'GET', tok.adminA, { id: dShared.id });
       ok('the link to an opened file is never cached', /no-store/.test(redirect.headers.get('cache-control') ?? ''));
     } finally {
+      await prisma.agencyPodAccess.delete({ where: { id: podAgain.id } });
       for (const k of r2Keys) { if (r2Before[k] === undefined) delete process.env[k]; else process.env[k] = r2Before[k]; }
     }
 

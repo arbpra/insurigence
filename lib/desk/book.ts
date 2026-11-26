@@ -17,7 +17,7 @@
  */
 import { Prisma, PolicyStatus, InsuredAssignmentRole, type InsuredStatus, type PrismaClient, type UserRole } from '@prisma/client';
 import { AGENCY_ROLES, canBeAssignedToInsured, defaultAssignmentRole, roleLabel } from '@/lib/roles';
-import { can, isStaffScope, canManageAgencyAccess, DeskAccessError, documentWhere, getInsuredForScope, getPolicyForScope, insuredWhere, isObjectId, policyWhere, scopeAgencyIds, taskWhere, type DeskScope, type GuardContext,  } from './access';
+import { can, isStaffScope, canManageAgencyAccess, DeskAccessError, documentWhere, getInsuredForScope, getPolicyForScope, insuredWhere, isObjectId, policyWhere, scopeAgencyIds, scopeIn, taskWhere, type DeskScope, type GuardContext } from './access';
 import { ACCOUNT_NAME_MAX, CONTACT_EMAIL_MAX, INSURED_TEXT, type TextRule } from './account-form';
 import { recordAudit, type AuditAction } from './audit';
 import { insuredNameKey } from './insureds';
@@ -170,6 +170,7 @@ const personName = (u: { firstName: string | null; lastName: string | null; emai
 type PolicyRow = Awaited<ReturnType<Db['policy']['findFirstOrThrow']>>;
 
 function policyView(p: PolicyRow, scope: DeskScope) {
+  scope = scopeIn(scope, p.agencyId);
   const dateOnly = (d: Date | null) => d?.toISOString().slice(0, 10) ?? null;
   return {
     id: p.id, version: p.updatedAt.toISOString(), insuredId: p.insuredId, policyNumber: p.policyNumber, lineOfBusiness: p.lineOfBusiness, carrierName: p.carrierName,
@@ -203,13 +204,15 @@ export function insuredListWhere(scope: DeskScope, opts: InsuredListOptions): Pr
   // A malformed id would be a database error, and leaving the filter off would widen the list.
   const person = (id: string) => (isObjectId(id) ? id : null);
   const staffFilters: Prisma.InsuredAccountWhereInput[] = [];
+  // Who is assigned to an account isn't shown for accounts reached only through a pod, so it can't be filtered on either.
+  const ownBooks: Prisma.InsuredAccountWhereInput = scope.kind === 'ACCOUNT_MANAGER' && scope.grants.length ? { agencyId: { in: scope.agencyIds } } : {};
   if (opts.assignedTo !== undefined) {
     const id = person(opts.assignedTo);
-    staffFilters.push(id && !throughWork(scope) ? { assignments: { some: { userId: id } } } : { id: { in: [] } });
+    staffFilters.push(id && !throughWork(scope) ? { ...ownBooks, assignments: { some: { userId: id } } } : { id: { in: [] } });
   }
   if (opts.notAssignedTo !== undefined) {
     const id = person(opts.notAssignedTo);
-    staffFilters.push(id && !throughWork(scope) ? { assignments: { none: { userId: id } } } : { id: { in: [] } });
+    staffFilters.push(id && !throughWork(scope) ? { ...ownBooks, assignments: { none: { userId: id } } } : { id: { in: [] } });
   }
   return {
     AND: [
@@ -264,7 +267,7 @@ export async function listInsureds(db: Db, scope: DeskScope, opts: InsuredListOp
       ...r,
       policyCount: policies.length,
       // A VA sees requests only through their own work, and has no need of the staff list.
-      ...(isVa ? {} : {
+      ...(isVa || throughWork(scopeIn(scope, r.agencyId)) ? {} : {
         openTasks: openBy.get(r.id) ?? 0,
         assignments: assignments.map((a) => ({ userId: a.user.id, name: personName(a.user), role: a.role })),
       }),
@@ -275,6 +278,7 @@ export async function listInsureds(db: Db, scope: DeskScope, opts: InsuredListOp
 /** The account as this user may see it. The caller logs the read. */
 async function readInsured(db: Db, scope: DeskScope, insuredId: string, ctx: GuardContext) {
   const row = await getInsuredForScope(db, scope, insuredId, ctx);
+  scope = scopeIn(scope, row.agencyId);
   const isVa = throughWork(scope);
   const [policies, assignments, openTasks] = await Promise.all([
     db.policy.findMany({ where: { AND: [{ insuredId: row.id }, policyWhere(scope)] }, orderBy: [{ expirationDate: 'asc' }, { id: 'asc' }] }),
@@ -312,6 +316,7 @@ export async function getInsured(db: Db, scope: DeskScope, insuredId: string, ct
  */
 export async function getInsuredOverview(db: Db, scope: DeskScope, insuredId: string, ctx: GuardContext = {}) {
   const account = await readInsured(db, scope, insuredId, ctx);
+  scope = scopeIn(scope, account.agencyId);
   const tasks: Prisma.TaskWhereInput = { AND: [{ insuredId: account.id }, taskWhere(scope), throughWork(scope) ? OPEN_TASK : OPEN_REQUEST] };
   const docs: Prisma.TaskDocumentWhereInput = { AND: [{ task: { is: { insuredId: account.id } } }, documentWhere(scope)] };
   const [taskRows, taskTotal, docRows, docTotal] = await Promise.all([
@@ -353,6 +358,7 @@ async function targetAgency(db: Db, scope: DeskScope, requested: unknown, ctx: G
   if (!isObjectId(requested)) throw bad('Choose an agency.');
   const allowed = scopeAgencyIds(scope);
   if (allowed !== 'ALL' && !allowed.includes(requested)) throw new DeskAccessError(404, 'Not found');
+  if (!canEdit(scopeIn(scope, requested))) return forbid(db, scope, ctx, 'InsuredAccount', 'create', requested, 'create', 'Only agency users and Account Managers add accounts.');
   const agency = await db.agency.findUnique({ where: { id: requested }, select: { deskEnabled: true } });
   if (!agency?.deskEnabled) throw new DeskAccessError(404, 'Not found');
   return requested;
@@ -392,7 +398,7 @@ export async function createInsured(db: Db, scope: DeskScope, input: Record<stri
  */
 export async function updateInsured(db: Db, scope: DeskScope, insuredId: string, input: Record<string, unknown>, ctx: GuardContext = {}): Promise<void> {
   const current = await getInsuredForScope(db, scope, insuredId, ctx);
-  if (!canEdit(scope)) return forbid(db, scope, ctx, 'InsuredAccount', current.id, current.agencyId, 'update', 'VAs cannot change accounts.');
+  if (!canEdit(scopeIn(scope, current.agencyId))) return forbid(db, scope, ctx, 'InsuredAccount', current.id, current.agencyId, 'update', 'VAs cannot change accounts.');
   if (input.version !== undefined && input.version !== current.updatedAt.toISOString()) throw conflict(CHANGED_ELSEWHERE, 'CHANGED_ELSEWHERE');
 
   const fields: Prisma.InsuredAccountUpdateManyMutationInput = insuredFields(input);
@@ -434,7 +440,7 @@ export async function updateInsured(db: Db, scope: DeskScope, insuredId: string,
 
 export async function addPolicy(db: Db, scope: DeskScope, insuredId: string, input: Record<string, unknown>, ctx: GuardContext = {}): Promise<{ id: string }> {
   const insured = await getInsuredForScope(db, scope, insuredId, ctx, { id: true, agencyId: true });
-  if (!canEdit(scope)) return forbid(db, scope, ctx, 'Policy', insured.id, insured.agencyId, 'create', 'VAs cannot change policies.');
+  if (!canEdit(scopeIn(scope, insured.agencyId))) return forbid(db, scope, ctx, 'Policy', insured.id, insured.agencyId, 'create', 'VAs cannot change policies.');
   const data = policyFields(input);
   assertDates(data.effectiveDate as Date | null | undefined, data.expirationDate as Date | null | undefined);
   const number = data.policyNumber as string | null | undefined;
@@ -456,7 +462,7 @@ export async function addPolicy(db: Db, scope: DeskScope, insuredId: string, inp
 /** Saves the fields present. Open requests keep the due dates they already have. */
 export async function updatePolicy(db: Db, scope: DeskScope, policyId: string, input: Record<string, unknown>, ctx: GuardContext = {}): Promise<void> {
   const current = await getPolicyForScope(db, scope, policyId, ctx);
-  if (!canEdit(scope)) return forbid(db, scope, ctx, 'Policy', current.id, current.agencyId, 'update', 'VAs cannot change policies.');
+  if (!canEdit(scopeIn(scope, current.agencyId))) return forbid(db, scope, ctx, 'Policy', current.id, current.agencyId, 'update', 'VAs cannot change policies.');
   if (input.version !== undefined && input.version !== current.updatedAt.toISOString()) throw conflict(CHANGED_ELSEWHERE, 'CHANGED_ELSEWHERE');
   const data = policyFields(input);
   const nextEffective = data.effectiveDate !== undefined ? data.effectiveDate as Date | null : current.effectiveDate;
@@ -485,7 +491,7 @@ export async function updatePolicy(db: Db, scope: DeskScope, policyId: string, i
 /** For a policy entered by mistake. One with requests stays, and is marked cancelled or expired instead. */
 export async function removePolicy(db: Db, scope: DeskScope, policyId: string, ctx: GuardContext = {}): Promise<void> {
   const current = await getPolicyForScope(db, scope, policyId, ctx);
-  if (!canEdit(scope)) return forbid(db, scope, ctx, 'Policy', current.id, current.agencyId, 'remove', 'VAs cannot change policies.');
+  if (!canEdit(scopeIn(scope, current.agencyId))) return forbid(db, scope, ctx, 'Policy', current.id, current.agencyId, 'remove', 'VAs cannot change policies.');
   const used = await db.task.count({ where: { policyId: current.id } });
   if (used) throw conflict(`This policy has ${used} request${used === 1 ? '' : 's'} on record, so it can't be removed. Change its status instead.`);
   await inTransaction(db, async (tx) => {

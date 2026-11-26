@@ -10,7 +10,7 @@ type Context = { params: Promise<{ agencyId: string }> };
 export async function GET(request: NextRequest, { params }: Context) {
   try {
     const { agencyId } = await params;
-    const { scope, ctx } = await deskAdminRequest(prisma, request, ['usage.view'], agencyId);
+    const { scope, ctx } = await deskAdminRequest(prisma, request, ['usage.view'], agencyId, { everyAgency: true });
     return NextResponse.json(await getAgencyUsage(prisma, scope, agencyId, { period: request.nextUrl.searchParams.get('period') }, ctx));
   } catch (err) {
     return deskAccessResponse(err);

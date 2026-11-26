@@ -27,16 +27,23 @@ export function meetsNeed(scope: DeskScope, need: AdminNeed): boolean {
   return isStaffScope(scope) && need.some((p) => can(scope, p));
 }
 
-export async function deskAdminRequest(db: PrismaClient, request: Request, need: AdminNeed, agencyId?: string): Promise<{ scope: DeskScope; ctx: GuardContext }> {
+/**
+ * `everyAgency`: the page covers every agency (workload, usage), so it also
+ * needs a position that reaches every agency. Refused here, so the refusal is
+ * logged like any other (Module 49).
+ */
+export async function deskAdminRequest(
+  db: PrismaClient, request: Request, need: AdminNeed, agencyId?: string, opts: { everyAgency?: boolean } = {}
+): Promise<{ scope: DeskScope; ctx: GuardContext }> {
   const user = await getSessionFromRequest(request);
   if (!user) throw new DeskAccessError(401, 'Unauthorized');
   const ctx = auditRequestContext(request);
   const scope = await resolveDeskScope(db, user.id);
-  if (!meetsNeed(scope, need)) {
+  if (!meetsNeed(scope, need) || (opts.everyAgency && scope.kind !== 'PLATFORM')) {
     try {
       await recordAudit(db, {
         actor: { id: user.id, role: user.role }, action: 'access.denied', entityType: 'DeskSetup',
-        metadata: { scope: scope.kind, needs: need, path: new URL(request.url).pathname, method: request.method, requestedAgencyId: agencyId?.slice(0, 64) ?? null },
+        metadata: { scope: scope.kind, needs: need, ...(opts.everyAgency ? { everyAgency: true } : {}), path: new URL(request.url).pathname, method: request.method, requestedAgencyId: agencyId?.slice(0, 64) ?? null },
         ip: ctx.ip, userAgent: ctx.userAgent,
       });
     } catch (err) {

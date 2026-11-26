@@ -2585,6 +2585,38 @@ Module 1–44 suites re-run: all 43 earlier Desk suites passed (3,688 checks; 3,
 - Full regression: **49 suites, 4,021 checks, all passing.**
 - The live database was checked afterwards: no test records left.
 
+**Module 49 — Permission suite rebuilt for positions (✅ complete, 26 Nov 2026)**
+
+**Built:**
+
+- **`script/verify-desk-permissions.ts` now tests positions, not roles.** It holds test copies of the seven default positions with their reporting lines, plus a position for usage only and a switched-off one. The people tested are the earlier ones and eight new ones: both Directors, a Senior AM, a Pod Leader, an Account Manager who is also a Pod Leader, a clerk with the Operations Manager role but only `usage.view`, staff with no position, and staff whose only position is switched off.
+- **The route matrix is read from the code.** What each setup and oversight handler needs is read from its source. Each person must get in exactly where their permissions allow, and be refused (403, logged) everywhere else: 444 calls.
+- **New sections:** two positions at once (each agency by the position that reaches it); oversight only, reporting lines, no position. The page sweep and the documents table cover the new people.
+
+**Gaps found by the new tests, all fixed:**
+
+1. **An Account Manager who is also a Pod Leader** had their Account Manager permissions and document categories in agencies they reach only through the pod: they could restrict and reclassify requests, edit accounts, add policies, file requests, and see premiums, notes, assignments and Financial or Personal files there. Now each agency is governed by the position that reaches it (`scopeIn`): there, only the Pod Leader's permissions and categories apply. This follows the client's rule that pod membership doesn't grant access to every agency.
+2. **A position with no request permission could read every request** in its reach (the usage-only position saw all requests). Reading requests now needs a request permission. Workload and turnaround counts still include them.
+3. **Workload and usage refusals for lack of reach weren't logged.** These pages cover every agency; the refusal now happens in the guard, so it is logged like any other.
+
+**Design decisions and their consequences:**
+
+- **Workload and usage need a position that reaches every agency.** A Senior AM or a Pod Leader with the permission is refused until Modules 50 and 51 give them views of their own agencies and pods.
+- **An individual Financial grant still applies through the pod,** as for any Pod Leader.
+
+**Not done or limited:**
+
+- Supervised agencies (50) and a Pod Leader's own workload view (51) are not tested here yet; they come with those modules.
+- No database change, so deploying 49 needs no `db:push` or seed.
+
+**Verified:**
+
+- `tsc --noEmit` exit 0.
+- **172 tests passed** (was 123).
+- **14 deliberate faults** in the fixes. The first run caught 12. One missed fault was the request list showing Account Manager details on rows from agencies reached through the pod: a check was added and the fault is now caught. The other was equivalent (the workspace's actions are only built after the scope has already been narrowed), so no test can catch it. All files were restored.
+- Full regression: **49 suites, 4,049 checks, all passing.**
+- The live database was checked afterwards. Today's runs left nothing, but three bare agencies from an interrupted `verify-desk-insureds` run on 24 November (`m20test-1795544784102`) were found, with nothing tied to them; they were saved and removed. No test records are left.
+
 ### Phase 3 — Task System Core (17 h)
 
 | # | Module | Hours | Change | Status |
@@ -2632,7 +2664,7 @@ From the client's feedback and answers of 24 November 2026 (Section 11). One par
 |---|---|---:|---|---|
 | 47 | Configurable roles and permissions: a permission catalogue and editable positions in the Super Admin portal (Super Admin / CEO, COO, Director of Virtual Operations, Director of Agency Operations, Senior Account Manager, Account Manager, Pod Leader, VA); one person can hold several positions; existing roles migrated (Operations Manager → COO) | 6.0 | ✏️ | ✅ Done |
 | 48 | Access layer on permissions: every Desk check moves from fixed roles to permissions. Agency data and sensitive documents stay governed by agency authorisation, pods and individual grants, never by position or reporting line | 5.0 | ✏️ Q4 | ✅ Done |
-| 49 | Permission suite rebuilt for positions, combined positions and reporting lines | 3.0 | ✏️ | ⬜ To do |
+| 49 | Permission suite rebuilt for positions, combined positions and reporting lines | 3.0 | ✏️ | ✅ Done |
 | 50 | Reporting lines and coverage: who reports to whom; Senior AMs see the agencies, accounts and requests of the AMs they supervise; covering an absent AM; reassigning agencies between authorised AMs | 5.0 | 🆕 | ⬜ To do |
 | 51 | Virtual Operations tools: the Director creates and manages pods and Pod Leaders and assigns VAs within authorised agencies; Pod Leaders assign, reassign and escalate in their pods | 4.0 | 🆕 | ⬜ To do |
 | 52 | Dashboards: Director of Virtual Operations (workload, productivity, QA, SLA, capacity; allowances read-only, no prices), Director of Agency Operations (agencies, AM performance, utilization, approvals), COO (both) | 5.0 | 🆕 | ⬜ To do |

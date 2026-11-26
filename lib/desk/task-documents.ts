@@ -12,7 +12,7 @@
  * open is a short-lived link minted after the check and the log entry.
  */
 import { Prisma, DocumentSensitivity, type PrismaClient, type TaskDocument } from '@prisma/client';
-import { isStaffScope, can, DeskAccessError, documentWhere, getDocumentForScope, getTaskForScope, type DeskScope, type GuardContext } from './access';
+import { isStaffScope, can, DeskAccessError, documentWhere, getDocumentForScope, getTaskForScope, scopeIn, type DeskScope, type GuardContext } from './access';
 import { recordAudit } from './audit';
 import { MAX_DOCUMENTS_PER_TASK, checkDocument, viewableInline } from './document-files';
 import { SENSITIVITY_LABELS } from './need-to-know';
@@ -82,6 +82,7 @@ function mayRemove(scope: DeskScope, doc: Pick<TaskDocument, 'uploadedById'>, up
 }
 
 function documentView(scope: DeskScope, doc: TaskDocument, uploaders: Map<string, Uploader>, taskClosed: boolean) {
+  scope = scopeIn(scope, doc.agencyId);
   const uploader = doc.uploadedById ? uploaders.get(doc.uploadedById) : undefined;
   // Agencies see their colleagues by name and the Desk team as a team (as in the history).
   const addedBy = scope.kind === 'AGENCY'
@@ -149,6 +150,7 @@ export async function documentTarget(db: Db, scope: DeskScope, taskId: string, c
 
 export async function addTaskDocument(db: Db, scope: DeskScope, taskId: string, input: NewDocument, ctx: GuardContext = {}, store: DocumentStore = r2DocumentStore) {
   const task = await documentTarget(db, scope, taskId, ctx);
+  scope = scopeIn(scope, task.agencyId);
 
   if (typeof input.sensitivity !== 'string' || !(Object.values(DocumentSensitivity) as string[]).includes(input.sensitivity)) {
     throw new DeskAccessError(400, 'Choose what kind of document this is.', 'NO_SENSITIVITY');
@@ -231,6 +233,7 @@ export async function openTaskDocument(db: Db, scope: DeskScope, documentId: str
  */
 export async function removeTaskDocument(db: Db, scope: DeskScope, documentId: string, ctx: GuardContext = {}, store: DocumentStore = r2DocumentStore) {
   const doc = await getDocumentForScope(db, scope, documentId, ctx);
+  scope = scopeIn(scope, doc.agencyId);
   const task = await db.task.findUniqueOrThrow({ where: { id: doc.taskId }, select: { id: true, status: true, reference: true } });
   const uploaders = await uploadersOf(db, [doc]);
   if (!mayRemove(scope, doc, doc.uploadedById ? uploaders.get(doc.uploadedById) : undefined, isClosed(task.status))) {

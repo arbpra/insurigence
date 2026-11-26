@@ -23,12 +23,14 @@ type Db = PrismaClient | Prisma.TransactionClient;
 export interface StaffProfile {
   permissions: PermissionKey[];
   reaches: DeskAgencyReach[];
+  /** What their pod positions (reach POD) allow on their own: all they may do in an agency reached only through a pod (Module 49). */
+  podPermissions: PermissionKey[];
   positions: { id: string; code: string; name: string }[];
   /** True when the person holds no position and their role's default was used. */
   fallback: boolean;
 }
 
-const NOTHING: StaffProfile = { permissions: [], reaches: [], positions: [], fallback: false };
+const NOTHING: StaffProfile = { permissions: [], reaches: [], podPermissions: [], positions: [], fallback: false };
 
 const POSITION = { id: true, code: true, name: true, reach: true, permissions: true, isActive: true } as const;
 type HeldPosition = Prisma.DeskPositionGetPayload<{ select: typeof POSITION }>;
@@ -55,20 +57,22 @@ export async function startingPermissions(db: Db, role: UserRole): Promise<Permi
 }
 
 function profileOf(role: string, held: HeldPosition[]): StaffProfile {
-  if (role === 'SUPER_ADMIN') return { permissions: [...PERMISSION_KEYS], reaches: ['ALL'], positions: [], fallback: false };
+  if (role === 'SUPER_ADMIN') return { permissions: [...PERMISSION_KEYS], reaches: ['ALL'], podPermissions: [], positions: [], fallback: false };
   if (!isDeskRole(role)) return NOTHING;
   if (held.length === 0) {
     const preset = DEFAULT_POSITIONS.find((p) => p.legacyRole === role);
-    return preset ? { permissions: [...preset.permissions], reaches: [preset.reach], positions: [], fallback: true } : NOTHING;
+    return preset ? { permissions: [...preset.permissions], reaches: [preset.reach], podPermissions: preset.reach === 'POD' ? [...preset.permissions] : [], positions: [], fallback: true } : NOTHING;
   }
   const keys = new Set<string>();
+  const podKeys = new Set<string>();
   const reaches = new Set<DeskAgencyReach>();
   const positions: StaffProfile['positions'] = [];
   for (const p of held) {
     if (!p.isActive) continue;
     reaches.add(p.reach);
-    for (const k of p.permissions) keys.add(k);
+    for (const k of p.permissions) { keys.add(k); if (p.reach === 'POD') podKeys.add(k); }
     positions.push({ id: p.id, code: p.code, name: p.name });
   }
-  return { permissions: PERMISSION_KEYS.filter((k) => keys.has(k) && isPermissionKey(k)), reaches: [...reaches], positions, fallback: false };
+  const known = (set: Set<string>) => PERMISSION_KEYS.filter((k) => set.has(k) && isPermissionKey(k));
+  return { permissions: known(keys), reaches: [...reaches], podPermissions: known(podKeys), positions, fallback: false };
 }
