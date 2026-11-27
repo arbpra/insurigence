@@ -3,7 +3,10 @@
  * sensitive-data permissions (client answer Q4: access is "controlled by
  * agency authorization, pod assignment, individual permissions, and task
  * requirements"). lib/desk/access.ts reads these on every request, so a change
- * applies at once. Super Admin and Operations Managers only.
+ * applies at once. Positions with `pods.manage` (the COO, the Director of
+ * Virtual Operations) run pods, their members and who leads them (Module 51),
+ * and choose which VAs work for an agency in a pod the agency authorises;
+ * authorising a pod for an agency is agency setup (`agencies.setup`).
  *
  * A pod's access to an agency has three states, stored as AgencyPodAccess rows:
  *  - NONE:  no rows;
@@ -20,6 +23,7 @@ import { canBePodMember, roleLabel } from '@/lib/roles';
 import { literal } from './literal-match';
 import { can, DeskAccessError, isObjectId, type DeskScope, type GuardContext } from './access';
 import { assertDeskPlatform } from './agency-setup';
+import { staffProfiles } from './staff-profile';
 import { recordAudit, type AuditAction } from './audit';
 import { DEFAULT_STAFF_SENSITIVITIES, SENSITIVITY_LABELS } from './need-to-know';
 import { CLOSED_STATUSES } from './task-filters';
@@ -76,18 +80,21 @@ export async function listPods(db: Db, scope: DeskScope) {
   const [pods, eligible] = await Promise.all([
     db.pod.findMany({
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-      include: { members: { select: { user: { select: PERSON } } }, agencyAccess: { select: { agencyId: true } } },
+      include: { members: { select: { isLead: true, user: { select: PERSON } } }, agencyAccess: { select: { agencyId: true } } },
     }),
     db.user.findMany({ where: { role: { in: ['DESK_VA', 'ACCOUNT_MANAGER'] }, isActive: true }, select: PERSON, orderBy: [{ firstName: 'asc' }, { email: 'asc' }] }),
   ]);
   const open = await db.task.groupBy({ by: ['podId'], where: { podId: { in: pods.map((p) => p.id) }, ...OPEN_TASK }, _count: { _all: true } });
+  const leaders = await mayLead(db, pods.flatMap((p) => p.members.map((m) => m.user)));
   const openByPod = new Map(open.map((o) => [o.podId, o._count._all]));
   const person = (u: { id: string; firstName: string | null; lastName: string | null; email: string; role: string; isActive: boolean }) =>
     ({ id: u.id, name: personName(u), role: u.role, roleLabel: roleLabel(u.role), isActive: u.isActive });
   return {
     pods: pods.map((p) => ({
       id: p.id, code: p.code, name: p.name, description: p.description, isActive: p.isActive,
-      members: p.members.map((m) => person(m.user)).sort((a, b) => a.name.localeCompare(b.name)),
+      members: p.members
+        .map((m) => ({ ...person(m.user), isLead: m.isLead, canLead: m.user.isActive && leaders.has(m.user.id) }))
+        .sort((a, b) => Number(b.isLead) - Number(a.isLead) || a.name.localeCompare(b.name)),
       agencies: new Set(p.agencyAccess.map((a) => a.agencyId)).size,
       openTasks: openByPod.get(p.id) ?? 0,
     })),
@@ -212,6 +219,41 @@ export async function removePodMember(db: Db, scope: DeskScope, podId: string, u
   });
 }
 
+// ── Pod Leaders (Module 51) ──
+
+/** Who may lead a pod: a pod position of theirs hands work out. Leading is what lets it do so there. */
+async function mayLead(db: Db, users: { id: string; role: string }[]): Promise<Set<string>> {
+  const profiles = await staffProfiles(db, users);
+  return new Set(users.filter((u) => profiles.get(u.id)?.podPermissions.includes('requests.assign')).map((u) => u.id));
+}
+
+/**
+ * Makes a member a leader of the pod, or not. A pod may have several (one
+ * covering for another). Stopping leading takes nothing away from what they
+ * hold or can see: they stay a member.
+ */
+export async function setPodLead(db: Db, scope: DeskScope, podId: string, input: { userId?: unknown; isLead?: unknown }, ctx: GuardContext = {}): Promise<void> {
+  assertDeskPlatform(scope, ['pods.manage']);
+  const pod = await loadPod(db, podId);
+  if (typeof input.isLead !== 'boolean') throw bad('isLead must be true or false.');
+  const isLead = input.isLead;
+  const userId = input.userId;
+  if (!isObjectId(userId)) throw bad('Choose a member of this pod.');
+  const member = await db.podMember.findUnique({ where: { podId_userId: { podId, userId } }, select: { id: true, isLead: true, user: { select: { id: true, role: true, isActive: true } } } });
+  if (!member) throw bad('Choose a member of this pod.');
+  if (member.isLead === isLead) return;
+  if (isLead) {
+    if (!pod.isActive) throw conflict('This pod is switched off.');
+    if (!member.user.isActive) throw bad('Choose an active member.');
+    if (!(await mayLead(db, [member.user])).has(userId)) throw bad('Only someone whose position hands work out in a pod can lead one. Give them the Pod Leader position first.');
+  }
+  await inTransaction(db, async (tx) => {
+    const { count } = await tx.podMember.updateMany({ where: { id: member.id, isLead: member.isLead }, data: { isLead } });
+    if (count !== 1) throw conflict(CHANGED_ELSEWHERE);
+    await audit(tx, scope, ctx, 'pod.lead_changed', 'Pod', podId, null, { userId, isLead });
+  });
+}
+
 // ── Agency access ──
 
 export type PodAccessMode = 'NONE' | 'WHOLE' | 'NAMED';
@@ -231,7 +273,10 @@ export async function getAgencyPodAccess(db: Db, scope: DeskScope, agencyId: str
   ]);
   return {
     agency,
+    /** Authorise a pod or take it away: agency setup. */
     canChange: can(scope, 'agencies.setup'),
+    /** Choose the VAs of a pod the agency already authorises (Module 51). */
+    canName: can(scope, 'agencies.setup') || can(scope, 'pods.manage'),
     pods: pods.map((p) => {
       const own = rows.filter((r) => r.podId === p.id);
       const whole = own.some((r) => !r.userId);
@@ -248,8 +293,9 @@ export async function getAgencyPodAccess(db: Db, scope: DeskScope, agencyId: str
 export async function setAgencyPodAccess(
   db: Db, scope: DeskScope, agencyId: string, input: { podId?: unknown; mode?: unknown; userIds?: unknown }, ctx: GuardContext = {}
 ): Promise<{ tasksReturned: number }> {
-  // Managing pods doesn't decide which agencies they may work for.
-  assertDeskPlatform(scope, ['agencies.setup']);
+  // Managing pods doesn't decide which agencies they may work for, only which
+  // of a pod's VAs work for an agency that already authorises it (Module 51).
+  assertDeskPlatform(scope, ['agencies.setup', 'pods.manage']);
   if (!isObjectId(agencyId) || !(await db.agency.findUnique({ where: { id: agencyId }, select: { id: true } }))) throw notFound();
   if (!isObjectId(input.podId)) throw bad('Choose a pod.');
   const podId = input.podId;
@@ -280,6 +326,13 @@ export async function setAgencyPodAccess(
 
   const sameNames = named.length === currentNamed.length && named.every((id) => currentNamed.includes(id));
   if (mode === currentMode && sameNames) return { tasksReturned: 0 };
+  if (!can(scope, 'agencies.setup') && (currentMode === 'NONE' || mode === 'NONE')) {
+    await recordAudit(db, {
+      actor: { id: scope.userId, role: scope.role }, action: 'access.denied', entityType: 'Agency', entityId: agencyId, agencyId,
+      metadata: { op: 'pod_access', podId, from: currentMode, to: mode }, ip: ctx.ip, userAgent: ctx.userAgent,
+    });
+    throw new DeskAccessError(403, 'Which pods an agency authorizes is part of agency setup. Once a pod is authorized, you can choose its VAs here.');
+  }
 
   return inTransaction(db, async (tx) => {
     await tx.agencyPodAccess.deleteMany({ where: { agencyId, podId } });

@@ -7,7 +7,7 @@
  * the person couldn't open.
  */
 import type { PrismaClient } from '@prisma/client';
-import { can, DeskAccessError, getTaskForScope, isStaffScope, isObjectId, resolveDeskScope, taskWhere, type DeskScope, type GuardContext } from './access';
+import { can, DeskAccessError, getTaskForScope, isStaffScope, isObjectId, resolveDeskScope, scopeIn, taskWhere, type DeskScope, type GuardContext } from './access';
 import { recordAudit } from './audit';
 import { CLOSED_STATUSES } from './task-filters';
 import { listWhere } from './task-api';
@@ -69,6 +69,14 @@ export async function queueOptions(db: Db, scope: DeskScope, ctx: GuardContext =
 
   return {
     canAssign: isManager(scope),
+    /**
+     * Where they hand work out (Module 51), so each row offers what the server
+     * allows: null = wherever they reach; otherwise their own agencies and the
+     * pods they lead. Elsewhere they pick work up like any pod member.
+     */
+    assignIn: scope.kind === 'VA'
+      ? { agencies: [] as string[], pods: [...scope.leads] }
+      : scope.kind === 'ACCOUNT_MANAGER' && scope.grants.length ? { agencies: [...scope.agencyIds], pods: [...scope.leads] } : null,
     pods,
     agencies,
     counts: { waiting, overdue, unrouted, mine },
@@ -84,6 +92,8 @@ export async function assigneesFor(db: Db, scope: DeskScope, taskId: string, ctx
   // Agency users never learn who works on the Desk team.
   if (!isStaff(scope)) await notForAgencies(db, scope, 'assignees', taskId, ctx);
   const task = await getTaskForScope(db, scope, taskId, ctx);
+  // As the task service will judge it: in this agency and pod (Modules 49, 51).
+  scope = scopeIn(scope, task.agencyId, task.podId);
   if (!isManager(scope)) throw new DeskAccessError(403, 'Pick up unassigned work yourself, or ask your Account Manager to reassign.');
   if ((CLOSED_STATUSES as readonly string[]).includes(task.status)) throw new DeskAccessError(409, 'This task is closed.');
 

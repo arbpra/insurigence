@@ -81,8 +81,8 @@ function mayRemove(scope: DeskScope, doc: Pick<TaskDocument, 'uploadedById'>, up
   return scope.kind === 'AGENCY' && scope.role === 'ADMIN' && !!uploader && uploader.agencyId === scope.agencyId;
 }
 
-function documentView(scope: DeskScope, doc: TaskDocument, uploaders: Map<string, Uploader>, taskClosed: boolean) {
-  scope = scopeIn(scope, doc.agencyId);
+function documentView(scope: DeskScope, doc: TaskDocument, uploaders: Map<string, Uploader>, taskClosed: boolean, podId: string | null) {
+  scope = scopeIn(scope, doc.agencyId, podId);
   const uploader = doc.uploadedById ? uploaders.get(doc.uploadedById) : undefined;
   // Agencies see their colleagues by name and the Desk team as a team (as in the history).
   const addedBy = scope.kind === 'AGENCY'
@@ -115,13 +115,13 @@ async function uploadersOf(db: Db, docs: Pick<TaskDocument, 'uploadedById'>[]) {
  * The files on a request this person may see, newest first. The caller logs the
  * listing (the request detail does, with the file ids).
  */
-export async function taskDocumentsFor(db: Db, scope: DeskScope, task: { id: string; status: string }) {
+export async function taskDocumentsFor(db: Db, scope: DeskScope, task: { id: string; status: string; podId: string | null }) {
   const docs = await db.taskDocument.findMany({
     where: { AND: [{ taskId: task.id }, documentWhere(scope)] },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
   });
   const uploaders = await uploadersOf(db, docs);
-  return docs.map((d) => documentView(scope, d, uploaders, isClosed(task.status)));
+  return docs.map((d) => documentView(scope, d, uploaders, isClosed(task.status), task.podId));
 }
 
 // ── Attaching ──
@@ -150,7 +150,7 @@ export async function documentTarget(db: Db, scope: DeskScope, taskId: string, c
 
 export async function addTaskDocument(db: Db, scope: DeskScope, taskId: string, input: NewDocument, ctx: GuardContext = {}, store: DocumentStore = r2DocumentStore) {
   const task = await documentTarget(db, scope, taskId, ctx);
-  scope = scopeIn(scope, task.agencyId);
+  scope = scopeIn(scope, task.agencyId, task.podId);
 
   if (typeof input.sensitivity !== 'string' || !(Object.values(DocumentSensitivity) as string[]).includes(input.sensitivity)) {
     throw new DeskAccessError(400, 'Choose what kind of document this is.', 'NO_SENSITIVITY');
@@ -199,7 +199,7 @@ export async function addTaskDocument(db: Db, scope: DeskScope, taskId: string, 
       return created;
     });
     const uploaders = await uploadersOf(db, [doc]);
-    return documentView(scope, doc, uploaders, false);
+    return documentView(scope, doc, uploaders, false, task.podId);
   } catch (err) {
     // Nothing points at the stored file, so it goes too.
     await store.remove(key).catch((e) => console.error('[desk/documents] could not remove an unrecorded upload', key, e));
@@ -233,8 +233,8 @@ export async function openTaskDocument(db: Db, scope: DeskScope, documentId: str
  */
 export async function removeTaskDocument(db: Db, scope: DeskScope, documentId: string, ctx: GuardContext = {}, store: DocumentStore = r2DocumentStore) {
   const doc = await getDocumentForScope(db, scope, documentId, ctx);
-  scope = scopeIn(scope, doc.agencyId);
-  const task = await db.task.findUniqueOrThrow({ where: { id: doc.taskId }, select: { id: true, status: true, reference: true } });
+  const task = await db.task.findUniqueOrThrow({ where: { id: doc.taskId }, select: { id: true, status: true, reference: true, podId: true } });
+  scope = scopeIn(scope, doc.agencyId, task.podId);
   const uploaders = await uploadersOf(db, [doc]);
   if (!mayRemove(scope, doc, doc.uploadedById ? uploaders.get(doc.uploadedById) : undefined, isClosed(task.status))) {
     await recordAudit(db, {

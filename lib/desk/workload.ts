@@ -1,6 +1,7 @@
 /**
  * The workload view (Module 40): all open work across agencies and pods, for
- * Operations Managers and the Super Admin. Counts per pod, per person and per
+ * positions that reach every agency; and since Module 51, for a Pod Leader,
+ * the work of the pods they lead. Counts per pod, per person and per
  * agency, the list of tasks behind them, and changes to several tasks at once.
  *
  * Every change still goes through the task service one task at a time
@@ -8,7 +9,7 @@
  * from the task itself.
  */
 import type { PrismaClient, TaskStatus } from '@prisma/client';
-import { can, DeskAccessError, isObjectId, taskWhere, type DeskScope, type GuardContext } from './access';
+import { can, DeskAccessError, isObjectId, podLeadScope, taskWhere, type DeskScope, type GuardContext } from './access';
 import { listTasks, setTaskAssignee, setTaskPod, type TaskListOptions } from './task-api';
 import { CLOSED_STATUSES } from './task-filters';
 import { lastAlertRun } from './alerts';
@@ -17,12 +18,17 @@ import { checkIntervalMinutes, cronSecret } from './alert-schedule';
 type Db = PrismaClient;
 
 /**
- * Positions that reach every agency and allow `workload.view` (the COO, the
- * Directors) and the Super Admin; the routes refuse everyone else first, and
- * log it. A Pod Leader's view of their own pods comes in Module 51.
+ * Whose workload: positions that reach every agency and allow `workload.view`
+ * (the COO, the Directors) and the Super Admin see all of it. A Pod Leader
+ * whose pod position allows it sees the pods they lead (Module 51), and works
+ * from that scope, so every count, list and change stays inside those pods.
+ * The routes refuse everyone else first, and log it.
  */
-function opsOnly(scope: DeskScope) {
-  if (scope.kind !== 'PLATFORM' || !can(scope, 'workload.view')) throw new DeskAccessError(403, 'Your position does not include the workload across the Desk.');
+function workloadScope(scope: DeskScope): { scope: DeskScope; everyPod: boolean } {
+  if (scope.kind === 'PLATFORM' && can(scope, 'workload.view')) return { scope, everyPod: true };
+  const lead = podLeadScope(scope);
+  if (lead && can(lead, 'workload.view')) return { scope: lead, everyPod: false };
+  throw new DeskAccessError(403, 'Your position does not include the workload across the Desk.');
 }
 
 /** The most tasks one change can cover. */
@@ -49,8 +55,9 @@ function add(counts: Counts, t: OpenTask, now: Date) {
 }
 
 /** Counts of open work by pod, person and agency, and one page of the tasks the filters choose. */
-export async function getWorkload(db: Db, scope: DeskScope, opts: TaskListOptions = {}) {
-  opsOnly(scope);
+export async function getWorkload(db: Db, asked: DeskScope, opts: TaskListOptions = {}) {
+  const { scope, everyPod } = workloadScope(asked);
+  const led = scope.kind === 'VA' ? scope.leads : [];
   const now = new Date();
   const open = await db.task.findMany({
     // Through the access layer: restricted requests only for those who may restrict.
@@ -71,19 +78,24 @@ export async function getWorkload(db: Db, scope: DeskScope, opts: TaskListOption
   }
 
   const [pods, staff, agencies, list, alertRun] = await Promise.all([
-    db.pod.findMany({ orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }], select: { id: true, name: true, isActive: true } }),
-    // Everyone who works tasks, idle or not, and anyone else still holding open work.
+    db.pod.findMany({ where: everyPod ? {} : { id: { in: led } }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }], select: { id: true, name: true, isActive: true } }),
+    // Everyone who works tasks, idle or not (for a Pod Leader, their pods' members), and anyone else still holding open work.
     db.user.findMany({
-      where: { OR: [{ role: { in: ['DESK_VA', 'ACCOUNT_MANAGER'] }, isActive: true }, { id: { in: [...byPerson.keys()] } }] },
+      where: { OR: [
+        everyPod ? { role: { in: ['DESK_VA', 'ACCOUNT_MANAGER'] }, isActive: true } : { podMemberships: { some: { podId: { in: led } } }, isActive: true },
+        { id: { in: [...byPerson.keys()] } },
+      ] },
       select: { id: true, firstName: true, lastName: true, email: true, role: true, isActive: true, podMemberships: { select: { podId: true } } },
     }),
     db.agency.findMany({ where: { id: { in: [...byAgency.keys()] } }, select: { id: true, name: true, deskEnabled: true } }),
     listTasks(db, scope, opts),
-    lastAlertRun(db),
+    everyPod ? lastAlertRun(db) : Promise.resolve(null),
   ]);
   const podName = new Map(pods.map((p) => [p.id, p.name]));
 
   return {
+    /** ALL: every agency and pod; LED_PODS: the pods this Pod Leader leads. */
+    reach: everyPod ? 'ALL' as const : 'LED_PODS' as const,
     total,
     // Switched-off pods appear only while they still hold open work.
     pods: [
@@ -104,7 +116,7 @@ export async function getWorkload(db: Db, scope: DeskScope, opts: TaskListOption
       .sort((a, b) => b.open - a.open || a.name.localeCompare(b.name)),
     list,
     /** The overdue-alert check (Module 41): when it last ran, and whether a schedule is set up. */
-    alertCheck: { lastRun: alertRun, scheduled: !!(checkIntervalMinutes() || cronSecret()) },
+    alertCheck: everyPod ? { lastRun: alertRun, scheduled: !!(checkIntervalMinutes() || cronSecret()) } : null,
   };
 }
 
@@ -118,8 +130,8 @@ export interface BulkResult {
  * Each task is changed on its own, so one that can't be changed doesn't stop the rest;
  * the answer says which were and why the others weren't.
  */
-export async function changeWorkload(db: Db, scope: DeskScope, body: Record<string, unknown>, ctx: GuardContext = {}): Promise<BulkResult> {
-  opsOnly(scope);
+export async function changeWorkload(db: Db, asked: DeskScope, body: Record<string, unknown>, ctx: GuardContext = {}): Promise<BulkResult> {
+  const { scope } = workloadScope(asked);
   const ids = body.taskIds;
   if (!Array.isArray(ids) || !ids.length || ids.some((id) => typeof id !== 'string')) throw new DeskAccessError(400, 'Choose the tasks to change.');
   const unique = [...new Set(ids as string[])];

@@ -16,6 +16,10 @@
  *        them, and anyone covering an absent AM gets that AM's agencies for
  *        the cover's dates (Module 50, lib/desk/supervision-reach.ts);
  *      - reach "pod authorisation" only (Pod Leaders, VAs) → kind VA.
+ *    Pod positions hand work out only in the pods the person leads (Module
+ *    51, PodMember.isLead): assigning, escalating, restricting and
+ *    reclassifying apply there, and elsewhere they are a pod member like any
+ *    other. Someone who leads no pod has none of these, nor the workload.
  *    Their permissions ride on the scope; `can(scope, key)` asks for one.
  *    A position never opens agency data on its own beyond its reach:
  *      - agency books are open directly only with `accounts.view`, otherwise
@@ -79,12 +83,14 @@ export type DeskScope =
       kind: 'ACCOUNT_MANAGER'; userId: string; role: string; agencyIds: string[]; grants: PodGrant[]; pod: StaffAccess;
       /** Module 50: the Account Managers below them (supervised reach), and the people they cover today. */
       team?: string[]; covering?: string[];
+      /** Module 51: the pods they lead (their pod positions hand work out only there). */
+      leads: string[];
     } & StaffAccess)
   /**
    * Positions that reach only through pods (Pod Leader, VA): the (agency, pod)
    * pairs they may work. No pairs = no access.
    */
-  | ({ kind: 'VA'; userId: string; role: string; grants: PodGrant[] } & StaffAccess)
+  | ({ kind: 'VA'; userId: string; role: string; grants: PodGrant[]; /** Module 51: the pods they lead. */ leads: string[] } & StaffAccess)
   /** No Desk access (agency not enabled, unknown or inactive user, no active position). */
   | { kind: 'NONE'; userId: string; role: string; reason: string };
 
@@ -156,37 +162,52 @@ export async function resolveDeskScope(db: Db, userId: string): Promise<DeskScop
   const staff = { ...base, permissions, sensitivities };
 
   if (reaches.has('ALL')) return { kind: 'PLATFORM', ...staff };
-  const grants = reaches.has('POD') ? await podGrants(db, user.id) : [];
+  const { grants, leads } = reaches.has('POD') ? await podGrants(db, user.id) : { grants: [], leads: [] };
   if (reaches.has('ASSIGNED') || reaches.has('SUPERVISED')) {
     const reach = await managedReach(db, user.id, reaches.has('SUPERVISED'));
     const rows = await db.agencyDeskAssignment.findMany({
       where: { OR: [{ primaryAmId: { in: reach.people } }, { backupAmId: { in: reach.people } }], agency: { deskEnabled: true } },
       select: { agencyId: true },
     });
-    const pod: StaffAccess = { permissions: profile.podPermissions, sensitivities: [...DEFAULT_STAFF_SENSITIVITIES] };
+    const pod: StaffAccess = { permissions: forLeads(profile.podPermissions, leads), sensitivities: [...DEFAULT_STAFF_SENSITIVITIES] };
     if (grants.length) pod.sensitivities = pod.permissions.includes('documents.all_categories') ? [...ALL_SENSITIVITIES] : await grantedSensitivities(db, user.id);
-    return { kind: 'ACCOUNT_MANAGER', ...staff, agencyIds: rows.map((r) => r.agencyId), grants, pod, team: reach.team, covering: reach.covering };
+    return { kind: 'ACCOUNT_MANAGER', ...staff, agencyIds: rows.map((r) => r.agencyId), grants, leads, pod, team: reach.team, covering: reach.covering };
   }
-  return { kind: 'VA', ...staff, grants };
+  return { kind: 'VA', ...staff, permissions: forLeads(permissions, leads), grants, leads };
 }
 
-/** The (agency, pod) pairs a person may work: their active pods × each agency's authorisation of the pod or of them by name. */
-async function podGrants(db: Db, userId: string): Promise<PodGrant[]> {
-  const memberships = await db.podMember.findMany({ where: { userId, pod: { isActive: true } }, select: { podId: true } });
+/**
+ * Module 51: what a pod position allows only in the pods its holder leads.
+ * Without a pod to lead, a Pod Leader's position is a VA's (plus anything
+ * else it lists), and the workload of their pods is not theirs to see.
+ */
+export const LEAD_PERMISSIONS: readonly PermissionKey[] = ['requests.assign', 'requests.escalate', 'requests.restrict', 'requests.classify'];
+const forLeads = (permissions: PermissionKey[], leads: string[]): PermissionKey[] =>
+  leads.length ? permissions : permissions.filter((p) => !LEAD_PERMISSIONS.includes(p) && p !== 'workload.view');
+
+/**
+ * The (agency, pod) pairs a person may work: their active pods × each
+ * agency's authorisation of the pod or of them by name; and the active pods
+ * they lead.
+ */
+async function podGrants(db: Db, userId: string): Promise<{ grants: PodGrant[]; leads: string[] }> {
+  const memberships = await db.podMember.findMany({ where: { userId, pod: { isActive: true } }, select: { podId: true, isLead: true } });
   const podIds = memberships.map((m) => m.podId);
-  if (!podIds.length) return [];
+  const leads = memberships.filter((m) => m.isLead).map((m) => m.podId);
+  if (!podIds.length) return { grants: [], leads };
   const access = await db.agencyPodAccess.findMany({
     where: { podId: { in: podIds }, agency: { deskEnabled: true }, OR: [WHOLE_POD_ACCESS, { userId }] },
     select: { agencyId: true, podId: true },
   });
   // A whole-pod row and a named row for the same pair grant the same thing.
   const seen = new Set<string>();
-  return access.filter((g) => {
+  const grants = access.filter((g) => {
     const key = `${g.agencyId}:${g.podId}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+  return { grants, leads };
 }
 
 /** General and Policy for everyone, plus categories granted to this person (Pods page). */
@@ -203,10 +224,43 @@ async function grantedSensitivities(db: Db, userId: string): Promise<DocumentSen
  * permissions into the other's agencies. Everyone else is unchanged.
  * Use it wherever a permission is checked against one request, account,
  * document or agency.
+ *
+ * For a request, pass its pod too (Module 51): where someone works through a
+ * pod, handing the work out (LEAD_PERMISSIONS) needs them to lead that pod.
+ * They are removed from the pod permissions as well, so narrowing the result
+ * again can't bring them back.
  */
-export function scopeIn<S extends DeskScope>(scope: S, agencyId: string | null | undefined): S {
-  if (scope.kind !== 'ACCOUNT_MANAGER' || !scope.grants.length || !agencyId || scope.agencyIds.includes(agencyId)) return scope;
-  return { ...scope, permissions: scope.pod.permissions, sensitivities: scope.pod.sensitivities };
+export function scopeIn<S extends DeskScope>(scope: S, agencyId: string | null | undefined, podId?: string | null): S {
+  if (!worksThroughPod(scope, agencyId)) return scope;
+  if (scope.kind === 'ACCOUNT_MANAGER') {
+    const narrowed = { ...scope, permissions: scope.pod.permissions, sensitivities: scope.pod.sensitivities };
+    if (podId === undefined || (podId && scope.leads.includes(podId))) return narrowed;
+    const pod = { ...scope.pod, permissions: withoutLead(scope.pod.permissions) };
+    return { ...narrowed, permissions: pod.permissions, pod };
+  }
+  if (scope.kind !== 'VA' || podId === undefined || (podId && scope.leads.includes(podId))) return scope;
+  return { ...scope, permissions: withoutLead(scope.permissions) };
+}
+
+const withoutLead = (permissions: PermissionKey[]) => permissions.filter((p) => !LEAD_PERMISSIONS.includes(p));
+
+/** Does this person reach the agency only through a pod (so pod rules, and leading, apply)? */
+export function worksThroughPod(scope: DeskScope, agencyId: string | null | undefined): scope is Extract<DeskScope, { kind: 'VA' | 'ACCOUNT_MANAGER' }> {
+  return scope.kind === 'VA'
+    || (scope.kind === 'ACCOUNT_MANAGER' && scope.grants.length > 0 && !!agencyId && !scope.agencyIds.includes(agencyId));
+}
+
+/**
+ * Module 51: the scope a Pod Leader manages from: their pod positions'
+ * permissions, in the pods they lead only. Null for someone who leads no pod.
+ * An Account Manager who also leads a pod gets their pod side, never their
+ * agencies.
+ */
+export function podLeadScope(scope: DeskScope): Extract<DeskScope, { kind: 'VA' }> | null {
+  if ((scope.kind !== 'VA' && scope.kind !== 'ACCOUNT_MANAGER') || !scope.leads.length) return null;
+  const grants = scope.grants.filter((g) => scope.leads.includes(g.podId));
+  const own = scope.kind === 'VA' ? scope : scope.pod;
+  return { kind: 'VA', userId: scope.userId, role: scope.role, permissions: [...own.permissions], sensitivities: [...own.sensitivities], grants, leads: [...scope.leads] };
 }
 
 /** Agencies the scope can see at all: a list, or 'ALL' for platform roles. */

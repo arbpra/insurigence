@@ -7,7 +7,7 @@
  */
 import type { PrismaClient } from '@prisma/client';
 import { getSessionFromRequest } from '@/lib/auth';
-import { can, DeskAccessError, isStaffScope, resolveDeskScope, type DeskScope, type GuardContext } from './access';
+import { can, DeskAccessError, isStaffScope, podLeadScope, resolveDeskScope, type DeskScope, type GuardContext } from './access';
 import type { PermissionKey } from './permission-catalogue';
 import { auditRequestContext, recordAudit } from './audit';
 
@@ -31,15 +31,19 @@ export function meetsNeed(scope: DeskScope, need: AdminNeed): boolean {
  * `everyAgency`: the page covers every agency (workload, usage), so it also
  * needs a position that reaches every agency. Refused here, so the refusal is
  * logged like any other (Module 49).
+ * `podLeads`: or a Pod Leader, for the pods they lead, whose pod positions
+ * allow it (Module 51). The route then works from podLeadScope.
  */
 export async function deskAdminRequest(
-  db: PrismaClient, request: Request, need: AdminNeed, agencyId?: string, opts: { everyAgency?: boolean } = {}
+  db: PrismaClient, request: Request, need: AdminNeed, agencyId?: string, opts: { everyAgency?: boolean; podLeads?: boolean } = {}
 ): Promise<{ scope: DeskScope; ctx: GuardContext }> {
   const user = await getSessionFromRequest(request);
   if (!user) throw new DeskAccessError(401, 'Unauthorized');
   const ctx = auditRequestContext(request);
   const scope = await resolveDeskScope(db, user.id);
-  if (!meetsNeed(scope, need) || (opts.everyAgency && scope.kind !== 'PLATFORM')) {
+  const allowed = meetsNeed(scope, need) && (!opts.everyAgency || scope.kind === 'PLATFORM');
+  const asLead = !allowed && opts.podLeads ? podLeadScope(scope) : null;
+  if (!allowed && !(asLead && meetsNeed(asLead, need))) {
     try {
       await recordAudit(db, {
         actor: { id: user.id, role: user.role }, action: 'access.denied', entityType: 'DeskSetup',

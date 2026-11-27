@@ -23,12 +23,13 @@ interface Row {
   parent: { id: string; reference: number } | null; followUp: boolean;
 }
 interface Workload {
+  reach: 'ALL' | 'LED_PODS';
   total: Counts;
   pods: ({ id: string; name: string; isActive: boolean } & Counts)[];
   people: ({ id: string; name: string; kind: 'VA' | 'ACCOUNT_MANAGER' | 'OTHER'; isActive: boolean; pods: string[] } & Counts)[];
   agencies: ({ id: string; name: string; deskEnabled: boolean } & Counts)[];
   list: { total: number; page: number; pageSize: number; rows: Row[] };
-  alertCheck: { lastRun: { at: string; sent: number; failed: number; error: string | null } | null; scheduled: boolean };
+  alertCheck: { lastRun: { at: string; sent: number; failed: number; error: string | null } | null; scheduled: boolean } | null;
 }
 interface Person { id: string; name: string; kind: 'VA' | 'ACCOUNT_MANAGER'; lead: boolean; openTasks: number }
 type Action =
@@ -152,8 +153,10 @@ export function WorkloadView() {
     <div className="grid gap-6" data-testid="desk-workload">
       <div>
         <h1 className="text-xl font-semibold text-slate-900">Workload</h1>
-        <p className="text-sm text-slate-600">All open work across agencies and pods. Choose a figure or a row to see the tasks behind it.</p>
-        {data && <AlertCheckLine check={data.alertCheck} />}
+        <p className="text-sm text-slate-600" data-testid="desk-workload-reach">
+          {data?.reach === 'LED_PODS' ? 'Open work in the pods you lead.' : 'All open work across agencies and pods.'} Choose a figure or a row to see the tasks behind it.
+        </p>
+        {data?.alertCheck && <AlertCheckLine check={data.alertCheck} />}
       </div>
 
       {error && (
@@ -389,7 +392,7 @@ function Table({ title, testId, cols, rows }: {
 }
 
 /** When the overdue-alert check last ran (Module 41), so a stopped schedule is noticed. */
-function AlertCheckLine({ check }: { check: Workload['alertCheck'] }) {
+function AlertCheckLine({ check }: { check: NonNullable<Workload['alertCheck']> }) {
   const run = check.lastRun;
   const text = run
     ? `Overdue alerts: last checked ${new Date(run.at).toLocaleString()}; ${run.sent === 0 ? 'nothing new to send' : `${run.sent} ${run.sent === 1 ? 'alert' : 'alerts'} sent`}.`

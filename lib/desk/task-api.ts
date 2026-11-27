@@ -52,7 +52,7 @@ const isClosed = (status: TaskStatus) => (CLOSED_STATUSES as readonly TaskStatus
 // ── Views ──
 
 function viewFor(scope: DeskScope, task: TaskRow, now: Date) {
-  scope = scopeIn(scope, task.agencyId);
+  scope = scopeIn(scope, task.agencyId, task.podId);
   const account = { insured: task.insured, policy: task.policy, typeLabel: TASK_TYPE_LABELS[task.type] };
   if (scope.kind === 'AGENCY') return { ...agencyTaskView(task), ...account };
   const staff = {
@@ -330,7 +330,7 @@ export async function listTasks(db: Db, scope: DeskScope, opts: TaskListOptions 
 /** One task and the history this person may see. Opening it is logged (Q4), and if that can't be logged, it doesn't open. */
 export async function getTaskDetail(db: Db, scope: DeskScope, taskId: string, ctx: GuardContext = {}) {
   const found = await getTaskForScope(db, scope, taskId, ctx);
-  scope = scopeIn(scope, found.agencyId);
+  scope = scopeIn(scope, found.agencyId, found.podId);
   const task = await db.task.findUniqueOrThrow({ where: { id: found.id }, include: RELATED });
   const where: Prisma.TaskEventWhereInput = { AND: [{ taskId: task.id }, taskEventWhere(scope)] };
   const [newestFirst, eventsTotal] = await Promise.all([
@@ -410,7 +410,7 @@ async function subtaskFamily(db: Db, scope: DeskScope, task: TaskRow) {
  * screen: the task service checks every change again.
  */
 function staffPermissions(scope: DeskScope, task: TaskRow, openSubtasks: number) {
-  scope = scopeIn(scope, task.agencyId);
+  scope = scopeIn(scope, task.agencyId, task.podId);
   const manager = isManager(scope);
   const holdsIt = task.assigneeId === scope.userId;
   const open = !isClosed(task.status);

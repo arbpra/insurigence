@@ -16,11 +16,11 @@ export async function GET(request: NextRequest, { params }: Context) {
   }
 }
 
-/** Body: { podId, mode: 'NONE' | 'WHOLE' | 'NAMED', userIds? }. */
+/** Body: { podId, mode: 'NONE' | 'WHOLE' | 'NAMED', userIds? }. With `pods.manage` only: WHOLE or NAMED, for a pod already authorized. */
 export async function PUT(request: NextRequest, { params }: Context) {
   try {
     const { id } = await params;
-    const { scope, ctx } = await deskAdminRequest(prisma, request, ['agencies.setup'], id);
+    const { scope, ctx } = await deskAdminRequest(prisma, request, ['agencies.setup', 'pods.manage'], id);
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== 'object' || Array.isArray(body)) throw new DeskAccessError(400, 'Invalid request.');
     return NextResponse.json(await setAgencyPodAccess(prisma, scope, id, body, ctx));

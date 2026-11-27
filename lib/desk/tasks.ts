@@ -16,7 +16,7 @@ import {
   type PrismaClient, type Task, type TaskStatus, type DeskVisibility,
 } from '@prisma/client';
 import { recordAudit } from './audit';
-import { can, DeskAccessError, getTaskForScope, isStaffScope, isObjectId, resolveDeskScope, resolveSubmission, scopeIn, taskWhere, type DeskScope } from './access';
+import { can, DeskAccessError, getTaskForScope, isStaffScope, isObjectId, resolveDeskScope, resolveSubmission, scopeIn, taskWhere, worksThroughPod, type DeskScope } from './access';
 import { defaultBilling } from './billing';
 import { completionPeriod, decideBilling, giveBack, type BillingDecision } from './billing-capture';
 import {
@@ -320,7 +320,7 @@ export interface SubtaskInput {
  */
 export async function createSubtask(db: Db, scope: DeskScope, parentId: string, input: SubtaskInput, ctx: Ctx = {}): Promise<Task> {
   const parent = await getTaskForScope(db, scope, parentId, ctx);
-  scope = scopeIn(scope, parent.agencyId);
+  scope = scopeIn(scope, parent.agencyId, parent.podId);
   await checkRules(db, scope, parent, { op: 'subtask' }, ctx, async () => {
     if (!isStaff(scope)) throw forbidden('Subtasks are added by the Desk team.');
     if (!isManager(scope) && parent.assigneeId !== scope.userId) throw forbidden('Pick up the request before adding a subtask to it.');
@@ -353,7 +353,7 @@ export async function changeTaskStatus(
   db: Db, scope: DeskScope, taskId: string, to: string, opts: { reason?: string | null } = {}, ctx: Ctx = {}
 ): Promise<Task> {
   const task = await getTaskForScope(db, scope, taskId, ctx);
-  scope = scopeIn(scope, task.agencyId);
+  scope = scopeIn(scope, task.agencyId, task.podId);
   if (typeof to !== 'string' || !Object.hasOwn(STATUS_LABELS, to)) throw bad('Choose a valid status.');
   const toStatus = to as TaskStatus;
   const from = task.status;
@@ -529,7 +529,7 @@ export async function assignTask(
   db: Db, scope: DeskScope, taskId: string, assigneeId: string | null, ctx: Ctx = {}
 ): Promise<Task> {
   const task = await getTaskForScope(db, scope, taskId, ctx);
-  scope = scopeIn(scope, task.agencyId);
+  scope = scopeIn(scope, task.agencyId, task.podId);
   if (task.assigneeId === assigneeId) throw conflict(assigneeId ? 'Already assigned to this person.' : 'The task is not assigned.');
   await checkRules(db, scope, task, { op: 'assign', from: task.assigneeId ?? null, to: assigneeId }, ctx, async () => {
     if (!isStaff(scope)) throw forbidden('Only Desk staff assign tasks.');
@@ -595,7 +595,7 @@ export async function escalateTask(
   db: Db, scope: DeskScope, taskId: string, input: { escalate: unknown; reason?: unknown }, ctx: Ctx = {}
 ): Promise<Task> {
   const task = await getTaskForScope(db, scope, taskId, ctx);
-  scope = scopeIn(scope, task.agencyId);
+  scope = scopeIn(scope, task.agencyId, task.podId);
   await checkRules(db, scope, task, { op: input.escalate === false ? 'deescalate' : 'escalate' }, ctx, async () => {
     if (!can(scope, 'requests.escalate')) throw forbidden('Your position does not allow escalating work.');
   });
@@ -638,9 +638,11 @@ export async function escalateTask(
  */
 export async function moveTaskToPod(db: Db, scope: DeskScope, taskId: string, podId: unknown, ctx: Ctx = {}): Promise<Task> {
   const task = await getTaskForScope(db, scope, taskId, ctx);
-  scope = scopeIn(scope, task.agencyId);
+  scope = scopeIn(scope, task.agencyId, task.podId);
   await checkRules(db, scope, task, { op: 'move_pod', from: task.podId ?? null, to: typeof podId === 'string' ? podId : null }, ctx, async () => {
     if (!isManager(scope)) throw forbidden('Your position does not allow moving work to another pod.');
+    // A Pod Leader moves work between the pods they lead (Module 51).
+    if (worksThroughPod(scope, task.agencyId) && !(typeof podId === 'string' && scope.leads.includes(podId))) throw forbidden('You can move work only to a pod you lead.');
   });
   if (!isObjectId(podId)) throw bad('Choose a pod.');
   if (task.status === 'COMPLETED' || task.status === 'CANCELLED') throw conflict('This task is closed.');
@@ -702,7 +704,7 @@ export async function restrictTask(
   db: Db, scope: DeskScope, taskId: string, input: { userIds: unknown; reason?: unknown }, ctx: Ctx = {}
 ): Promise<{ task: Task; subtasks: number; released: number }> {
   const task = await getTaskForScope(db, scope, taskId, ctx);
-  scope = scopeIn(scope, task.agencyId);
+  scope = scopeIn(scope, task.agencyId, task.podId);
   await checkRules(db, scope, task, { op: 'restrict' }, ctx, async () => {
     if (!can(scope, 'requests.restrict')) throw forbidden('Your position does not allow restricting a request.');
   });
@@ -778,7 +780,7 @@ export async function restrictTask(
  */
 export async function restrictionCandidates(db: Db, scope: DeskScope, taskId: string, ctx: Ctx = {}) {
   const task = await getTaskForScope(db, scope, taskId, ctx);
-  scope = scopeIn(scope, task.agencyId);
+  scope = scopeIn(scope, task.agencyId, task.podId);
   await checkRules(db, scope, task, { op: 'restriction_candidates' }, ctx, async () => {
     if (!can(scope, 'requests.restrict')) throw forbidden('Your position does not allow restricting a request.');
   });
@@ -830,7 +832,7 @@ export interface ReviewInput {
  */
 export async function reviewTask(db: Db, scope: DeskScope, taskId: string, input: ReviewInput, ctx: Ctx = {}): Promise<Task> {
   const task = await getTaskForScope(db, scope, taskId, ctx);
-  scope = scopeIn(scope, task.agencyId);
+  scope = scopeIn(scope, task.agencyId, task.podId);
   await checkRules(db, scope, task, { op: 'review' }, ctx, async () => {
     if (!can(scope, 'requests.classify')) throw forbidden('Your position does not allow reclassifying work or changing its billing.');
   });
@@ -919,7 +921,7 @@ export async function addTaskNote(
   db: Db, scope: DeskScope, taskId: string, input: { body: string; visibility?: string | null }, ctx: Ctx = {}
 ): Promise<{ task: Task; resumed: boolean }> {
   const task = await getTaskForScope(db, scope, taskId, ctx);
-  scope = scopeIn(scope, task.agencyId);
+  scope = scopeIn(scope, task.agencyId, task.podId);
   const body = cleanText(input.body, 'Note', 5_000, true)!;
   let visibility: DeskVisibility = 'INTERNAL';
   if (scope.kind === 'AGENCY') visibility = 'AGENCY';

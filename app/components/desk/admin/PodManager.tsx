@@ -167,7 +167,23 @@ function PodsTab({ run, busy, onError }: TabProps) {
               {pod.members.length === 0 && <li className="py-2 text-sm text-amber-700">No members yet.</li>}
               {pod.members.map((m) => (
                 <li key={m.id} className="py-2 flex items-center justify-between gap-3 text-sm" data-testid="desk-pod-member">
-                  <span className="text-slate-700">{m.name} <span className="text-xs text-slate-400">{m.roleLabel}{m.isActive ? '' : ' · inactive'}</span></span>
+                  <span className="text-slate-700">
+                    {m.name} <span className="text-xs text-slate-400">{m.roleLabel}{m.isActive ? '' : ' · inactive'}</span>
+                    {m.isLead && <span className="ml-2 text-xs font-medium text-emerald-700" data-testid="desk-pod-lead">Pod Leader</span>}
+                  </span>
+                  <span className="flex gap-3 shrink-0">
+                  {(m.isLead || (m.canLead && pod.isActive)) && (
+                    <button
+                      className={ACTION} disabled={busy} data-testid="desk-pod-lead-toggle"
+                      title={m.isLead ? undefined : 'Leads this pod: assigns, reassigns and escalates its work'}
+                      onClick={() => run(async () => {
+                        await patch(pod.id, { action: 'setLead', userId: m.id, isLead: !m.isLead });
+                        return m.isLead ? `${m.name} no longer leads ${pod.name}.` : `${m.name} now leads ${pod.name}.`;
+                      }, load)}
+                    >
+                      {m.isLead ? 'Stop leading' : 'Make Pod Leader'}
+                    </button>
+                  )}
                   <button
                     className={ACTION} disabled={busy}
                     onClick={() => {
@@ -180,6 +196,7 @@ function PodsTab({ run, busy, onError }: TabProps) {
                   >
                     Remove
                   </button>
+                  </span>
                 </li>
               ))}
             </ul>
@@ -236,20 +253,29 @@ function AgencyAccessTab({ run, busy, onError }: TabProps) {
         </select>
       </div>
       {view && !view.agency.deskEnabled && <p className="text-xs text-amber-700 mb-3">The Desk is off for this agency, so nobody can reach its work until it is turned on.</p>}
-      {view && !view.canChange && <p className="text-xs text-slate-500 mb-3" data-testid="desk-access-readonly">Your position can see which pods an agency authorizes, but not change it.</p>}
+      {view && !view.canChange && (
+        <p className="text-xs text-slate-500 mb-3" data-testid="desk-access-readonly">
+          {view.canName
+            ? 'Which pods an agency authorizes is part of agency setup. For a pod it authorizes, you choose whether every VA in the pod works for it, or only those you name.'
+            : 'Your position can see which pods an agency authorizes, but not change it.'}
+        </p>
+      )}
       {view?.pods.map((pod) => {
         const draft = drafts[pod.id] ?? { mode: pod.mode, userIds: pod.userIds };
         const setDraft = (patch: Partial<typeof draft>) => setDrafts({ ...drafts, [pod.id]: { ...draft, ...patch } });
+        // Without agency setup: only the VAs of a pod already authorized.
+        const editable = view.canChange || (view.canName && pod.mode !== 'NONE');
+        const modes = (Object.keys(MODE_LABELS) as PodAccessMode[]).filter((m) => view.canChange || m !== 'NONE' || pod.mode === 'NONE');
         return (
           <section key={pod.id} className={CARD} data-testid="desk-access-pod">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <h2 className="text-sm font-semibold text-slate-800">{pod.name}</h2>
               <div className="flex gap-2 items-center">
-                <select aria-label={`Access for ${pod.name}`} className={INPUT} value={draft.mode} disabled={!view.canChange} onChange={(e) => setDraft({ mode: e.target.value as PodAccessMode })} data-testid="desk-access-mode">
-                  {(Object.keys(MODE_LABELS) as PodAccessMode[]).map((m) => <option key={m} value={m}>{MODE_LABELS[m]}</option>)}
+                <select aria-label={`Access for ${pod.name}`} className={INPUT} value={draft.mode} disabled={!editable} onChange={(e) => setDraft({ mode: e.target.value as PodAccessMode })} data-testid="desk-access-mode">
+                  {modes.map((m) => <option key={m} value={m}>{MODE_LABELS[m]}</option>)}
                 </select>
                 <button
-                  className="px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-60" style={PRIMARY} disabled={busy || !view.canChange} data-testid="desk-access-save"
+                  className="px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-60" style={PRIMARY} disabled={busy || !editable} data-testid="desk-access-save"
                   onClick={() => run(async () => {
                     const r = await api<{ tasksReturned: number }>(`/api/desk/admin/agencies/${agencyId}/pod-access`, { method: 'PUT', body: JSON.stringify({ podId: pod.id, mode: draft.mode, userIds: draft.mode === 'NAMED' ? draft.userIds : [] }) });
                     return `${pod.name}: saved.${returned(r.tasksReturned)}`;
@@ -265,7 +291,7 @@ function AgencyAccessTab({ run, busy, onError }: TabProps) {
                 {pod.vas.map((va) => (
                   <label key={va.id} className="flex items-center gap-2 text-sm text-slate-700">
                     <input
-                      type="checkbox" checked={draft.userIds.includes(va.id)} disabled={!view.canChange}
+                      type="checkbox" checked={draft.userIds.includes(va.id)} disabled={!editable}
                       onChange={(e) => setDraft({ userIds: e.target.checked ? [...draft.userIds, va.id] : draft.userIds.filter((id) => id !== va.id) })}
                     />
                     {va.name}{va.isActive ? '' : ' (inactive)'}

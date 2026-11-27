@@ -54,6 +54,8 @@ export interface DeskNavItem {
   permissions?: readonly PermissionKey[];
   /** Desk staff: the scope kinds (reach) the page works for; omitted = any. */
   kinds?: readonly DeskScope['kind'][];
+  /** Module 51: also for a Pod Leader whose pod positions allow one of the permissions, for the pods they lead. */
+  podLeads?: boolean;
 }
 
 /** What navigation needs to know about a person: plain data, so the browser shell can use it. */
@@ -61,6 +63,8 @@ export interface NavAccess {
   role: string;
   kind: DeskScope['kind'];
   permissions: readonly string[];
+  /** Module 51: what their pod positions allow in the pods they lead, if they lead one. */
+  leadPermissions?: readonly string[];
 }
 
 /** Any of these opens Desk setup. */
@@ -72,7 +76,10 @@ const ALL_AGENCIES: readonly DeskScope['kind'][] = ['PLATFORM'];
 
 /** The navigation view of a resolved scope. */
 export function navAccess(scope: DeskScope): NavAccess {
-  return { role: scope.role, kind: scope.kind, permissions: 'permissions' in scope ? [...scope.permissions] : [] };
+  // As podLeadScope (lib/desk/access.ts), which this file can't import: the browser shell uses it.
+  const lead = (scope.kind === 'VA' || scope.kind === 'ACCOUNT_MANAGER') && scope.leads.length
+    ? [...(scope.kind === 'VA' ? scope.permissions : scope.pod.permissions)] : null;
+  return { role: scope.role, kind: scope.kind, permissions: 'permissions' in scope ? [...scope.permissions] : [], ...(lead ? { leadPermissions: lead } : {}) };
 }
 
 /** A bare role read as its default position (the Super Admin has everything). */
@@ -90,6 +97,7 @@ const isStaffKind = (who: NavAccess) => who.kind === 'PLATFORM' || who.kind === 
 
 function shows(item: DeskNavItem, who: NavAccess): boolean {
   if (item.roles && !item.roles.includes(who.role)) return false;
+  if (item.podLeads && item.permissions?.some((p) => who.leadPermissions?.includes(p))) return true;
   if (item.permissions && !item.permissions.some((p) => who.permissions.includes(p))) return false;
   if (item.kinds && !item.kinds.includes(who.kind)) return false;
   return true;
@@ -112,7 +120,7 @@ export const DESK_NAV: Record<DeskArea, readonly DeskNavItem[]> = {
     { label: 'Agencies', href: '/desk-ops/agencies', icon: 'building', module: 35, summary: 'Your agencies, their accounts and their work.', permissions: ['accounts.view'], kinds: MANAGED },
     { label: 'Messages', href: '/desk-ops/messages', icon: 'chat', module: 36, summary: 'Conversations with your agencies.', permissions: ['messages.agency'], kinds: MANAGED },
     { label: 'Account Managers', href: '/desk-ops/account-managers', icon: 'staff', module: 50, summary: 'Who reports to whom, cover for absences, and moving agencies between Account Managers.', permissions: ['team.manage'], kinds: MANAGED },
-    { label: 'Workload', href: '/desk-ops/workload', icon: 'layers', module: 40, summary: 'All work across agencies and pods; reassign and escalate.', permissions: ['workload.view'], kinds: ALL_AGENCIES },
+    { label: 'Workload', href: '/desk-ops/workload', icon: 'layers', module: 40, summary: 'All work across agencies and pods (for a Pod Leader, the pods they lead); reassign and escalate.', permissions: ['workload.view'], kinds: ALL_AGENCIES, podLeads: true },
     { label: 'Turnaround', href: '/desk-ops/metrics', icon: 'chart', module: 42, summary: 'Turnaround by pod, VA and agency, in business time.', permissions: ['turnaround.view'], kinds: MANAGED },
     { label: 'Usage & audit', href: '/desk-ops/usage', icon: 'receipt', module: 43, summary: 'Monthly usage against plan allowances, and the audit log.', permissions: ['usage.view', 'audit.view'], kinds: ALL_AGENCIES },
   ],

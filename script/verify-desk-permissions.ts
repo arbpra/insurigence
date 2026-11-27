@@ -248,7 +248,8 @@ async function call(route: Route, method: Method, token: string | null, params: 
     const clerk = await mkUser('clerk', 'DESK_ADMIN'); await hold(clerk.id, clerkPos.id);
     const bare = await mkUser('bare', 'DESK_VA');
     const switched = await mkUser('switched', 'DESK_VA'); await hold(switched.id, offPos.id);
-    await prisma.podMember.createMany({ data: [lead, amPod, bare, switched].map((u) => ({ podId: podA.id, userId: u.id })) });
+    // The two Pod Leaders lead pod A (Module 51: a Pod Leader hands work out only in a pod they lead).
+    await prisma.podMember.createMany({ data: [lead, amPod, bare, switched].map((u) => ({ podId: podA.id, userId: u.id, isLead: u === lead || u === amPod })) });
     // amPod: Account Manager (backup) for Beta, and Pod Leader in the pod Alpha authorises.
     await prisma.agencyDeskAssignment.updateMany({ where: { agencyId: B.id }, data: { backupAmId: amPod.id } });
     const permsOf = (...codes: string[]) => [...new Set(codes.flatMap((c) => pos.get(c)!.permissions))];
@@ -355,10 +356,13 @@ async function call(route: Route, method: Method, token: string | null, params: 
       ok(`every setup handler names what it needs (${handlerCount})`, needs.size === handlerCount && [...needs.values()].every((v) => v !== 'UNKNOWN' && (v === 'SUPER_ADMIN' || v.length > 0)),
         [...needs.entries()].filter(([, v]) => v === 'UNKNOWN'));
       ok('positions are the Super Admin\'s alone', [...needs.entries()].filter(([k]) => k.includes('/admin/positions')).every(([, v]) => v === 'SUPER_ADMIN'));
-      // Workload and usage cover every agency, so they also need a position that reaches every agency
-      // (a Pod Leader's own pods come in Module 51, a Senior AM's supervised agencies in Module 50).
+      // Workload and usage cover every agency, so they also need a position that reaches every agency.
+      // Since Module 51, a Pod Leader is let into the workload too, for the pods they lead.
       const EVERY_AGENCY = routes.filter((r) => /everyAgency: true/.test(readFileSync(r.file, 'utf8'))).map((r) => r.path);
       ok('workload and usage are the pages that need every agency', EVERY_AGENCY.sort().join() === ['/api/desk/usage', '/api/desk/usage/[agencyId]', '/api/desk/workload', '/api/desk/workload/bulk'].join(), EVERY_AGENCY);
+      const FOR_LEADS = routes.filter((r) => /podLeads: true/.test(readFileSync(r.file, 'utf8'))).map((r) => r.path);
+      ok('…of which the workload also opens to Pod Leaders, for their pods (Module 51)', FOR_LEADS.sort().join() === ['/api/desk/workload', '/api/desk/workload/bulk'].join(), FOR_LEADS);
+      const leadsPod: Record<string, boolean> = { lead: true, amPod: true };
       const reachesAll: Record<string, boolean> = {};
       for (const w of Object.keys(perms)) reachesAll[w] = ['ops', 'dvo', 'dao', 'clerk'].includes(w);
       let byReach = 0;
@@ -370,7 +374,7 @@ async function call(route: Route, method: Method, token: string | null, params: 
       await pool(tries, async ({ w, r, m }) => {
         const need = needs.get(`${m} ${r.path}`)!;
         const permitted = Array.isArray(need) && need.some((p) => perms[w].includes(p));
-        if (permitted && EVERY_AGENCY.includes(r.path) && !reachesAll[w]) {
+        if (permitted && EVERY_AGENCY.includes(r.path) && !reachesAll[w] && !(FOR_LEADS.includes(r.path) && leadsPod[w])) {
           byReach += 1;
           const a = await call(r, m, tok[w], { id: A.id, agencyId: A.id }, { name: 'x' });
           if (a.status !== 403) wrong.push(`${w} ${m} ${r.path}: ${a.status}, expected 403 (needs every agency)`);

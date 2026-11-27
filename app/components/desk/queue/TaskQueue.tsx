@@ -33,6 +33,7 @@ interface Row {
 interface ListResult { total: number; page: number; rows: Row[] }
 interface Options {
   canAssign: boolean;
+  assignIn: { agencies: string[]; pods: string[] } | null;
   pods: { id: string; name: string }[];
   agencies: { id: string; name: string }[];
   counts: { waiting: number; overdue: number; unrouted: number; mine: number };
@@ -178,6 +179,9 @@ export function TaskQueue({ mode, userId }: { mode: QueueMode; userId: string })
     act(task.id, () => assign(task, person.id), { text: person.id === userId ? `You took #${task.reference}. It's in My tasks.` : `#${task.reference} is assigned to ${person.name}.`, link: person.id === userId });
 
   const canAssign = !!options?.canAssign;
+  // Module 51: a Pod Leader hands out work only in the pods they lead.
+  const assignsRow = (task: Row) => canAssign && (!options?.assignIn
+    || options.assignIn.agencies.includes(task.agency.id) || (!!task.pod && options.assignIn.pods.includes(task.pod.id)));
   const rows = data?.rows ?? [];
   const shownPage = data?.page ?? filters.page;
   const total = data?.total ?? 0;
@@ -301,13 +305,13 @@ export function TaskQueue({ mode, userId }: { mode: QueueMode; userId: string })
                 </div>
                 {!closed && (
                   <div className="flex flex-wrap gap-2 shrink-0">
-                    {mode === 'queue' && !canAssign && (
+                    {mode === 'queue' && !assignsRow(task) && (
                       <button type="button" className={`${BUTTON} text-white`} style={{ backgroundColor: ACCENT }} disabled={busy === task.id} onClick={() => pickUp(task)} data-testid="desk-queue-pickup">Pick up</button>
                     )}
                     {mode === 'mine' && mineRow && task.status === 'ASSIGNED' && (
                       <button type="button" className={`${BUTTON} text-white`} style={{ backgroundColor: ACCENT }} disabled={busy === task.id} onClick={() => start(task)} data-testid="desk-queue-start">Start</button>
                     )}
-                    {canAssign && (
+                    {assignsRow(task) && (
                       <button type="button" className={SECONDARY} disabled={busy === task.id} aria-expanded={picking?.taskId === task.id} onClick={() => void openPicker(task)} data-testid="desk-queue-assign">{task.assignee ? 'Reassign' : 'Assign'}</button>
                     )}
                     {mode === 'mine' && mineRow && (

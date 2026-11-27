@@ -130,7 +130,8 @@ const status = async (fn: () => Promise<unknown>) => {
     const offPos = await prisma.deskPosition.create({ data: { code: `${TAG}_OFF`, name: `${TAG} Off`, department: 'VIRTUAL_OPERATIONS', reach: 'POD', permissions: ['requests.work'], isActive: false } });
     await prisma.deskPositionHolder.create({ data: { userId: off.id, positionId: offPos.id } });
     const owner = await person('owner', 'ADMIN', { agencyId: A.id });
-    for (const u of [amPod, lead, va, bare]) await prisma.podMember.create({ data: { podId: P.id, userId: u.id } });
+    // The Pod Leaders lead the pod (Module 51: their position hands work out only there).
+    for (const u of [amPod, lead, va, bare]) await prisma.podMember.create({ data: { podId: P.id, userId: u.id, isLead: u === amPod || u === lead } });
     await prisma.agencyDeskAssignment.create({ data: { agencyId: A.id, primaryAmId: am.id } });
     await prisma.agencyDeskAssignment.create({ data: { agencyId: B.id, primaryAmId: amPod.id } });
 
@@ -218,7 +219,7 @@ const status = async (fn: () => Promise<unknown>) => {
       && !meetsNeed(sDvo, ['agencies.setup']) && !meetsNeed(sDvo, ['documents.grant']) && !meetsNeed(sDvo, ['audit.view']));
     ok('the Director of Agency Operations: agency setup, not pods or staff', meetsNeed(sDao, ['agencies.setup']) && !meetsNeed(sDao, ['pods.manage']) && !meetsNeed(sDao, ['staff.manage']));
     ok('positions: only the Super Admin, not the COO', !meetsNeed(sCoo, 'SUPER_ADMIN'));
-    const [tDvo, tDao, tLead] = await Promise.all([createSession(dvo.id), createSession(dao.id), createSession(lead.id)]);
+    const [tDvo, tDao, tLead, tVa] = await Promise.all([createSession(dvo.id), createSession(dao.id), createSession(lead.id), createSession(va.id)]);
     const req = (url: string, token: string) => new NextRequest(`http://local.test${url}`, { headers: { cookie: `session_token=${token}` } });
     const p = (id: string) => ({ params: Promise.resolve({ id }) });
     ok('routes: pods 200 for the Director of Virtual Operations, 403 for the Director of Agency Operations',
@@ -227,8 +228,9 @@ const status = async (fn: () => Promise<unknown>) => {
       (await agencyRoute(req(`/api/desk/admin/agencies/${A.id}`, tDvo), p(A.id))).status === 403 && (await agencyRoute(req(`/api/desk/admin/agencies/${A.id}`, tDao), p(A.id))).status === 200);
     ok('routes: VA document permissions and the audit log are refused to the Director of Virtual Operations',
       (await vaPermRoute(req('/api/desk/admin/va-permissions', tDvo))).status === 403 && (await auditRoute(req('/api/desk/audit', tDvo))).status === 403);
-    ok('routes: the workload for the Director of Virtual Operations; a Pod Leader is refused (their pod view comes later)',
-      (await workloadRoute(req('/api/desk/workload', tDvo))).status === 200 && (await workloadRoute(req('/api/desk/workload', tLead))).status === 403);
+    ok('routes: the workload for the Director of Virtual Operations, and for a Pod Leader their pod (Module 51); a VA is refused',
+      (await workloadRoute(req('/api/desk/workload', tDvo))).status === 200 && (await workloadRoute(req('/api/desk/workload', tLead))).status === 200
+      && (await workloadRoute(req('/api/desk/workload', tVa))).status === 403);
     ok('a refusal is logged with what the route needed', ((await prisma.deskAuditLog.findFirst({ where: { actorId: dao.id, action: 'access.denied', entityType: 'DeskSetup' }, orderBy: { createdAt: 'desc' } }))?.metadata as Json)?.needs?.includes?.('pods.manage'));
     const wl = await getWorkload(prisma, sDvo, {}) as Json;
     ok('the workload leaves out restricted requests for someone who can\'t restrict', !JSON.stringify(wl).includes(t2.id));
@@ -243,7 +245,7 @@ const status = async (fn: () => Promise<unknown>) => {
     const labels = (area: 'OPS' | 'ADMIN', s: DeskScope) => navFor(area, navAccess(s)).map((i) => i.label);
     ok('Director of Virtual Operations: queue, workload and turnaround; no Agencies or Messages', ['Pod queue', 'Workload', 'Turnaround', 'Usage & audit'].every((l) => labels('OPS', sDvo).includes(l)) && !labels('OPS', sDvo).includes('Agencies') && !labels('OPS', sDvo).includes('Messages'));
     ok('…Desk setup: Staff, Pods and the operating rules; not Agencies or Positions', ['Staff', 'Pods', 'Routing & targets', 'Business calendar', 'Follow-up rules'].every((l) => labels('ADMIN', sDvo).includes(l)) && !labels('ADMIN', sDvo).includes('Agencies') && !labels('ADMIN', sDvo).includes('Positions'));
-    ok('Pod Leader: queue and My tasks; no Workload (it needs every agency)', labels('OPS', sLead).includes('Pod queue') && !labels('OPS', sLead).includes('Workload'));
+    ok('Pod Leader: queue, My tasks, and the Workload of the pod they lead (Module 51); a VA no Workload', labels('OPS', sLead).includes('Pod queue') && labels('OPS', sLead).includes('Workload') && !labels('OPS', sVa).includes('Workload'));
     ok('Desk setup opens for the Directors, not for an AM or a VA', gateArea('ADMIN', dvo.role, sDvo).ok && gateArea('ADMIN', dao.role, sDao).ok && !gateArea('ADMIN', am.role, sAm).ok && !gateArea('ADMIN', va.role, sVa).ok);
     ok('the Directors get links between Desk Operations and Desk setup; a VA doesn\'t', otherAreaLinks('OPS', navAccess(sDvo)).some((l) => l.href === '/super-admin/desk') && !otherAreaLinks('OPS', navAccess(sVa)).length);
     ok('a page is refused if the position doesn\'t allow it', !itemAllowed('/super-admin/desk/agencies', navAccess(sDvo)) && itemAllowed('/super-admin/desk/agencies', navAccess(sDao)));
@@ -275,7 +277,7 @@ const status = async (fn: () => Promise<unknown>) => {
     })());
 
     section('Which agencies a pod may work for');
-    ok('the Director of Virtual Operations sees it, read-only', (await getAgencyPodAccess(prisma, sDvo, A.id)).canChange === false && (await podAccessRoute(req(`/api/desk/admin/agencies/${A.id}/pod-access`, tDvo), p(A.id))).status === 200);
+    ok('the Director of Virtual Operations sees it: can name VAs, not authorize pods (Module 51)', (await getAgencyPodAccess(prisma, sDvo, A.id)).canChange === false && (await getAgencyPodAccess(prisma, sDvo, A.id)).canName === true && (await podAccessRoute(req(`/api/desk/admin/agencies/${A.id}/pod-access`, tDvo), p(A.id))).status === 200);
     ok('but can\'t authorize a pod for an agency (403), by the service or the route', await status(() => setAgencyPodAccess(prisma, sDvo, B.id, { podId: P.id, mode: 'WHOLE' }, CTX)) === 403
       && (await podAccessPut(new NextRequest(`http://local.test/api/desk/admin/agencies/${B.id}/pod-access`, { method: 'PUT', headers: { cookie: `session_token=${tDvo}` }, body: JSON.stringify({ podId: P.id, mode: 'WHOLE' }) }), p(B.id))).status === 403
       && (await prisma.agencyPodAccess.count({ where: { agencyId: B.id } })) === 0);
@@ -329,9 +331,10 @@ const status = async (fn: () => Promise<unknown>) => {
     const bulk = await changeWorkload(prisma, sDvo, { taskIds: [t2.id], assigneeId: va.id }, CTX);
     ok('a bulk change on a request they can\'t see gives away no reference number', bulk.done.length === 0 && bulk.failed[0]?.reference === null);
     ok('…but names one they can see', (await changeWorkload(prisma, sDvo, { taskIds: [tB.id], podId: 'nope' }, CTX)).failed[0]?.reference === tB.reference);
+    const deniedBefore = await prisma.deskAuditLog.count({ where: { actorId: dvo.id, action: 'access.denied', entityType: 'Agency' } });
     ok('agency pages (contacts, where logins are kept): not for the Director of Virtual Operations, and logged',
       await status(() => managedAgencies(prisma, sDvo, CTX)) === 404 && await status(() => agencySummary(prisma, sDvo, A.id, CTX)) === 404
-      && (await prisma.deskAuditLog.count({ where: { actorId: dvo.id, action: 'access.denied', entityType: 'Agency' } })) === 2);
+      && (await prisma.deskAuditLog.count({ where: { actorId: dvo.id, action: 'access.denied', entityType: 'Agency' } })) === deniedBefore + 2);
     ok('…still for the Director of Agency Operations and the AM', await status(() => managedAgencies(prisma, sDao, CTX)) === 200 && await status(() => agencySummary(prisma, sAm, A.id, CTX)) === 200);
     // Renewals on the overview: on active accounts only, through requests for those who don't open books.
     const soon = new Date(Date.now() + 20 * 86_400_000);

@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { deskAccessResponse, DeskAccessError } from '@/lib/desk/access';
 import { deskAdminRequest } from '@/lib/desk/admin-api';
-import { addPodMember, removePodMember, updatePod } from '@/lib/desk/pod-admin';
+import { addPodMember, removePodMember, setPodLead, updatePod } from '@/lib/desk/pod-admin';
 
 type Context = { params: Promise<{ id: string }> };
 
-/** Body: { action: 'update', name?, description?, isActive? } | { action: 'addMember' | 'removeMember', userId }. */
+/** Body: { action: 'update', name?, description?, isActive? } | { action: 'addMember' | 'removeMember', userId } | { action: 'setLead', userId, isLead }. */
 export async function PATCH(request: NextRequest, { params }: Context) {
   try {
     const { id } = await params;
@@ -21,6 +21,9 @@ export async function PATCH(request: NextRequest, { params }: Context) {
         return NextResponse.json({ success: true });
       case 'removeMember':
         return NextResponse.json(await removePodMember(prisma, scope, id, body.userId, ctx));
+      case 'setLead':
+        await setPodLead(prisma, scope, id, body, ctx);
+        return NextResponse.json({ success: true });
       default:
         throw new DeskAccessError(400, 'Invalid request.');
     }

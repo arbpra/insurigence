@@ -261,7 +261,7 @@ function rules() {
       const src = read(`app/(desk)/desk-ops/${page}/page.tsx`);
       ok(`${page}: a real page now, checked on the server, for the signed-in person`, !src.includes('DeskPage ') && src.includes(`deskPageAccess('OPS', '/desk-ops/${page}')`) && src.includes(`mode="${mode}"`) && src.includes('userId={access.user.id}'));
     }
-    ok('VAs pick up; managers assign from the checked list', screen.includes("mode === 'queue' && !canAssign") && screen.includes('/assignees'));
+    ok('VAs pick up; managers assign from the checked list, row by row (a Pod Leader only in the pods they lead)', screen.includes("mode === 'queue' && !assignsRow(task)") && screen.includes('{assignsRow(task) && (') && screen.includes('/assignees'));
     ok('releasing asks first', screen.includes('window.confirm(`Return #'));
     ok('a lost race is explained and the list refreshed', screen.includes('err.status === 409') && screen.includes('The list has been refreshed.') && screen.includes('Someone else has already picked up #'));
     ok('waiting work isn\'t shown as overdue on screen either', screen.includes('dueLabel(task, now)'));

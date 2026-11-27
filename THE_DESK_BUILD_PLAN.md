@@ -2653,6 +2653,38 @@ Module 1–44 suites re-run: all 43 earlier Desk suites passed (3,688 checks; 3,
 - Full regression: `tsc` and 50 suites, **4,170 checks, 0 failed**. Two expectations were updated on the way: the permission suite now finds 65 Desk routes (the 5 new ones, each checked for its guard), and one alert check failed once because the live server's own 15-minute check wrote its run record while the suite ran; it passed on re-run.
 - The live database was checked afterwards: no test records left.
 
+**Module 51 — Virtual Operations tools (✅ complete, 26 Nov 2026)**
+
+**Built:**
+
+- **Who leads a pod is now a setting** (it existed only as a label before). On **Desk setup → Pods**, the COO and the Director of Virtual Operations (`pods.manage`) mark a member as Pod Leader, or not. A pod can have several leaders, so one can cover for another. Only a member whose position hands out work in a pod can be marked (by default, the Pod Leader position), and not in a switched-off pod. Every change is in the audit log (`pod.lead_changed`).
+- **A Pod Leader assigns, reassigns, escalates and moves work only in the pods they lead.** In a pod they're merely a member of, they work like any VA: they pick work up and let it go. Someone with the Pod Leader position who leads no pod is, in practice, a VA. The rule is one check in the access layer (`scopeIn` now takes the request's pod), used by the task service, the request page, the queue, the list of who can take a request, and file removal, so the screens offer only what the server allows. A Pod Leader moves work only between pods they lead. Every refusal is logged.
+- **An Account Manager who also leads a pod** keeps their own agencies as before. In other agencies, they hand out work only in the pods they lead.
+- **The Workload page for Pod Leaders:** the open work of the pods they lead, in every agency that authorises those pods, with the pods' people. The same reassigning, escalating and moving several at once, kept inside those pods. The alert-check status stays with those who reach every agency. In the sidebar for a Pod Leader who leads a pod.
+- **The Director of Virtual Operations names VAs within authorised agencies.** For a pod an agency already authorises, they choose whether every VA in the pod works for it or only named VAs. Authorising a pod for an agency, or taking it away, stays with agency setup (`agencies.setup`, the Director of Agency Operations and the COO). The refusal is logged. Work held by a VA no longer named goes back to the queue, as before.
+- **Already there from earlier modules:** creating, renaming and switching off pods and changing their members (`pods.manage`, Module 17), and inviting and managing VAs and Pod Leaders (`staff.manage`, Module 48).
+
+**Design decisions and their consequences:**
+
+- **Leading decides what a Pod Leader may do, not what they see.** A Pod Leader sees the same work in every pod they belong to. Leading adds handing it out.
+- **Leading is per pod, not a position.** The position says what a Pod Leader may do; being marked in a pod says where. Production has no Pod Leaders yet, so nobody loses anything. When one is appointed, the Director gives them the position and marks them in their pod.
+- **Stopping leading takes nothing away** that they hold or can see. They stay a member, and work they handed out stays where it is.
+
+**Not done or limited:**
+
+- Alerts and escalation still go to the role "Operations Manager", not to the Pod Leader (Module 60).
+- The Pod Leader's dashboard with productivity, QA and capacity is part of the dashboards (Module 52).
+- As in earlier Phase 7 modules, the screens were not seen in a browser.
+
+**Verified:**
+
+- `tsc --noEmit` exit 0. No database change.
+- **94 tests passed** (`script/verify-desk-pod-leads.ts`): who may mark a leader and who may be one; what a Pod Leader may do in a pod they lead and in one they don't (assigning, escalating, moving, who can take it, the request page, files, the queue); an AM who also leads; the workload of their pods (counts, people, list, changes); the Director naming VAs but not authorising pods; the sidebar, the routes and the audit log; and nothing left behind.
+- Earlier suites updated where they expected the old behaviour: a Pod Leader now leads their pod in the fixtures, has a Workload page, and the queue decides per row who may assign.
+- **37 deliberate faults**, each put into the code one at a time and the code restored after. The first run caught 31. Four of the missed faults showed real gaps: narrowing a scope twice must not give back what a pod they don't lead took away; an Account Manager who also leads acts on the Workload page, and in the sidebar, with the Pod Leader's permissions, not their wider own; and the Workload page's refusal of someone marked as leader without the position must be logged. A check was added for each, and all four are now caught. The other two are equivalent: the request page's actions and its files' remove button are worked out after the request page has already narrowed the scope to the request's pod, so no test can catch them. All files were restored.
+- Full regression: `tsc` and 51 suites, **4,262 checks, 0 failed** (with the new suite at 91, before the 3 checks added after the fault check; 4,265 with them). The first run was interrupted when a session ended during the task-api suite; it left 3 empty test agencies on the live database, which were backed up and removed, and the 13 remaining suites were then run separately.
+- The live database was checked afterwards: no test records left.
+
 ### Phase 3 — Task System Core (17 h)
 
 | # | Module | Hours | Change | Status |
@@ -2702,7 +2734,7 @@ From the client's feedback and answers of 24 November 2026 (Section 11). One par
 | 48 | Access layer on permissions: every Desk check moves from fixed roles to permissions. Agency data and sensitive documents stay governed by agency authorisation, pods and individual grants, never by position or reporting line | 5.0 | ✏️ Q4 | ✅ Done |
 | 49 | Permission suite rebuilt for positions, combined positions and reporting lines | 3.0 | ✏️ | ✅ Done |
 | 50 | Reporting lines and coverage: who reports to whom; Senior AMs see the agencies, accounts and requests of the AMs they supervise; covering an absent AM; reassigning agencies between authorised AMs | 5.0 | 🆕 | ✅ Done |
-| 51 | Virtual Operations tools: the Director creates and manages pods and Pod Leaders and assigns VAs within authorised agencies; Pod Leaders assign, reassign and escalate in their pods | 4.0 | 🆕 | ⬜ To do |
+| 51 | Virtual Operations tools: the Director creates and manages pods and Pod Leaders and assigns VAs within authorised agencies; Pod Leaders assign, reassign and escalate in their pods | 4.0 | 🆕 | ✅ Done |
 | 52 | Dashboards: Director of Virtual Operations (workload, productivity, QA, SLA, capacity; allowances read-only, no prices), Director of Agency Operations (agencies, AM performance, utilization, approvals), COO (both) | 5.0 | 🆕 | ⬜ To do |
 | 53 | Account and request classification: Small Commercial / Middle-Market / Complex-Custom on the account, overridable per request; the AM sets it, Senior AM, Director of Agency Operations and COO override with a reason; VAs and Pod Leaders can only flag; audited | 3.5 | 🆕 D1 | ⬜ To do |
 | 54 | Plan admin screen: plans, monthly prices, allowances, monthly credits and maximum balance, custom agency plans, the one-time implementation fee; the client's figures entered. Contract fields editable only by CEO / authorised administrators | 4.0 | 🆕 D1 | ⬜ To do |
