@@ -38,7 +38,7 @@ export const AREA_TITLES: Record<DeskArea, string> = {
 export type DeskIcon =
   | 'home' | 'inbox' | 'plus' | 'users' | 'upload' | 'chat' | 'shield'
   | 'queue' | 'check' | 'building' | 'layers' | 'chart' | 'receipt'
-  | 'staff' | 'route' | 'calendar' | 'repeat';
+  | 'staff' | 'route' | 'calendar' | 'repeat' | 'gauge';
 
 export interface DeskNavItem {
   label: string;
@@ -115,6 +115,7 @@ export const DESK_NAV: Record<DeskArea, readonly DeskNavItem[]> = {
   ],
   OPS: [
     { label: 'Overview', href: '/desk-ops', icon: 'home', module: 34, summary: 'Open, due-soon and overdue work across your agencies.' },
+    { label: 'Dashboards', href: '/desk-ops/dashboards', icon: 'gauge', module: 52, summary: 'Department dashboards: Virtual Operations (pods, people, QA, capacity) and Agency Operations (agencies, Account Managers, utilization).', permissions: ['dashboard.virtual_ops', 'dashboard.agency_ops'], kinds: MANAGED, podLeads: true },
     { label: 'Pod queue', href: '/desk-ops/queue', icon: 'queue', module: 31, summary: 'Unassigned work in your pods, ready to pick up.', permissions: WORK },
     { label: 'My tasks', href: '/desk-ops/my-tasks', icon: 'check', module: 31, summary: 'Work assigned to you.', permissions: WORK },
     { label: 'Agencies', href: '/desk-ops/agencies', icon: 'building', module: 35, summary: 'Your agencies, their accounts and their work.', permissions: ['accounts.view'], kinds: MANAGED },

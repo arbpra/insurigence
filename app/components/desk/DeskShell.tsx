@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  Building2, CalendarDays, CheckSquare, ChevronRight, Home, Inbox, Layers, LineChart, ListTodo,
+  Building2, CalendarDays, CheckSquare, ChevronRight, Gauge, Home, Inbox, Layers, LineChart, ListTodo,
   LogOut, Menu, MessageSquare, Plus, Receipt, Repeat, Route, ShieldCheck, Upload, UserCog, Users, X,
   type LucideIcon,
 } from 'lucide-react';
@@ -15,7 +15,7 @@ import {
 const ICONS: Record<DeskIcon, LucideIcon> = {
   home: Home, inbox: Inbox, plus: Plus, users: Users, upload: Upload, chat: MessageSquare,
   shield: ShieldCheck, queue: ListTodo, check: CheckSquare, building: Building2, layers: Layers,
-  chart: LineChart, receipt: Receipt, staff: UserCog, route: Route, calendar: CalendarDays, repeat: Repeat,
+  chart: LineChart, receipt: Receipt, staff: UserCog, route: Route, calendar: CalendarDays, repeat: Repeat, gauge: Gauge,
 };
 
 interface DeskShellProps {

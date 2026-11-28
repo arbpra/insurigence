@@ -93,10 +93,20 @@ export function categoryUsage(
 /** Every agency with The Desk on (or with work counted in the month): its plan and its month. */
 export async function getUsage(db: Db, scope: DeskScope, opts: { period?: string | null; now?: Date } = {}) {
   opsOnly(scope);
+  return usageReport(db, scope, opts);
+}
+
+/**
+ * The report itself, for the agencies given (all when none are given). The
+ * caller decides who may read it: the Usage page above, and the dashboards
+ * (Module 52), which leave prices out.
+ */
+export async function usageReport(db: Db, scope: DeskScope, opts: { period?: string | null; now?: Date; agencyIds?: readonly string[] } = {}) {
+  const only: Prisma.TaskWhereInput = opts.agencyIds ? { agencyId: { in: [...opts.agencyIds] } } : {};
   const now = opts.now ?? new Date();
   const cal = await loadBusinessCalendar(db);
   const period = usagePeriod(opts.period, now, cal.timeZone);
-  const completed: Prisma.TaskWhereInput = { status: 'COMPLETED', billingPeriod: period };
+  const completed: Prisma.TaskWhereInput = { status: 'COMPLETED', billingPeriod: period, ...only };
 
   const [classified, pending] = await Promise.all([
     db.task.groupBy({
@@ -125,7 +135,7 @@ export async function getUsage(db: Db, scope: DeskScope, opts: { period?: string
 
   const withWork = [...new Set([...classified, ...pending].map((g) => g.agencyId))];
   const agencies = await db.agency.findMany({
-    where: { OR: [{ deskEnabled: true }, { id: { in: withWork } }] },
+    where: { AND: [{ OR: [{ deskEnabled: true }, { id: { in: withWork } }] }, opts.agencyIds ? { id: { in: [...opts.agencyIds] } } : {}] },
     select: {
       id: true, name: true, deskEnabled: true,
       deskPlan: {

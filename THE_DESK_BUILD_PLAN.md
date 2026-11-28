@@ -2685,6 +2685,39 @@ Module 1–44 suites re-run: all 43 earlier Desk suites passed (3,688 checks; 3,
 - Full regression: `tsc` and 51 suites, **4,262 checks, 0 failed** (with the new suite at 91, before the 3 checks added after the fault check; 4,265 with them). The first run was interrupted when a session ended during the task-api suite; it left 3 empty test agencies on the live database, which were backed up and removed, and the 13 remaining suites were then run separately.
 - The live database was checked afterwards: no test records left.
 
+**Module 52 — Dashboards (✅ complete, 27 Nov 2026)**
+
+**Built:**
+
+- **A Dashboards page** (`/desk-ops/dashboards`, in the sidebar) with the two department dashboards. Each has its own permission, so the Super Admin can give or take it away on the Positions page: **Virtual Operations dashboard** (`dashboard.virtual_ops`) and **Agency Operations dashboard** (`dashboard.agency_ops`). The COO holds both and sees both on one page.
+- **Virtual Operations**, per pod and per person: open work (unassigned, overdue, waiting, escalated), the requests completed in the period, their typical time and how many met their target, QA (in review now; passed or sent back for correction in the period), and capacity (the people in each pod, open work per person, who has none, the busiest). The Director of Virtual Operations sees every pod, and the agencies' allowances and this month's use, read-only. A Pod Leader sees the pods they lead.
+- **Agency Operations**, per agency and per Account Manager: open work, overdue, escalated, waiting on the agency, in QA review, completed and on target, and this month's use against the allowances; and what awaits a decision (QA sign-off, escalations, completed work awaiting a billing decision). The Director of Agency Operations sees every agency with The Desk on; a Senior AM, their own agencies and their team's (Module 50).
+- The period is 7, 30, 90 or 365 days, as on Turnaround.
+- The new permissions are given once to the existing positions by `db:seed:desk`: Virtual Operations to the COO, the Director of Virtual Operations and the Pod Leader; Agency Operations to the COO, the Director of Agency Operations and the Senior AM. Anyone else asking is refused, and the refusal is logged.
+
+**Design decisions and their consequences:**
+
+- **Counted as on the other pages, so the figures agree:** open work as on Workload (requests and subtasks, wherever they are held, so a VA's work for a switched-off agency still counts on their plate); completed work and targets as on Turnaround (requests only, in business time less waiting, against the original target); use as on Usage (this month).
+- **Never prices or contract amounts,** even for someone who may see them elsewhere. Those stay on the Usage page. No request titles or text either: counts only.
+- **A Pod Leader's figures include every request in the pods they lead, closed ones included,** so their pods' completed work and QA are counted. Counts only: a closed request someone else held still doesn't open for them, and requests restricted to others stay out of their figures.
+- **QA is counted for the person holding the request now.** An Account Manager's figures are those of the agencies they are the primary Account Manager for.
+
+**Not done or limited:**
+
+- **Approvals:** the dashboard shows what exists now (QA sign-off, escalations, work awaiting a billing decision). The approval of overage charges comes with Module 58 and will be added to this dashboard then.
+- **No capacity or workload alerts:** their thresholds are among the questions still open with the client. The dashboard shows the figures.
+- Productivity is the number of requests completed. There is no time tracking.
+- As in earlier Phase 7 modules, the screens were not seen in a browser.
+
+**Verified:**
+
+- `tsc --noEmit` exit 0. No database change (the new permissions are added by `db:seed:desk`).
+- **62 tests passed** (`script/verify-desk-dashboards.ts`): who sees which dashboard, and who sees none (refused and logged), including a Pod Leader whose position loses the permission and an Account Manager who leads a pod; the figures for a pod, a person, an agency and an Account Manager (open work, completed work and targets in the period, QA, capacity, use); a Pod Leader's pods and a Senior AM's agencies only; no prices (an agency on a priced plan shows only the plan's name) and no request text; totals that are those of the agencies shown, with nothing from a switched-off agency; the period, the sidebar and the route; and nothing left behind.
+- Earlier suites updated: the permission suite now finds 66 Desk routes, and the dashboards are among the routes open to Pod Leaders.
+- **Fault check:** 34 deliberate faults put into the code one at a time; the suite caught 31. The first run missed 7, and 4 checks were added for them. The other 3 change nothing the dashboard can show: the Pod Leader's scope already holds only the pods they lead; the usage figures are already limited to the agencies listed; and a Pod Leader's own permissions already let them through the route, which then narrows them to the pods they lead.
+- Full regression: `tsc` and 52 suites, **4,327 checks, 0 failed**. The first run was interrupted when a session ended during the workload suite. It left that suite's tagged records on the live database (2 agencies, 8 people, 5 pods, 6 requests and an account), which were backed up and removed, and the 4 remaining suites were then run separately. Twice the alerts suite's check that the real alerts run record is untouched failed, because the live server's own alerts run updated that record while the suite was running. Re-run while the server was quiet, it passed 75 of 75.
+- The first run of the new suite stopped on a mistake in its own test data and could not remove its records (a subtask has to go before its request). They were found on the live database (3 agencies, 12 people, 2 pods, 7 positions and 12 requests, all tagged), backed up and removed, and the suite's cleanup was fixed. The live database was checked afterwards: no test records left.
+
 ### Phase 3 — Task System Core (17 h)
 
 | # | Module | Hours | Change | Status |
@@ -2735,7 +2768,7 @@ From the client's feedback and answers of 24 November 2026 (Section 11). One par
 | 49 | Permission suite rebuilt for positions, combined positions and reporting lines | 3.0 | ✏️ | ✅ Done |
 | 50 | Reporting lines and coverage: who reports to whom; Senior AMs see the agencies, accounts and requests of the AMs they supervise; covering an absent AM; reassigning agencies between authorised AMs | 5.0 | 🆕 | ✅ Done |
 | 51 | Virtual Operations tools: the Director creates and manages pods and Pod Leaders and assigns VAs within authorised agencies; Pod Leaders assign, reassign and escalate in their pods | 4.0 | 🆕 | ✅ Done |
-| 52 | Dashboards: Director of Virtual Operations (workload, productivity, QA, SLA, capacity; allowances read-only, no prices), Director of Agency Operations (agencies, AM performance, utilization, approvals), COO (both) | 5.0 | 🆕 | ⬜ To do |
+| 52 | Dashboards: Director of Virtual Operations (workload, productivity, QA, SLA, capacity; allowances read-only, no prices), Director of Agency Operations (agencies, AM performance, utilization, approvals), COO (both) | 5.0 | 🆕 | ✅ Done |
 | 53 | Account and request classification: Small Commercial / Middle-Market / Complex-Custom on the account, overridable per request; the AM sets it, Senior AM, Director of Agency Operations and COO override with a reason; VAs and Pod Leaders can only flag; audited | 3.5 | 🆕 D1 | ⬜ To do |
 | 54 | Plan admin screen: plans, monthly prices, allowances, monthly credits and maximum balance, custom agency plans, the one-time implementation fee; the client's figures entered. Contract fields editable only by CEO / authorised administrators | 4.0 | 🆕 D1 | ⬜ To do |
 | 55 | Overage price list: by service, standard / complex, classification, rush +50 %, Complete discounts, custom pricing for Complex / Custom; internal subtasks, routine QA and corrections of our own work never charged | 4.5 | 🆕 D1 | ⬜ To do |

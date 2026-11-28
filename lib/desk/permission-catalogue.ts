@@ -45,6 +45,8 @@ export const PERMISSIONS = [
   { key: 'usage.view', group: 'Oversight', label: 'Allowances and utilization', description: 'Monthly usage against plan allowances, without prices.' },
   { key: 'billing.prices', group: 'Oversight', label: 'Prices and contract amounts', description: 'Plan prices, overage prices and agency contract amounts.' },
   { key: 'audit.view', group: 'Oversight', label: 'Audit log', description: 'Read and export the audit log.' },
+  { key: 'dashboard.virtual_ops', group: 'Oversight', label: 'Virtual Operations dashboard', description: 'Workload, productivity, QA, targets and capacity of the pods in reach (for a Pod Leader, the pods they lead). With usage, allowances read-only, never prices.' },
+  { key: 'dashboard.agency_ops', group: 'Oversight', label: 'Agency Operations dashboard', description: 'The agencies in reach, Account Manager performance, utilization and work awaiting a billing decision. Never prices.' },
   // Documents
   { key: 'documents.all_categories', group: 'Documents', label: 'Financial and Personal documents', description: 'Open Financial and Personal documents in reach without an individual grant.' },
   { key: 'documents.grant', group: 'Documents', label: 'Grant document permissions', description: 'Give or remove individual Financial and Personal permissions.' },
@@ -100,12 +102,12 @@ export const DEFAULT_POSITIONS: readonly DefaultPosition[] = [
   {
     code: 'DIRECTOR_VIRTUAL_OPS', name: 'Director of Virtual Operations', department: 'VIRTUAL_OPERATIONS', reach: 'ALL', reportsTo: 'COO', legacyRole: null,
     description: 'Oversees Pod Leaders and VAs: staffing, workload, productivity, quality and execution. Allowances read-only, no prices.',
-    permissions: ['requests.work', 'requests.assign', 'requests.escalate', 'workload.view', 'turnaround.view', 'usage.view', 'staff.manage', 'pods.manage', 'settings.operations'],
+    permissions: ['requests.work', 'requests.assign', 'requests.escalate', 'workload.view', 'turnaround.view', 'usage.view', 'staff.manage', 'pods.manage', 'settings.operations', 'dashboard.virtual_ops'],
   },
   {
     code: 'POD_LEADER', name: 'Pod Leader', department: 'VIRTUAL_OPERATIONS', reach: 'POD', reportsTo: 'DIRECTOR_VIRTUAL_OPS', legacyRole: null,
     description: 'Leads a pod: assigns, reassigns and escalates its work.',
-    permissions: ['requests.work', 'requests.assign', 'requests.escalate', 'workload.view', 'turnaround.view'],
+    permissions: ['requests.work', 'requests.assign', 'requests.escalate', 'workload.view', 'turnaround.view', 'dashboard.virtual_ops'],
   },
   {
     code: 'VA', name: 'Virtual Agent', department: 'VIRTUAL_OPERATIONS', reach: 'POD', reportsTo: 'POD_LEADER', legacyRole: 'DESK_VA',
@@ -115,12 +117,12 @@ export const DEFAULT_POSITIONS: readonly DefaultPosition[] = [
   {
     code: 'DIRECTOR_AGENCY_OPS', name: 'Director of Agency Operations', department: 'AGENCY_OPERATIONS', reach: 'ALL', reportsTo: 'COO', legacyRole: null,
     description: 'Oversees Senior Account Managers, Account Managers and the agency relationships, settings, billing and utilization.',
-    permissions: ['requests.assign', 'requests.escalate', 'requests.restrict', 'requests.classify', 'accounts.view', 'accounts.edit', 'messages.agency', 'agencies.setup', 'team.manage', 'workload.view', 'turnaround.view', 'usage.view', 'billing.prices', 'documents.all_categories'],
+    permissions: ['requests.assign', 'requests.escalate', 'requests.restrict', 'requests.classify', 'accounts.view', 'accounts.edit', 'messages.agency', 'agencies.setup', 'team.manage', 'workload.view', 'turnaround.view', 'usage.view', 'billing.prices', 'documents.all_categories', 'dashboard.agency_ops'],
   },
   {
     code: 'SENIOR_AM', name: 'Senior Account Manager', department: 'AGENCY_OPERATIONS', reach: 'SUPERVISED', reportsTo: 'DIRECTOR_AGENCY_OPS', legacyRole: null,
     description: 'Supervises Account Managers and covers for them. Cannot change contracts, pricing or contracted allowances.',
-    permissions: ['requests.work', 'requests.assign', 'requests.escalate', 'requests.restrict', 'requests.classify', 'accounts.view', 'accounts.edit', 'messages.agency', 'team.manage', 'turnaround.view', 'usage.view', 'billing.prices', 'documents.all_categories'],
+    permissions: ['requests.work', 'requests.assign', 'requests.escalate', 'requests.restrict', 'requests.classify', 'accounts.view', 'accounts.edit', 'messages.agency', 'team.manage', 'turnaround.view', 'usage.view', 'billing.prices', 'documents.all_categories', 'dashboard.agency_ops'],
   },
   {
     code: 'AM', name: 'Account Manager', department: 'AGENCY_OPERATIONS', reach: 'ASSIGNED', reportsTo: 'SENIOR_AM', legacyRole: 'ACCOUNT_MANAGER',
@@ -137,6 +139,8 @@ export const DEFAULT_POSITIONS: readonly DefaultPosition[] = [
  */
 export const PERMISSION_ADDITIONS: readonly { key: PermissionKey; module: number; codes: readonly string[] }[] = [
   { key: 'team.manage', module: 50, codes: ['COO', 'DIRECTOR_AGENCY_OPS', 'SENIOR_AM'] },
+  { key: 'dashboard.virtual_ops', module: 52, codes: ['COO', 'DIRECTOR_VIRTUAL_OPS', 'POD_LEADER'] },
+  { key: 'dashboard.agency_ops', module: 52, codes: ['COO', 'DIRECTOR_AGENCY_OPS', 'SENIOR_AM'] },
 ];
 
 /** Reach from widest to narrowest, for showing the widest a person has. */

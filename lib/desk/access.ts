@@ -179,11 +179,13 @@ export async function resolveDeskScope(db: Db, userId: string): Promise<DeskScop
 /**
  * Module 51: what a pod position allows only in the pods its holder leads.
  * Without a pod to lead, a Pod Leader's position is a VA's (plus anything
- * else it lists), and the workload of their pods is not theirs to see.
+ * else it lists), and the workload and dashboard of their pods are not theirs to see.
  */
 export const LEAD_PERMISSIONS: readonly PermissionKey[] = ['requests.assign', 'requests.escalate', 'requests.restrict', 'requests.classify'];
 const forLeads = (permissions: PermissionKey[], leads: string[]): PermissionKey[] =>
-  leads.length ? permissions : permissions.filter((p) => !LEAD_PERMISSIONS.includes(p) && p !== 'workload.view');
+  leads.length ? permissions : permissions.filter((p) => !LEAD_PERMISSIONS.includes(p) && !LEADS_SEE.includes(p));
+/** What a Pod Leader sees of the pods they lead (Modules 51–52). */
+const LEADS_SEE: readonly PermissionKey[] = ['workload.view', 'dashboard.virtual_ops'];
 
 /**
  * The (agency, pod) pairs a person may work: their active pods × each
@@ -293,6 +295,19 @@ function managedTasks(scope: Extract<DeskScope, { kind: 'PLATFORM' | 'ACCOUNT_MA
   const where: Prisma.TaskWhereInput = scope.kind === 'PLATFORM' ? {} : { agencyId: { in: scope.agencyIds } };
   if (can(scope, 'requests.restrict')) return where;
   return scope.kind === 'PLATFORM' ? passesRestriction(scope.userId) : { AND: [where, passesRestriction(scope.userId)] };
+}
+
+/**
+ * For the figures of the pods a Pod Leader leads (Module 52): every request in
+ * the (agency, pod) pairs of those pods, closed ones included, so the pods'
+ * completed work and QA can be counted. Counts only: their lists and requests
+ * still go through taskWhere, where closed work is their own only (Q4).
+ * Restricted requests stay out, as everywhere for someone who may not restrict.
+ */
+export function ledPodFigures(lead: Extract<DeskScope, { kind: 'VA' }>): Prisma.TaskWhereInput {
+  const grants = lead.grants.filter((g) => lead.leads.includes(g.podId));
+  if (!grants.length) return NOTHING;
+  return { AND: [{ OR: grants.map((g) => ({ agencyId: g.agencyId, podId: g.podId })) }, passesRestriction(lead.userId)] };
 }
 
 /** Pod work: open requests in authorised (agency, pod) pairs, plus the person's own history. `permissions`: what their pod positions allow. */

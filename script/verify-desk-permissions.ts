@@ -162,7 +162,7 @@ async function call(route: Route, method: Method, token: string | null, params: 
     const R = (path: string) => { const r = routes.find((x) => x.path === path); if (!r) throw new Error(`no route ${path}`); return r; };
 
     section('The routes');
-    ok('every Desk route found on disk (65)', routes.length === 65, routes.length);
+    ok('every Desk route found on disk (66)', routes.length === 66, routes.length);
     ok('each one goes through a Desk guard, or is the scheduler\'s door', routes.every((r) => r.cron || /desk(User|Admin)Request\(prisma, request/.test(readFileSync(r.file, 'utf8'))),
       routes.filter((r) => !r.cron && !/desk(User|Admin)Request\(prisma, request/.test(readFileSync(r.file, 'utf8'))).map((r) => r.path));
     ok('…and the guard comes before any database work in every handler', routes.filter((r) => !r.cron).every((r) => {
@@ -173,8 +173,8 @@ async function call(route: Route, method: Method, token: string | null, params: 
         return guard >= 0 && (db < 0 || guard < db || /desk(User|Admin)Request\(prisma/.test(h.slice(db, db + 40)));
       });
     }));
-    ok('the Operations routes are the admin, audit, usage and workload ones', routes.filter((r) => r.admin).map((r) => r.path.split('/')[3]).every((s) => ['admin', 'audit', 'usage', 'workload'].includes(s))
-      && routes.filter((r) => ['admin', 'audit', 'usage', 'workload'].includes(r.path.split('/')[3])).every((r) => r.admin));
+    ok('the Operations routes are the admin, audit, dashboards, usage and workload ones', routes.filter((r) => r.admin).map((r) => r.path.split('/')[3]).every((s) => ['admin', 'audit', 'dashboards', 'usage', 'workload'].includes(s))
+      && routes.filter((r) => ['admin', 'audit', 'dashboards', 'usage', 'workload'].includes(r.path.split('/')[3])).every((r) => r.admin));
 
     // ── The world ──
     const mark = (k: string) => `${TAG}K${k}Q`;
@@ -361,7 +361,7 @@ async function call(route: Route, method: Method, token: string | null, params: 
       const EVERY_AGENCY = routes.filter((r) => /everyAgency: true/.test(readFileSync(r.file, 'utf8'))).map((r) => r.path);
       ok('workload and usage are the pages that need every agency', EVERY_AGENCY.sort().join() === ['/api/desk/usage', '/api/desk/usage/[agencyId]', '/api/desk/workload', '/api/desk/workload/bulk'].join(), EVERY_AGENCY);
       const FOR_LEADS = routes.filter((r) => /podLeads: true/.test(readFileSync(r.file, 'utf8'))).map((r) => r.path);
-      ok('…of which the workload also opens to Pod Leaders, for their pods (Module 51)', FOR_LEADS.sort().join() === ['/api/desk/workload', '/api/desk/workload/bulk'].join(), FOR_LEADS);
+      ok('…and the routes that also open to Pod Leaders, for their pods: the workload (Module 51) and the dashboards (Module 52)', FOR_LEADS.sort().join() === ['/api/desk/dashboards', '/api/desk/workload', '/api/desk/workload/bulk'].join(), FOR_LEADS);
       const leadsPod: Record<string, boolean> = { lead: true, amPod: true };
       const reachesAll: Record<string, boolean> = {};
       for (const w of Object.keys(perms)) reachesAll[w] = ['ops', 'dvo', 'dao', 'clerk'].includes(w);

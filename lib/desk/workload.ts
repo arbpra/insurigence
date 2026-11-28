@@ -36,7 +36,7 @@ export const WORKLOAD_BULK_MAX = 50;
 
 export interface Counts { open: number; unassigned: number; overdue: number; waiting: number; escalated: number }
 
-const zero = (): Counts => ({ open: 0, unassigned: 0, overdue: 0, waiting: 0, escalated: 0 });
+export const zero = (): Counts => ({ open: 0, unassigned: 0, overdue: 0, waiting: 0, escalated: 0 });
 const nameOf = (p: { firstName: string | null; lastName: string | null; email: string }) =>
   [p.firstName, p.lastName].filter(Boolean).join(' ') || p.email;
 
@@ -45,7 +45,8 @@ type OpenTask = {
   dueAt: Date | null; slaPausedAt: Date | null; escalated: boolean; status: TaskStatus;
 };
 
-function add(counts: Counts, t: OpenTask, now: Date) {
+/** Adds one open task to the counts (also used by the dashboards, Module 52). */
+export function add(counts: Counts, t: Pick<OpenTask, 'assigneeId' | 'dueAt' | 'slaPausedAt' | 'escalated'>, now: Date) {
   counts.open += 1;
   if (!t.assigneeId) counts.unassigned += 1;
   // Waiting work's clock is stopped, so it can't be overdue (as in the queue).
