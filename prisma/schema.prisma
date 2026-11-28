@@ -1191,6 +1191,10 @@ enum TaskEventKind {
   ALERTED
   /// A manager restricted the request (and its subtasks) to named VAs, or lifted it (Q4). Internal.
   RESTRICTED
+  /// Someone asked for the account's or the request's classification to be changed (Module 53). Internal.
+  CLASS_FLAGGED
+  /// That request was settled: the classification changed, or the flag was dismissed (Module 53). Internal.
+  CLASS_FLAG_CLOSED
 }
 
 /// A unit of Desk work, always tied to an agency and, when applicable, an
@@ -1259,6 +1263,9 @@ model Task {
   /// Standard or complex; drives the service-level target and is recorded for
   /// billing. Chosen by the agency, may be reclassified by staff (logged).
   complexity       TaskComplexity @default(STANDARD)
+  /// Module 53: this request's own classification. Null = the account's
+  /// (AccountClassification). Internal; never shown to the agency.
+  serviceClass     ServiceClass?
 
   // ── Billing (tracked now; invoicing is a later phase) ──
   /// Allowance bucket; defaults from the task type (lib/desk/billing.ts).
@@ -1407,6 +1414,75 @@ enum AmsSystem {
 enum TaskComplexity {
   STANDARD
   COMPLEX
+}
+
+/// Module 53: how demanding an account is to serve (complexity, policies,
+/// locations, underwriting, markets and workload, not premium alone). Set on
+/// the account; a request may have its own.
+enum ServiceClass {
+  SMALL_COMMERCIAL
+  MIDDLE_MARKET
+  COMPLEX_CUSTOM
+}
+
+/// Module 53: an account's classification. Kept apart from InsuredAccount so
+/// it never travels with the account to agency users. Internal.
+model AccountClassification {
+  id           String       @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId     String       @db.ObjectId
+  insuredId    String       @unique @db.ObjectId
+  serviceClass ServiceClass
+  setById      String       @db.ObjectId
+  setAt        DateTime
+  updatedAt    DateTime     @updatedAt
+
+  @@index([agencyId])
+}
+
+/// Module 53: every change of an account's classification, with its reason.
+model AccountClassificationChange {
+  id        String        @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId  String        @db.ObjectId
+  insuredId String        @db.ObjectId
+  fromClass ServiceClass?
+  toClass   ServiceClass
+  reason    String?
+  actorId   String        @db.ObjectId
+  createdAt DateTime      @default(now())
+
+  @@index([insuredId, createdAt])
+}
+
+enum ClassFlagTarget {
+  ACCOUNT
+  REQUEST
+}
+
+enum ClassFlagOutcome {
+  CHANGED
+  DISMISSED
+}
+
+/// Module 53: a VA's, Pod Leader's or Account Manager's request that a
+/// classification be changed by someone who may. One open flag per request.
+model ClassificationFlag {
+  id          String            @id @default(auto()) @map("_id") @db.ObjectId
+  agencyId    String            @db.ObjectId
+  taskId      String            @db.ObjectId
+  insuredId   String?           @db.ObjectId
+  target      ClassFlagTarget
+  suggested   ServiceClass
+  reason      String
+  flaggedById String            @db.ObjectId
+  createdAt   DateTime          @default(now())
+  closedAt    DateTime?
+  closedById  String?           @db.ObjectId
+  outcome     ClassFlagOutcome?
+  closeNote   String?
+
+  @@index([taskId, closedAt])
+  @@index([insuredId, closedAt])
+  @@index([agencyId, closedAt])
 }
 
 /// Allowance buckets in a Desk plan. Each task type maps to one

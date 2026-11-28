@@ -165,7 +165,7 @@ const status = async (fn: () => Promise<unknown>) => {
     ok('an AM who is also a Pod Leader: their agency, plus pod work for the agencies that authorise the pod',
       sAmPod.kind === 'ACCOUNT_MANAGER' && sAmPod.agencyIds.join() === B.id && sAmPod.grants.some((g) => g.agencyId === A.id && g.podId === P.id) && can(sAmPod, 'requests.assign'));
     ok('a Pod Leader and a VA reach by pod', sLead.kind === 'VA' && sVa.kind === 'VA' && can(sLead, 'requests.assign') && !can(sVa, 'requests.assign'));
-    ok('someone with no position yet gets their role\'s default (a VA)', sBare.kind === 'VA' && sBare.permissions.join() === 'requests.work' && sBare.grants.length === 1);
+    ok('someone with no position yet gets their role\'s default (a VA)', sBare.kind === 'VA' && sBare.permissions.join() === 'requests.work,classification.flag' && sBare.grants.length === 1);
     ok('someone whose only position is switched off has no Desk access', sOff.kind === 'NONE' && sOff.reason === 'no active position');
     ok('Financial and Personal documents: the COO and AM by permission; the Director of Virtual Operations and VAs only General and Policy',
       sCoo.kind === 'PLATFORM' && sCoo.sensitivities.length === 4 && sAm.kind === 'ACCOUNT_MANAGER' && sAm.sensitivities.length === 4

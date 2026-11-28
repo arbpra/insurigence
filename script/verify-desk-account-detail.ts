@@ -107,7 +107,7 @@ function pureLogic() {
   console.log('The screens');
   ok('the shared logic brings in no server code', !/^import (?!type )/m.test(read('lib/desk/policy-form.ts')));
   for (const [p, allowed] of [
-    ['app/components/desk/accounts/AccountDetail.tsx', /from '(react|next\/link|@\/lib\/desk\/account-form|\.\/account-api|\.\/AssignedStaff|\.\/PolicyPanel)'/],
+    ['app/components/desk/accounts/AccountDetail.tsx', /from '(react|next\/link|@\/lib\/desk\/account-form|\.\/account-api|\.\/AssignedStaff|\.\/ClassificationPanel|\.\/PolicyPanel)'/],
     ['app/components/desk/accounts/PolicyPanel.tsx', /from '(react|@\/lib\/desk\/account-form|@\/lib\/desk\/policy-form|\.\/account-api)'/],
   ] as const) {
     const imports = read(p).match(/^import [^;]+;/gm) ?? [];

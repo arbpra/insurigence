@@ -2,6 +2,8 @@
  * The internal task workspace: how each history entry reads, and what a
  * reclassification sends. Pure — safe for server and browser.
  */
+import type { ServiceClass } from '@prisma/client';
+import { SERVICE_CLASS_LABELS, classLabel } from './classification-view';
 import type { TaskComplexity, TaskEventKind, TaskPriority, TaskStatus } from '@prisma/client';
 import { COMPLEXITY_LABELS, PRIORITY_LABELS } from './service-levels';
 import { STATUS_LABELS } from './task-statuses';
@@ -37,6 +39,10 @@ export function reclassifiedLines(details: Record<string, unknown>): string[] {
   if ('priority' in to) lines.push(`Priority: ${PRIORITY_LABELS[from.priority as TaskPriority] ?? from.priority} → ${PRIORITY_LABELS[to.priority as TaskPriority] ?? to.priority}`);
   if ('billableUnits' in to) lines.push(`Billable units: ${from.billableUnits} → ${to.billableUnits}`);
   if ('nonBillable' in to) lines.push(`Non-billable: ${yesNo(from.nonBillable)} → ${yesNo(to.nonBillable)}`);
+  if ('serviceClass' in to) {
+    const label = (c: unknown) => (c ? SERVICE_CLASS_LABELS[c as ServiceClass] ?? String(c) : `the account's (${classLabel(details.accountClass as ServiceClass | null)})`);
+    lines.push(`Classification: ${label(from.serviceClass)} → ${label(to.serviceClass)}`);
+  }
   if ('dueAtTo' in details) lines.push(details.dueAtTo ? 'Due date recalculated for the new target' : 'No service-level target applies any more');
   return lines;
 }
@@ -54,6 +60,9 @@ export function restrictedLines(details: Record<string, unknown>): string[] {
 /** The lines under a history entry's headline, from its details (managers see them all; VAs only a few). */
 export function eventLines(e: StaffEvent): string[] {
   if (e.kind === 'RECLASSIFIED') return reclassifiedLines(e.details);
+  if (e.kind === 'CLASS_FLAGGED' && typeof e.details.suggested === 'string') {
+    return [`${e.details.target === 'ACCOUNT' ? 'The account' : 'This request'}: suggested ${SERVICE_CLASS_LABELS[e.details.suggested as ServiceClass] ?? e.details.suggested}`];
+  }
   if ((e.kind === 'ESCALATED' || e.kind === 'DEESCALATED') && typeof e.details.reason === 'string') return [`Reason: ${e.details.reason}`];
   if (e.kind === 'ALERTED' && typeof e.details.sentTo === 'number') {
     const n = e.details.sentTo;
@@ -96,6 +105,8 @@ export function eventTitle(e: StaffEvent): string {
       return typeof e.details.reference === 'number' ? `${what} #${e.details.reference} ${verb}` : `${what} ${verb}`;
     }
     case 'RECLASSIFIED': return 'Reclassified';
+    case 'CLASS_FLAGGED': return 'Flagged for reclassification';
+    case 'CLASS_FLAG_CLOSED': return e.details.outcome === 'DISMISSED' ? 'Reclassification flag dismissed' : 'Reclassification flag settled: classification changed';
     case 'RESTRICTED': {
       // VAs get no details: they learn access changed, not who is named or why.
       if (!Array.isArray(e.details.to)) return 'Access restriction changed';

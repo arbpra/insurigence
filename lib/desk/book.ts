@@ -20,6 +20,7 @@ import { AGENCY_ROLES, canBeAssignedToInsured, defaultAssignmentRole, roleLabel 
 import { can, isStaffScope, canManageAgencyAccess, DeskAccessError, documentWhere, getInsuredForScope, getPolicyForScope, insuredWhere, isObjectId, policyWhere, scopeAgencyIds, scopeIn, taskWhere, type DeskScope, type GuardContext } from './access';
 import { ACCOUNT_NAME_MAX, CONTACT_EMAIL_MAX, INSURED_TEXT, type TextRule } from './account-form';
 import { recordAudit, type AuditAction } from './audit';
+import { accountClassification } from './classification';
 import { insuredNameKey } from './insureds';
 import { literal } from './literal-match';
 import { SENSITIVITY_LABELS } from './need-to-know';
@@ -296,6 +297,8 @@ async function readInsured(db: Db, scope: DeskScope, insuredId: string, ctx: Gua
       assignments: assignments.map((a) => ({ userId: a.user.id, name: personName(a.user), role: a.role, isActive: a.user.isActive })),
     }),
     can: { edit: canEdit(scope), manage: manages },
+    // Module 53: Desk staff only; agency users never see a classification.
+    ...(isStaffScope(scope) ? { classification: await accountClassification(db, scope, row) } : {}),
   };
 }
 

@@ -1,7 +1,7 @@
 # The Desk — Handover Report
 
 **Date:** 22 November 2026, updated 26 November 2026
-**Covers:** the 46 modules of the Desk build plan (`THE_DESK_BUILD_PLAN.md`), 125.5 hours in total, and Modules 47–52 (positions, permissions, reporting lines and cover, Pod Leaders, dashboards) from Phase 7
+**Covers:** the 46 modules of the Desk build plan (`THE_DESK_BUILD_PLAN.md`), 125.5 hours in total, and Modules 47–53 (positions, permissions, reporting lines and cover, Pod Leaders, dashboards, classification) from Phase 7
 **Code:** merged into `main` and deployed to https://insurigence.ai (Modules 47–48 on 26 November 2026)
 
 ---
@@ -81,6 +81,12 @@ On **Desk Operations → Account Managers**, for the COO, the Director of Agency
 - **Who sees what:** the COO both; the Director of Virtual Operations every pod, with allowances read-only; a Pod Leader the pods they lead; the Director of Agency Operations every agency; a Senior AM their own and their team's agencies. Prices never appear on the dashboards.
 - Who has a dashboard is a permission on each position (Positions page), so it can be given to another position or taken away.
 
+### Classification (Module 53)
+
+- Each account is **Small Commercial**, **Middle-Market** or **Complex / Custom**, shown on its page to Desk staff only. Its requests take it; a single request can have its own.
+- The **Account Manager** sets it the first time. The **Senior AM**, the **Director of Agency Operations** and the **COO** change it, giving a reason. **VAs, Pod Leaders and Account Managers** flag a request or its account for a change, from the request page; the flag shows on the request, on the account page and on the Agency Operations dashboard until the classification changes or the flag is dismissed.
+- Every change is in the account's history or the request's internal history, with its reason, and in the audit log. Agency users never see any of it.
+
 ### How a request flows
 
 1. An agency sends a request for one of its accounts.
@@ -109,11 +115,11 @@ Each step is recorded in the request's history. Every action by anyone is also r
 
 ## 3. How it was tested
 
-- **52 automated test suites** with **4,327 checks**:
+- **53 automated test suites** with **4,373 checks**:
   - 43 Desk suites from Modules 1–44;
   - the demo walkthrough (83 checks);
   - restricting a request to named people (57 checks);
-  - positions (75 checks), access by position (91 checks) and Pod Leaders (94 checks) and the dashboards (62 checks);
+  - positions (75 checks), access by position (91 checks) and Pod Leaders (94 checks), the dashboards (62 checks) and classification (67 checks);
   - the two older text-matching and user-responses suites (25 checks).
 
   They all pass. They run against the real database through the real API routes, signed in as real people. Each one cleans up its own temporary records.
@@ -140,9 +146,9 @@ Each step is recorded in the request's history. Every action by anyone is also r
 
 These steps are for whoever runs the hosting. Steps 1–4 are required before go-live; steps 5 and 6 are needed for the first agency. **Status on 22 November 2026:** steps 1, 2, 3 and 5 are done; in step 4 everything but R2 is set; step 6 waits for R2.
 
-**Status on 27 November 2026:** Modules 47–51 are live. On 26 November insurigence.ai was first found to be running a build without The Desk; the new code was then pulled, built and started, and the seven positions created. The site runs on an Ubuntu server behind nginx, so the server settings below belong **on that server**. **Alerts:** the app now runs the alert check itself every 15 minutes (`DESK_ALERT_CHECK_MINUTES=15` on the server); runs were confirmed at 02:34 and 02:48 UTC on 26 November. The GitHub schedule stays as a backup. Its runs from 23 to 25 November failed because the site was running a build without The Desk; the first run after the rebuild succeeded.
+**Status on 28 November 2026:** Modules 47–52 are live. On 26 November insurigence.ai was first found to be running a build without The Desk; the new code was then pulled, built and started, and the seven positions created. The site runs on an Ubuntu server behind nginx, so the server settings below belong **on that server**. **Alerts:** the app now runs the alert check itself every 15 minutes (`DESK_ALERT_CHECK_MINUTES=15` on the server); runs were confirmed at 02:34 and 02:48 UTC on 26 November. The GitHub schedule stays as a backup. Its runs from 23 to 25 November failed because the site was running a build without The Desk; the first run after the rebuild succeeded.
 
-**Each time code is deployed,** on that server: `git pull origin main`, `npm ci`, `npm run db:push`, `npm run build`, `npm run db:seed:desk`, then restart the app. A push to GitHub alone doesn't update the site. **Module 50 needs both database steps:** `db:push` adds the reporting-line and cover collections (already added to the shared database on 26 November, so there it changes nothing), and `db:seed:desk` should print "Permissions added: team.manage → COO, DIRECTOR_AGENCY_OPS, SENIOR_AM" the first time (nothing on later runs). **Module 52:** `db:seed:desk` should print "Permissions added: dashboard.virtual_ops → COO, DIRECTOR_VIRTUAL_OPS, POD_LEADER" and "dashboard.agency_ops → COO, DIRECTOR_AGENCY_OPS, SENIOR_AM" the first time; until it has run, nobody sees the Dashboards page.
+**Each time code is deployed,** on that server: `git pull origin main`, `npm ci`, `npm run db:push`, `npm run build`, `npm run db:seed:desk`, then restart the app. A push to GitHub alone doesn't update the site. **Module 50 needs both database steps:** `db:push` adds the reporting-line and cover collections (already added to the shared database on 26 November, so there it changes nothing), and `db:seed:desk` should print "Permissions added: team.manage → COO, DIRECTOR_AGENCY_OPS, SENIOR_AM" the first time (nothing on later runs). **Module 52:** `db:seed:desk` should print "Permissions added: dashboard.virtual_ops → COO, DIRECTOR_VIRTUAL_OPS, POD_LEADER" and "dashboard.agency_ops → COO, DIRECTOR_AGENCY_OPS, SENIOR_AM" the first time; until it has run, nobody sees the Dashboards page. **Module 53 needs both database steps:** `db:push` adds the classification collections, and `db:seed:desk` should print "Permissions added" for `classification.set`, `classification.override` and `classification.flag` the first time; until it has run, nobody can classify or flag.
 
 | # | Step | Why |
 |---|---|---|

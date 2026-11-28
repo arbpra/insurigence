@@ -11,6 +11,7 @@
  * Reads are always through taskWhere and taskEventWhere, so a filter can only
  * narrow what the person could already see.
  */
+import { taskClassification } from './classification';
 import { Prisma, TaskPriority, TaskType, type PrismaClient, type TaskEvent, type TaskStatus } from '@prisma/client';
 import { can, DeskAccessError, getTaskForScope, insuredWhere, isObjectId, scopeIn, taskEventWhere, taskWhere, type DeskScope, type GuardContext } from './access';
 import { recordAudit } from './audit';
@@ -134,7 +135,8 @@ function agencyEventView(event: TaskEvent, agencyId: string, actors: Map<string,
 }
 
 /** Listed, not removed: anything added to an event's details later stays from VAs until it's chosen here. */
-const VA_EVENT_DETAILS = ['clock', 'automatic', 'reference', 'followUp'];
+// Module 53: what a flag asked for, and how it was settled, are not billing details.
+const VA_EVENT_DETAILS = ['clock', 'automatic', 'reference', 'followUp', 'target', 'suggested', 'outcome'];
 
 function staffEventView(scope: DeskScope, event: TaskEvent, actors: Map<string, Actor>) {
   scope = scopeIn(scope, event.agencyId);
@@ -360,6 +362,8 @@ export async function getTaskDetail(db: Db, scope: DeskScope, taskId: string, ct
   return {
     ...viewFor(scope, task, new Date()),
     ...(scope.kind === 'AGENCY' ? {} : { permissions: staffPermissions(scope, task, (family && 'openSubtasks' in family ? family.openSubtasks : 0) ?? 0) }),
+    // Module 53: internal, so never for agency users.
+    ...(scope.kind === 'AGENCY' ? {} : { classification: await taskClassification(db, scope, task) }),
     documents,
     ...(family ?? {}),
     // The pods a manager can move it to.

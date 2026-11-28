@@ -78,8 +78,8 @@ function catalogue() {
     && !['billing.prices', 'documents.all_categories', 'documents.grant', 'agencies.setup', 'plans.manage'].some((k) => P('DIRECTOR_VIRTUAL_OPS').has(k)));
   ok('the Director of Agency Operations: agency setup, prices and utilization, but not pods or staff',
     ['agencies.setup', 'billing.prices', 'usage.view'].every((k) => P('DIRECTOR_AGENCY_OPS').has(k)) && !['pods.manage', 'staff.manage', 'plans.manage'].some((k) => P('DIRECTOR_AGENCY_OPS').has(k)));
-  ok('a VA only works requests; a Pod Leader also assigns and escalates',
-    [...P('VA')].join() === 'requests.work' && ['requests.assign', 'requests.escalate'].every((k) => P('POD_LEADER').has(k)) && !P('POD_LEADER').has('documents.all_categories'));
+  ok('a VA only works requests and flags classifications; a Pod Leader also assigns and escalates',
+    [...P('VA')].join() === 'requests.work,classification.flag' && ['requests.assign', 'requests.escalate'].every((k) => P('POD_LEADER').has(k)) && !P('POD_LEADER').has('documents.all_categories'));
   ok('reach: COO and Directors all agencies; Senior AM supervised; AM assigned; Pod Leader and VA by pod',
     DEFAULT_POSITIONS.map((p) => p.reach).join() === 'ALL,ALL,POD,POD,ALL,SUPERVISED,ASSIGNED');
   ok('today\'s roles start in COO, VA and AM', DEFAULT_POSITIONS.filter((p) => p.legacyRole).map((p) => `${p.legacyRole}>${p.code}`).join() === 'DESK_ADMIN>COO,DESK_VA>VA,ACCOUNT_MANAGER>AM');

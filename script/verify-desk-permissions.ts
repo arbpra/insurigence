@@ -162,7 +162,7 @@ async function call(route: Route, method: Method, token: string | null, params: 
     const R = (path: string) => { const r = routes.find((x) => x.path === path); if (!r) throw new Error(`no route ${path}`); return r; };
 
     section('The routes');
-    ok('every Desk route found on disk (66)', routes.length === 66, routes.length);
+    ok('every Desk route found on disk (68)', routes.length === 68, routes.length);
     ok('each one goes through a Desk guard, or is the scheduler\'s door', routes.every((r) => r.cron || /desk(User|Admin)Request\(prisma, request/.test(readFileSync(r.file, 'utf8'))),
       routes.filter((r) => !r.cron && !/desk(User|Admin)Request\(prisma, request/.test(readFileSync(r.file, 'utf8'))).map((r) => r.path));
     ok('…and the guard comes before any database work in every handler', routes.filter((r) => !r.cron).every((r) => {

@@ -205,7 +205,8 @@ function AgencyOps({ a, t }: { a: Agency; t: (m: number | null) => string }) {
       </div>
       <div className="border border-slate-200 rounded-xl bg-white px-4 py-3 text-sm text-slate-700" data-testid="desk-dash-awaiting">
         <span className="font-medium text-slate-800">Awaiting a decision:</span> {a.awaiting.inReview} in QA review, {a.awaiting.escalated} escalated
-        {a.awaiting.billing !== null && <>, {a.awaiting.billing} completed {a.awaiting.billing === 1 ? 'unit' : 'units'} awaiting a billing decision (<Link className="underline" href="/desk-ops/usage">Usage</Link>)</>}.
+        {a.awaiting.billing !== null && <>, {a.awaiting.billing} completed {a.awaiting.billing === 1 ? 'unit' : 'units'} awaiting a billing decision (<Link className="underline" href="/desk-ops/usage">Usage</Link>)</>}
+        {a.awaiting.classFlags > 0 && <>, {a.awaiting.classFlags} {a.awaiting.classFlags === 1 ? 'request' : 'requests'} flagged for reclassification</>}.
         {a.utilization && <> This month: {a.utilization.overAllowance} {a.utilization.overAllowance === 1 ? 'agency' : 'agencies'} over an allowance, {a.utilization.noPlan} without a plan.</>}
       </div>
       <Table title="Account Managers" testId="desk-dash-managers" rows={a.managers} empty="No agencies in reach." cols={[

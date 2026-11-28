@@ -2718,6 +2718,41 @@ Module 1–44 suites re-run: all 43 earlier Desk suites passed (3,688 checks; 3,
 - Full regression: `tsc` and 52 suites, **4,327 checks, 0 failed**. The first run was interrupted when a session ended during the workload suite. It left that suite's tagged records on the live database (2 agencies, 8 people, 5 pods, 6 requests and an account), which were backed up and removed, and the 4 remaining suites were then run separately. Twice the alerts suite's check that the real alerts run record is untouched failed, because the live server's own alerts run updated that record while the suite was running. Re-run while the server was quiet, it passed 75 of 75.
 - The first run of the new suite stopped on a mistake in its own test data and could not remove its records (a subtask has to go before its request). They were found on the live database (3 agencies, 12 people, 2 pods, 7 positions and 12 requests, all tagged), backed up and removed, and the suite's cleanup was fixed. The live database was checked afterwards: no test records left.
 
+**Module 53 — Account and request classification (✅ complete, 28 Nov 2026)**
+
+**Built:**
+
+- **Three classifications:** Small Commercial, Middle-Market and Complex / Custom. One is set on the account, and its requests take it. A single request can have its own, for example a simple certificate for a middle-market account. A subtask always takes its request's.
+- **Who does what** (client, 24 November): the Account Manager **sets** a classification where none is set yet. The Senior AM, the Director of Agency Operations and the COO **override** one already set, and an override needs a reason. VAs, Pod Leaders and Account Managers **flag** a request or its account for reclassification, with a suggested classification and a reason. A flag changes nothing by itself.
+- **Three new permissions**, so the Super Admin can give or remove each on the Positions page: **Classify accounts** (`classification.set`), **Override classifications** (`classification.override`) and **Flag for reclassification** (`classification.flag`). `db:seed:desk` gives them to the existing positions once.
+- **On the account page** (Desk staff only): the classification, who set it and when, a way to set or change it, the open flags asking for a change (with links to their requests) and the history of changes with their reasons.
+- **On the request page:** the request's classification, whether it is the account's or the request's own, the open flag, and the buttons this person may use: change for this request, flag, or dismiss the flag.
+- **Flags are settled** when the classification they ask about changes (the account's, or the request's own) or when someone who could make the change dismisses the flag, optionally with a note. Each step is a line in the request's internal history. One open flag per request.
+- **Agency Operations dashboard:** "Awaiting a decision" now counts the requests flagged for reclassification.
+
+**Design decisions and their consequences:**
+
+- **"Override" means changing a classification already set.** So an Account Manager can't correct their own choice once it is saved. They flag it, and their Senior AM changes it. If the client prefers that Account Managers change their own, the Super Admin gives the Account Manager position the override permission.
+- **A request's own classification goes through its reclassification** (Module 32): a reason is always required, it is kept in the request's internal history, the change is audited, and a closed request has to be reopened first. VAs see that a request was reclassified and why, not the details.
+- **Internal throughout.** Agency users never see a classification, a flag or their history. The account's classification is stored apart from the account record, so it can't travel with the account to an agency screen by mistake.
+- **Reasons are kept with the change**, in the account's history or the request's internal history. The audit log records the facts (from, to, who, whether it was an override) but not the reason, as for other reclassifications.
+- **Every position may flag.** Someone may manage staff only if they hold every permission that person holds (Module 47). With the flag on VAs alone, the Director of Virtual Operations could no longer manage VAs. A flag changes nothing, so giving it to every position costs nothing.
+
+**Not done or limited:**
+
+- **Prices and credits don't use the classification yet.** Modules 55 (overage prices) and 56 (remarketing credits) will use it, and Module 55 will also record which classification applied when the work was completed.
+- **No notification when a request is flagged.** The flag shows on the request, on the account page and in the dashboard count. Notifications come with Module 61.
+- **No suggestion from the account's policies, locations or markets.** The client said the classification rests on judgment, not premium alone, so people set it.
+- As in earlier Phase 7 modules, the screens were not seen in a browser.
+
+**Verified:**
+
+- `tsc --noEmit` exit 0. **Database change:** three new collections (the account's classification, its history and the flags), a classification on requests, and two new history entries. `db:push` adds them.
+- **67 tests passed** (`script/verify-desk-classification.ts`): who may set, override and flag, and the defaults; the account set, overridden (reason required), its history, a stale page refused, refusals logged, another agency out of reach; a request's own classification, back to the account's, subtasks and closed requests refused, the internal history; flags raised, one at a time, settled by a change or dismissed by someone who may make the change, and counted on the dashboard; agency users see none of it; reasons not in the audit log; the routes; and nothing left behind.
+- Earlier suites updated: the permission suite now finds 68 Desk routes; a VA's default position now also flags; the account page's import check allows the new panel.
+- **Fault check:** 40 deliberate faults put into the code one at a time; the suite caught all 40. The first run missed 5, so checks were added: someone without the flag permission is refused; a request can't go back to an account it hasn't got; an unknown class on a request is refused; a subtask can't be flagged; and the dashboard counts only its own agencies' flags. Two of those checks had been refused for another reason, which hid the fault.
+- Full regression: `tsc` and 53 suites, **4,373 checks**. One check failed in the run: the alerts suite's check that the real alerts run record is untouched, because the live server's own alerts run updated it meanwhile, as in Module 52. Re-run straight after the server's run, it passed 75 of 75. The live database was checked afterwards: no test records left. (The 52 earlier suites ran 4,306 checks, the same suite by suite as Module 52's run; the 4,327 given for Module 52 above was 21 too many.)
+
 ### Phase 3 — Task System Core (17 h)
 
 | # | Module | Hours | Change | Status |
@@ -2769,7 +2804,7 @@ From the client's feedback and answers of 24 November 2026 (Section 11). One par
 | 50 | Reporting lines and coverage: who reports to whom; Senior AMs see the agencies, accounts and requests of the AMs they supervise; covering an absent AM; reassigning agencies between authorised AMs | 5.0 | 🆕 | ✅ Done |
 | 51 | Virtual Operations tools: the Director creates and manages pods and Pod Leaders and assigns VAs within authorised agencies; Pod Leaders assign, reassign and escalate in their pods | 4.0 | 🆕 | ✅ Done |
 | 52 | Dashboards: Director of Virtual Operations (workload, productivity, QA, SLA, capacity; allowances read-only, no prices), Director of Agency Operations (agencies, AM performance, utilization, approvals), COO (both) | 5.0 | 🆕 | ✅ Done |
-| 53 | Account and request classification: Small Commercial / Middle-Market / Complex-Custom on the account, overridable per request; the AM sets it, Senior AM, Director of Agency Operations and COO override with a reason; VAs and Pod Leaders can only flag; audited | 3.5 | 🆕 D1 | ⬜ To do |
+| 53 | Account and request classification: Small Commercial / Middle-Market / Complex-Custom on the account, overridable per request; the AM sets it, Senior AM, Director of Agency Operations and COO override with a reason; VAs and Pod Leaders can only flag; audited | 3.5 | 🆕 D1 | ✅ Done |
 | 54 | Plan admin screen: plans, monthly prices, allowances, monthly credits and maximum balance, custom agency plans, the one-time implementation fee; the client's figures entered. Contract fields editable only by CEO / authorised administrators | 4.0 | 🆕 D1 | ⬜ To do |
 | 55 | Overage price list: by service, standard / complex, classification, rush +50 %, Complete discounts, custom pricing for Complex / Custom; internal subtasks, routine QA and corrections of our own work never charged | 4.5 | 🆕 D1 | ⬜ To do |
 | 56 | Remarketing credit ledger: monthly issue, 90-day expiry, oldest first, maximum balance per plan with agency overrides; reserved when work begins, used on completion, released on cancellation; issued / available / reserved / used / expired / adjusted | 6.0 | 🆕 D1 | ⬜ To do |

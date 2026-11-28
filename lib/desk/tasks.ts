@@ -12,10 +12,12 @@
  * against the agency's monthly allowance (lib/desk/billing-capture.ts).
  */
 import {
-  Prisma, TaskComplexity, TaskPriority, TaskType,
+  Prisma, TaskComplexity, TaskPriority, TaskType, type ServiceClass,
   type PrismaClient, type Task, type TaskStatus, type DeskVisibility,
 } from '@prisma/client';
 import { recordAudit } from './audit';
+import { accountClassOf, classRights, settleRequestFlags } from './classification';
+import { isServiceClass, mayChange } from './classification-view';
 import { can, DeskAccessError, getTaskForScope, isStaffScope, isObjectId, resolveDeskScope, resolveSubmission, scopeIn, taskWhere, worksThroughPod, type DeskScope } from './access';
 import { defaultBilling } from './billing';
 import { completionPeriod, decideBilling, giveBack, type BillingDecision } from './billing-capture';
@@ -818,6 +820,8 @@ export interface ReviewInput {
   priority?: unknown;
   billableUnits?: unknown;
   nonBillable?: unknown;
+  /** Module 53: this request's own classification; null goes back to the account's. */
+  serviceClass?: unknown;
   reason?: unknown;
 }
 
@@ -832,16 +836,32 @@ export interface ReviewInput {
  */
 export async function reviewTask(db: Db, scope: DeskScope, taskId: string, input: ReviewInput, ctx: Ctx = {}): Promise<Task> {
   const task = await getTaskForScope(db, scope, taskId, ctx);
+  const rights = classRights(scope, task.agencyId, task.podId);
   scope = scopeIn(scope, task.agencyId, task.podId);
-  await checkRules(db, scope, task, { op: 'review' }, ctx, async () => {
-    if (!can(scope, 'requests.classify')) throw forbidden('Your position does not allow reclassifying work or changing its billing.');
+  // Module 53: the classification has its own permissions; everything else needs `requests.classify`.
+  const classes = input.serviceClass !== undefined;
+  const others = (['complexity', 'priority', 'billableUnits', 'nonBillable'] as const).some((k) => input[k] !== undefined);
+  const accountClass = classes ? await accountClassOf(db, task.insuredId) : null;
+  await checkRules(db, scope, task, { op: 'review', ...(classes ? { serviceClass: true } : {}) }, ctx, async () => {
+    if ((others || !classes) && !can(scope, 'requests.classify')) throw forbidden('Your position does not allow reclassifying work or changing its billing.');
+    if (classes && !mayChange(rights, task.serviceClass ?? accountClass)) {
+      throw forbidden(task.serviceClass ?? accountClass
+        ? 'Only a Senior Account Manager, the Director of Agency Operations or the COO can change a classification already set. Flag it for them instead.'
+        : 'Your position does not allow classifying requests.');
+    }
   });
   if (task.status === 'COMPLETED' || task.status === 'CANCELLED') {
     throw conflict('This task is closed. Reopen it to change its classification or billing.');
   }
 
-  const from: Record<string, string | number | boolean> = {};
-  const to: Record<string, string | number | boolean> = {};
+  const from: Record<string, string | number | boolean | null> = {};
+  const to: Record<string, string | number | boolean | null> = {};
+  if (classes) {
+    if (task.parentTaskId) throw bad('A subtask takes its request\'s classification.');
+    if (input.serviceClass !== null && !isServiceClass(input.serviceClass)) throw bad('Choose Small Commercial, Middle-Market or Complex / Custom, or the account\'s.');
+    if (input.serviceClass === null && !task.insuredId) throw bad('This request has no account to take a classification from.');
+    if (input.serviceClass !== task.serviceClass) { from.serviceClass = task.serviceClass; to.serviceClass = input.serviceClass as string | null; }
+  }
   if (input.complexity !== undefined) {
     if (!oneOf(TaskComplexity, input.complexity)) throw bad('Choose standard or complex.');
     if (input.complexity !== task.complexity) { from.complexity = task.complexity; to.complexity = input.complexity; }
@@ -897,13 +917,14 @@ export async function reviewTask(db: Db, scope: DeskScope, taskId: string, input
   return inTransaction(db, async (tx) => {
     const { count } = await tx.task.updateMany({ where: { id: task.id, status: task.status, updatedAt: task.updatedAt }, data });
     if (count !== 1) throw conflict(CHANGED_ELSEWHERE);
-    const details = { from, to, ...(due ? { dueAtFrom: due.from, dueAtTo: due.to } : {}) };
+    const details = { from, to, ...(due ? { dueAtFrom: due.from, dueAtTo: due.to } : {}), ...('serviceClass' in to ? { accountClass } : {}) };
+    const flagsClosed = 'serviceClass' in to ? await settleRequestFlags(tx, scope, task.id, (to.serviceClass ?? accountClass) as ServiceClass | null, now) : 0;
     await tx.taskEvent.create({
       data: { taskId: task.id, agencyId: task.agencyId, actorId: scope.userId, kind: 'RECLASSIFIED', body: reason, metadata: details },
     });
     await recordAudit(tx, {
       actor: actorOf(scope), action: 'task.reclassified', entityType: 'Task', entityId: task.id, agencyId: task.agencyId,
-      metadata: { reference: task.reference, ...details, ...(due ? { targetFrom: due.targetFrom, targetTo: due.targetTo } : {}) },
+      metadata: { reference: task.reference, ...details, ...(due ? { targetFrom: due.targetFrom, targetTo: due.targetTo } : {}), ...(flagsClosed ? { flagsClosed } : {}) },
       ...ctx,
     });
     return tx.task.findUniqueOrThrow({ where: { id: task.id } });

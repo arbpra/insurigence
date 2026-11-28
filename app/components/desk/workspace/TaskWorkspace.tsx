@@ -11,6 +11,7 @@ import { STATUS_LABELS, moveLabel, needsReason, reasonPrompt } from '@/lib/desk/
 import { MAX_UNITS, NOTE_MAX, REVIEW_REASON_MAX, SUBTASK_TITLE_MAX, eventLines, eventTitle, reviewBody, type ReviewState, type StaffEvent } from '@/lib/desk/task-workspace';
 import { PRIORITY_BADGE, dueLabel } from '@/lib/desk/queue-view';
 import { ApiError, api } from '@/components/desk/accounts/account-api';
+import { TaskClassificationCard, type TaskClassificationView } from './TaskClassificationCard';
 
 type Person = { id: string; name: string } | null;
 interface Doc {
@@ -34,6 +35,8 @@ interface Detail {
   subtasks?: Subtask[]; openSubtasks?: number; hiddenSubtasks?: number;
   /** On a subtask: its request (the title only if this person can open it). */
   parentRequest?: { id: string | null; reference: number | null; title: string | null; statusLabel: string | null; canOpen: boolean; followUp: boolean };
+  /** Module 53: null on a subtask. */
+  classification?: TaskClassificationView | null;
   documents: Doc[];
   events: StaffEvent[];
   eventsTotal: number;
@@ -510,9 +513,11 @@ export function TaskWorkspace({ taskId, userId }: { taskId: string; userId: stri
             )}
           </section>
 
+          {task.classification && <TaskClassificationCard taskId={taskId} value={task.classification} busy={busy} act={act} />}
+
           {task.billing && review && (
             <section className={CARD} data-testid="desk-task-review">
-              <h2 className={H2}>Classification and billing</h2>
+              <h2 className={H2}>Complexity and billing</h2>
               <p className="text-sm text-slate-600 mb-3" data-testid="desk-task-billing">
                 Counts toward {task.billing.serviceCategory ? SERVICE_CATEGORY_LABELS[task.billing.serviceCategory] : 'no category'}
                 {task.billing.class ? ` · ${task.billing.class === 'INCLUDED' ? 'Included in the plan' : task.billing.class === 'OVERAGE' ? 'Overage' : 'Non-billable'}${task.billing.period ? ` (${task.billing.period})` : ''}` : task.status === 'COMPLETED' ? ' · not classified yet: the agency has no plan allowance for this' : ' · decided when completed'}
@@ -541,11 +546,11 @@ export function TaskWorkspace({ taskId, userId }: { taskId: string; userId: stri
                   <textarea aria-label="Reason" rows={2} maxLength={REVIEW_REASON_MAX} className={`${INPUT} w-full`} placeholder="Why? Kept in the internal history." value={review.reason} onChange={(e) => setReview({ ...review, reason: e.target.value })} data-testid="desk-task-review-reason" />
                   {reviewCheck && 'problem' in reviewCheck && (review.reason || reviewCheck.problem !== 'Change something first.') && <p className="text-xs text-slate-500" data-testid="desk-task-review-hint">{reviewCheck.problem}</p>}
                   <button type="button" className={PRIMARY} style={{ backgroundColor: ACCENT }} disabled={busy || !reviewCheck || !('body' in reviewCheck)}
-                    onClick={() => { if (reviewCheck && 'body' in reviewCheck) void act(() => post('review', reviewCheck.body), 'Classification saved. A new complexity or priority recalculates the due date.'); }} data-testid="desk-task-review-save">Save</button>
+                    onClick={() => { if (reviewCheck && 'body' in reviewCheck) void act(() => post('review', reviewCheck.body), 'Saved. A new complexity or priority recalculates the due date.'); }} data-testid="desk-task-review-save">Save</button>
                   <p className="text-xs text-slate-500">A new complexity or priority can change the service-level target and its due date.</p>
                 </div>
               ) : (
-                <p className="text-sm text-slate-500">Reopen the request to change its classification or billing.</p>
+                <p className="text-sm text-slate-500">Reopen the request to change its complexity or billing.</p>
               )}
             </section>
           )}

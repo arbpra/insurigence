@@ -291,6 +291,8 @@ async function agencyDashboard(db: Db, reach: { scope: DeskScope; agencyIds: str
     completedIn(db, inReach, from, now, cal),
     can(scope, 'usage.view') ? usageReport(db, scope, { now, agencyIds: ids }) : Promise.resolve(null),
   ]);
+  // Module 53: requests flagged for reclassification, waiting on someone who may change it.
+  const classFlags = await db.classificationFlag.count({ where: { agencyId: { in: ids }, closedAt: null } });
 
   type Extra = { waitingOnAgency: number; inReview: number };
   const total = { ...zero(), waitingOnAgency: 0, inReview: 0 };
@@ -351,7 +353,7 @@ async function agencyDashboard(db: Db, reach: { scope: DeskScope; agencyIds: str
       ? { period: usage.period, overAllowance: usage.totals.overAllowance, pending: usage.totals.pending, overageUnbilled: usage.totals.overageUnbilled, noPlan: usage.totals.noPlan }
       : null,
     /** What waits on a manager: QA sign-off, escalations, and completed work awaiting a billing decision. */
-    awaiting: { inReview: total.inReview, escalated: total.escalated, billing: usage ? usage.totals.pending : null },
+    awaiting: { inReview: total.inReview, escalated: total.escalated, billing: usage ? usage.totals.pending : null, classFlags },
   };
 }
 

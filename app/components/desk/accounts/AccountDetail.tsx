@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { fileSizeLabel, localDayLabel, mailtoHref, websiteHref } from '@/lib/desk/account-form';
 import { ApiError, api } from './account-api';
 import { AssignedStaff } from './AssignedStaff';
+import { ClassificationPanel, type AccountClassificationView } from './ClassificationPanel';
 import { PolicyPanel, type PolicyRow } from './PolicyPanel';
 
 interface Overview {
@@ -30,6 +31,8 @@ interface Overview {
   requests: { total: number; rows: { id: string; reference: number; typeLabel: string; title: string; statusLabel: string; needsAttention: boolean; createdAt: string }[] };
   documents: { total: number; rows: { id: string; fileName: string; fileSize: number; categoryLabel: string; addedAt: string; requestReference: number }[] };
   can: { edit: boolean; manage: boolean };
+  /** Module 53: Desk staff only. */
+  classification?: AccountClassificationView | null;
 }
 
 const ACCENT = 'var(--brand-primary, #05314c)';
@@ -161,7 +164,10 @@ export function AccountDetail({ accountId, justCreated }: { accountId: string; j
           {data.notes && <dl className="mt-4"><Detail label="Notes">{data.notes}</Detail></dl>}
         </section>
 
-        <AssignedStaff insuredId={data.id} staff={data.assignments ?? []} canManage={data.can.manage} onChanged={load} />
+        <div className="min-w-0">
+          <AssignedStaff insuredId={data.id} staff={data.assignments ?? []} canManage={data.can.manage} onChanged={load} />
+          {data.classification && <ClassificationPanel insuredId={data.id} value={data.classification} onChanged={load} />}
+        </div>
       </div>
 
       <PolicyPanel insuredId={data.id} policies={data.policies} canEdit={data.can.edit} onChanged={load} onUnsaved={setPolicyUnsaved} />

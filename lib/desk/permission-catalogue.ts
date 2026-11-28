@@ -33,6 +33,9 @@ export const PERMISSIONS = [
   { key: 'requests.escalate', group: 'Requests', label: 'Escalate', description: 'Escalate a request, or clear an escalation.' },
   { key: 'requests.restrict', group: 'Requests', label: 'Restrict to named people', description: 'Limit a request and its subtasks to named VAs.' },
   { key: 'requests.classify', group: 'Requests', label: 'Reclassify and review billing', description: 'Change complexity and the billing review of a request.' },
+  { key: 'classification.set', group: 'Requests', label: 'Classify accounts', description: 'Set Small Commercial, Middle-Market or Complex / Custom on an account or request that has none yet.' },
+  { key: 'classification.override', group: 'Requests', label: 'Override classifications', description: 'Change a classification already set, on an account or for a single request, with a reason.' },
+  { key: 'classification.flag', group: 'Requests', label: 'Flag for reclassification', description: 'Ask for an account\'s or a request\'s classification to be changed, with a reason. Changes nothing by itself.' },
   // Agencies
   { key: 'accounts.view', group: 'Agencies', label: 'Open agency books', description: 'Open the accounts and policies of agencies in reach, not only through requests.' },
   { key: 'accounts.edit', group: 'Agencies', label: 'Edit agency books', description: 'Add and change accounts and policies, and import books, for agencies in reach.' },
@@ -102,32 +105,32 @@ export const DEFAULT_POSITIONS: readonly DefaultPosition[] = [
   {
     code: 'DIRECTOR_VIRTUAL_OPS', name: 'Director of Virtual Operations', department: 'VIRTUAL_OPERATIONS', reach: 'ALL', reportsTo: 'COO', legacyRole: null,
     description: 'Oversees Pod Leaders and VAs: staffing, workload, productivity, quality and execution. Allowances read-only, no prices.',
-    permissions: ['requests.work', 'requests.assign', 'requests.escalate', 'workload.view', 'turnaround.view', 'usage.view', 'staff.manage', 'pods.manage', 'settings.operations', 'dashboard.virtual_ops'],
+    permissions: ['requests.work', 'requests.assign', 'requests.escalate', 'workload.view', 'turnaround.view', 'usage.view', 'staff.manage', 'pods.manage', 'settings.operations', 'dashboard.virtual_ops', 'classification.flag'],
   },
   {
     code: 'POD_LEADER', name: 'Pod Leader', department: 'VIRTUAL_OPERATIONS', reach: 'POD', reportsTo: 'DIRECTOR_VIRTUAL_OPS', legacyRole: null,
     description: 'Leads a pod: assigns, reassigns and escalates its work.',
-    permissions: ['requests.work', 'requests.assign', 'requests.escalate', 'workload.view', 'turnaround.view', 'dashboard.virtual_ops'],
+    permissions: ['requests.work', 'requests.assign', 'requests.escalate', 'workload.view', 'turnaround.view', 'dashboard.virtual_ops', 'classification.flag'],
   },
   {
     code: 'VA', name: 'Virtual Agent', department: 'VIRTUAL_OPERATIONS', reach: 'POD', reportsTo: 'POD_LEADER', legacyRole: 'DESK_VA',
     description: 'Works requests in their pods, for the agencies that authorise them.',
-    permissions: ['requests.work'],
+    permissions: ['requests.work', 'classification.flag'],
   },
   {
     code: 'DIRECTOR_AGENCY_OPS', name: 'Director of Agency Operations', department: 'AGENCY_OPERATIONS', reach: 'ALL', reportsTo: 'COO', legacyRole: null,
     description: 'Oversees Senior Account Managers, Account Managers and the agency relationships, settings, billing and utilization.',
-    permissions: ['requests.assign', 'requests.escalate', 'requests.restrict', 'requests.classify', 'accounts.view', 'accounts.edit', 'messages.agency', 'agencies.setup', 'team.manage', 'workload.view', 'turnaround.view', 'usage.view', 'billing.prices', 'documents.all_categories', 'dashboard.agency_ops'],
+    permissions: ['requests.assign', 'requests.escalate', 'requests.restrict', 'requests.classify', 'accounts.view', 'accounts.edit', 'messages.agency', 'agencies.setup', 'team.manage', 'workload.view', 'turnaround.view', 'usage.view', 'billing.prices', 'documents.all_categories', 'dashboard.agency_ops', 'classification.set', 'classification.override', 'classification.flag'],
   },
   {
     code: 'SENIOR_AM', name: 'Senior Account Manager', department: 'AGENCY_OPERATIONS', reach: 'SUPERVISED', reportsTo: 'DIRECTOR_AGENCY_OPS', legacyRole: null,
     description: 'Supervises Account Managers and covers for them. Cannot change contracts, pricing or contracted allowances.',
-    permissions: ['requests.work', 'requests.assign', 'requests.escalate', 'requests.restrict', 'requests.classify', 'accounts.view', 'accounts.edit', 'messages.agency', 'team.manage', 'turnaround.view', 'usage.view', 'billing.prices', 'documents.all_categories', 'dashboard.agency_ops'],
+    permissions: ['requests.work', 'requests.assign', 'requests.escalate', 'requests.restrict', 'requests.classify', 'accounts.view', 'accounts.edit', 'messages.agency', 'team.manage', 'turnaround.view', 'usage.view', 'billing.prices', 'documents.all_categories', 'dashboard.agency_ops', 'classification.set', 'classification.override', 'classification.flag'],
   },
   {
     code: 'AM', name: 'Account Manager', department: 'AGENCY_OPERATIONS', reach: 'ASSIGNED', reportsTo: 'SENIOR_AM', legacyRole: 'ACCOUNT_MANAGER',
     description: 'Owns the relationship with their assigned agencies.',
-    permissions: ['requests.work', 'requests.assign', 'requests.escalate', 'requests.restrict', 'requests.classify', 'accounts.view', 'accounts.edit', 'messages.agency', 'turnaround.view', 'documents.all_categories'],
+    permissions: ['requests.work', 'requests.assign', 'requests.escalate', 'requests.restrict', 'requests.classify', 'accounts.view', 'accounts.edit', 'messages.agency', 'turnaround.view', 'documents.all_categories', 'classification.set', 'classification.flag'],
   },
 ];
 
@@ -141,6 +144,10 @@ export const PERMISSION_ADDITIONS: readonly { key: PermissionKey; module: number
   { key: 'team.manage', module: 50, codes: ['COO', 'DIRECTOR_AGENCY_OPS', 'SENIOR_AM'] },
   { key: 'dashboard.virtual_ops', module: 52, codes: ['COO', 'DIRECTOR_VIRTUAL_OPS', 'POD_LEADER'] },
   { key: 'dashboard.agency_ops', module: 52, codes: ['COO', 'DIRECTOR_AGENCY_OPS', 'SENIOR_AM'] },
+  { key: 'classification.set', module: 53, codes: ['COO', 'DIRECTOR_AGENCY_OPS', 'SENIOR_AM', 'AM'] },
+  { key: 'classification.override', module: 53, codes: ['COO', 'DIRECTOR_AGENCY_OPS', 'SENIOR_AM'] },
+  // Every position: a flag changes nothing, and a manager keeps every permission of the people they manage.
+  { key: 'classification.flag', module: 53, codes: ['COO', 'DIRECTOR_VIRTUAL_OPS', 'POD_LEADER', 'VA', 'DIRECTOR_AGENCY_OPS', 'SENIOR_AM', 'AM'] },
 ];
 
 /** Reach from widest to narrowest, for showing the widest a person has. */
